@@ -101,8 +101,8 @@ fn stringify_hash_map() {
 fn stringify_object_with_put() {
     let mut object = object!{};
 
-    object.put("a", 100);
-    object.put("b", false);
+    object.put("a", 100).unwrap();
+    object.put("b", false).unwrap();
 
     assert_eq!(stringify(object), "{\"a\":100,\"b\":false}");
 }
@@ -168,4 +168,42 @@ fn parse_object_with_array(){
     ").unwrap(), object!{
         "foo" => array![1, 2, 3]
     });
+}
+
+#[test]
+fn parse_nested_object() {
+    assert_eq!(parse("
+
+    {
+        \"l10n\": [ {
+          \"product\": {
+            \"inStock\": {
+              \"DE\": \"Lieferung innerhalb von 1-3 Werktagen\"
+            }
+          }
+        } ]
+    }
+
+    ").unwrap(), object!{
+        "l10n" => array![ object!{
+            "product" => object!{
+                "inStock" => object!{
+                    "DE" => "Lieferung innerhalb von 1-3 Werktagen"
+                }
+            }
+        } ]
+    });
+}
+
+#[test]
+fn parse_and_get_from_object() {
+    let object = parse("{ \"pi\": 3.14 }").unwrap();
+    let pi = object.get("pi").unwrap();
+
+    assert_eq!(*pi, 3.14.into());
+}
+
+#[test]
+fn parse_error() {
+    assert!(parse("10 20").is_err());
 }

@@ -178,6 +178,13 @@ impl<'a> Parser<'a> {
         }
     }
 
+    #[must_use]
+    fn ensure_end(&mut self) -> JsonResult<()> {
+        match self.tokenizer.next() {
+            Some(token) => Err(JsonError::unexpected_token(token)),
+            None        => Ok(())
+        }
+    }
 
     fn array(&mut self) -> JsonResult<JsonValue> {
         let mut array = Vec::new();
@@ -254,5 +261,9 @@ impl<'a> Parser<'a> {
 pub fn parse(source: &str) -> JsonResult<JsonValue> {
     let mut parser = Parser::new(source);
 
-    parser.value()
+    let value = try!(parser.value());
+
+    try!(parser.ensure_end());
+
+    Ok(value)
 }

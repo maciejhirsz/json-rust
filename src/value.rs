@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use { JsonResult, JsonError };
 
 #[derive(Debug, PartialEq)]
 pub enum JsonValue {
@@ -53,12 +54,25 @@ impl JsonValue {
         }
     }
 
-    pub fn put<T>(&mut self, key: &str, value: T) where T: Into<JsonValue> {
+    #[must_use]
+    pub fn put<T>(&mut self, key: &str, value: T) -> JsonResult<()>
+    where T: Into<JsonValue> {
         match *self {
             JsonValue::Object(ref mut btree) => {
                 btree.insert(key.into(), value.into());
+                Ok(())
             },
-            _ => {}
+            _ => Err(JsonError::wrong_type("Object"))
+        }
+    }
+
+    pub fn get(&self, key: &str) -> JsonResult<&JsonValue> {
+        match *self {
+            JsonValue::Object(ref btree) => match btree.get(key) {
+                Some(value) => Ok(value),
+                _ => Err(JsonError::undefined(key))
+            },
+            _ => Err(JsonError::wrong_type("Object"))
         }
     }
 }
