@@ -147,15 +147,15 @@ impl<'a> Iterator for Tokenizer<'a> {
 
 macro_rules! expect {
     ($parser:ident, $p:pat => $value:ident) => (
-        match $parser.consume() {
+        match try!($parser.consume()) {
             $p    => $value,
-            token => panic!("Unexpected token {:?}", token)
+            token => return Err(JsonError::unexpected_token(token))
         }
     );
     ($parser:ident, $token:pat) => ({
-        match $parser.consume() {
+        match try!($parser.consume()) {
             $token => {}
-            token  => panic!("Unexpected token {:?}", token)
+            token  => return Err(JsonError::unexpected_token(token))
         }
     })
 }
@@ -171,84 +171,87 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn consume(&mut self) -> Token {
-        self.tokenizer.next().expect("Unexpected end of JSON")
+    fn consume(&mut self) -> JsonResult<Token> {
+        match self.tokenizer.next() {
+            Some(token) => Ok(token),
+            None        => Err(JsonError::custom("Unexpected end of JSON"))
+        }
     }
 
 
-    fn array(&mut self) -> JsonValue {
+    fn array(&mut self) -> JsonResult<JsonValue> {
         let mut array = Vec::new();
 
-        match self.consume() {
-            Token::BracketOff => return array.into(),
-            token             => array.push(self.value_from(token)),
+        match try!(self.consume()) {
+            Token::BracketOff => return Ok(array.into()),
+            token             => array.push(try!(self.value_from(token))),
         }
 
         loop {
-            match self.consume() {
+            match try!(self.consume()) {
                 Token::Comma => {
-                    array.push(self.value());
+                    array.push(try!(self.value()));
                     continue
                 },
                 Token::BracketOff => break,
-                token => panic!("Unexpected token {:?}", token)
+                token => return Err(JsonError::unexpected_token(token))
             }
         }
 
-        array.into()
+        Ok(array.into())
     }
 
-    fn object(&mut self) -> JsonValue {
+    fn object(&mut self) -> JsonResult<JsonValue> {
         let mut object = BTreeMap::new();
 
-        match self.consume() {
-            Token::BraceOff    => return object.into(),
+        match try!(self.consume()) {
+            Token::BraceOff    => return Ok(object.into()),
             Token::String(key) => {
                 expect!(self, Token::Colon);
-                let value = self.value();
+                let value = try!(self.value());
                 object.insert(key, value);
             },
-            token => panic!("Unexpected token {:?}", token),
+            token => return Err(JsonError::unexpected_token(token))
         }
 
         loop {
-            match self.consume() {
+            match try!(self.consume()) {
                 Token::Comma => {
                     let key = expect!(self,
                         Token::String(key) => key
                     );
                     expect!(self, Token::Colon);
-                    let value = self.value();
+                    let value = try!(self.value());
                     object.insert(key, value);
                     continue
                 },
                 Token::BraceOff => break,
-                token => panic!("Unexpected token {:?}", token)
+                token => return Err(JsonError::unexpected_token(token))
             }
         }
 
-        object.into()
+        Ok(object.into())
     }
 
-    fn value_from(&mut self, token: Token) -> JsonValue {
-        match token {
+    fn value_from(&mut self, token: Token) -> JsonResult<JsonValue> {
+        Ok(match token {
             Token::String(value)  => JsonValue::String(value),
             Token::Number(value)  => JsonValue::Number(value),
             Token::Boolean(value) => JsonValue::Boolean(value),
             Token::Null           => JsonValue::Null,
-            Token::BracketOn      => self.array(),
-            Token::BraceOn        => self.object(),
-            token => panic!("Unexpected token {:?}", token)
-        }
+            Token::BracketOn      => return self.array(),
+            Token::BraceOn        => return self.object(),
+            token => return Err(JsonError::unexpected_token(token))
+        })
     }
 
-    fn value(&mut self) -> JsonValue {
-        let token = self.consume();
+    fn value(&mut self) -> JsonResult<JsonValue> {
+        let token = try!(self.consume());
         self.value_from(token)
     }
 }
 
-pub fn parse(source: &str) -> JsonValue {
+pub fn parse(source: &str) -> JsonResult<JsonValue> {
     let mut parser = Parser::new(source);
 
     parser.value()

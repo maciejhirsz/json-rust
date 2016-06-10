@@ -109,32 +109,32 @@ fn stringify_object_with_put() {
 
 #[test]
 fn parse_true() {
-    assert_eq!(parse("true"), true.into());
+    assert_eq!(parse("true").unwrap(), true.into());
 }
 
 #[test]
 fn parse_false() {
-    assert_eq!(parse("false"), false.into());
+    assert_eq!(parse("false").unwrap(), false.into());
 }
 
 #[test]
 fn parse_null() {
-    assert_eq!(parse("null"), Null);
+    assert_eq!(parse("null").unwrap(), Null);
 }
 
 #[test]
 fn parse_number() {
-    assert_eq!(parse("3.14"), 3.14.into())
+    assert_eq!(parse("3.14").unwrap(), 3.14.into())
 }
 
 #[test]
 fn parse_integer() {
-    assert_eq!(parse("42"), 42.into());
+    assert_eq!(parse("42").unwrap(), 42.into());
 }
 
 #[test]
 fn parse_array() {
-    assert_eq!(parse("[10, \"foo\", true, null]"), array![
+    assert_eq!(parse("[10, \"foo\", true, null]").unwrap(), array![
         10,
         "foo",
         true,
@@ -151,7 +151,7 @@ fn parse_object() {
         \"num\": 10
     }
 
-    "), object!{
+    ").unwrap(), object!{
         "foo" => "bar",
         "num" => 10
     });
@@ -165,7 +165,7 @@ fn parse_object_with_array(){
         \"foo\": [1, 2, 3]
     }
 
-    "), object!{
+    ").unwrap(), object!{
         "foo" => array![1, 2, 3]
     });
 }

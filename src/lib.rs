@@ -65,7 +65,7 @@ macro_rules! implement {
             fn into(self) -> JsonValue {
                 match self {
                     Some(value) => JsonValue::$to(value as $wanted),
-                    None        => JsonValue::Null,
+                    None        => Null,
                 }
             }
         }
@@ -81,7 +81,7 @@ macro_rules! implement {
             fn into(self) -> JsonValue {
                 match self {
                     Some(value) => JsonValue::$to(value),
-                    None        => JsonValue::Null,
+                    None        => Null,
                 }
             }
         }
@@ -98,7 +98,7 @@ impl<'a> Into<JsonValue> for Option<&'a str> {
     fn into(self) -> JsonValue {
         match self {
             Some(value) => value.into(),
-            None        => JsonValue::Null,
+            None        => Null,
         }
     }
 }
@@ -119,7 +119,16 @@ impl Into<JsonValue> for Option<HashMap<String, JsonValue>> {
     fn into(self) -> JsonValue {
         match self {
             Some(value) => value.into(),
-            None        => JsonValue::Null,
+            None        => Null,
+        }
+    }
+}
+
+impl Into<JsonValue> for Option<JsonValue> {
+    fn into(self) -> JsonValue {
+        match self {
+            Some(value) => value,
+            None        => Null,
         }
     }
 }
