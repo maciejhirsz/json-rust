@@ -10,7 +10,7 @@ fn is_as_string() {
     let string = JsonValue::String("foo".to_string());
 
     assert!(string.is_string());
-    assert_eq!(string.as_string().unwrap(), "foo".to_string());
+    assert_eq!(*string.as_string().unwrap(), "foo".to_string());
 }
 
 #[test]
@@ -18,7 +18,7 @@ fn is_as_number() {
     let number = JsonValue::Number(42.0);
 
     assert!(number.is_number());
-    assert_eq!(number.as_number().unwrap(), 42.0);
+    assert_eq!(*number.as_number().unwrap(), 42.0);
 }
 
 #[test]
@@ -26,7 +26,7 @@ fn is_as_boolean() {
     let boolean = JsonValue::Boolean(true);
 
     assert!(boolean.is_boolean());
-    assert_eq!(boolean.as_boolean().unwrap(), true);
+    assert_eq!(*boolean.as_boolean().unwrap(), true);
 }
 
 #[test]

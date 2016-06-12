@@ -2,16 +2,61 @@
 //!
 //! Parse and serialize JSON with ease.
 //!
+//! ```
+//! #[macro_use]
+//! extern crate json;
+//! use json::JsonValue;
+//!
+//! fn main() {
+//!     // stringify
+//!     let data = object!{
+//!         "a" => "bar",
+//!         "b" => array![1,false,"foo"]
+//!     };
+//!     let string = json::stringify_ref(&data);
+//!
+//!     // parse
+//!     let parsed_data = json::parse(&string).unwrap();
+//!
+//!     assert_eq!(data, parsed_data);
+//!     assert_eq!(parsed_data.get("a").unwrap().as_string().unwrap(), "bar");
+//!     assert!(parsed_data.get("b").unwrap().at(0).unwrap().is_number());
+//! }
+//! ```
+//!
 //! ## Serialize with `json::stringify(value)`
 //!
 //! Primitives:
 //!
 //! ```
+//! // str slices
 //! assert_eq!(json::stringify("foobar"), "\"foobar\"");
+//!
+//! // Owned strings
+//! assert_eq!(json::stringify("foobar".to_string()), "\"foobar\"");
+//!
+//! // Any number types
 //! assert_eq!(json::stringify(42), "42");
+//!
+//! // Booleans
 //! assert_eq!(json::stringify(true), "true");
 //! assert_eq!(json::stringify(false), "false");
+//! ```
+//!
+//! Explicit `null` type `json::Null`:
+//!
+//! ```
 //! assert_eq!(json::stringify(json::Null), "null");
+//! ```
+//!
+//! Optional types:
+//!
+//! ```
+//! let value: Option<String> = Some("foo".to_string());
+//! assert_eq!(json::stringify(value), "\"foo\"");
+//!
+//! let no_value: Option<String> = None;
+//! assert_eq!(json::stringify(no_value), "null");
 //! ```
 //!
 //! Vector:
@@ -26,6 +71,18 @@
 //! ```
 //! let data = vec![Some(1), None, Some(2), None, Some(3)];
 //! assert_eq!(json::stringify(data), "[1,null,2,null,3]");
+//! ```
+//!
+//! Pushing to arrays:
+//!
+//! ```
+//! let mut data = json::JsonValue::new_array();
+//!
+//! data.push(10);
+//! data.push("foo");
+//! data.push(false);
+//!
+//! assert_eq!(json::stringify(data), "[10,\"foo\",false]");
 //! ```
 //!
 //! `array!` macro:
@@ -56,9 +113,6 @@
 //! );
 //! # }
 //! ```
-//!
-//!
-//!
 
 mod codegen;
 mod parser;
@@ -78,6 +132,12 @@ use std::collections::BTreeMap;
 
 pub type Array = Vec<JsonValue>;
 pub type Object = BTreeMap<String, JsonValue>;
+
+pub fn stringify_ref(root: &JsonValue) -> String {
+    let mut gen = Generator::new(true);
+    gen.write_json(root);
+    gen.consume()
+}
 
 pub fn stringify<T>(root: T) -> String where T: Into<JsonValue> {
     let mut gen = Generator::new(true);

@@ -27,10 +27,10 @@ impl JsonValue {
         }
     }
 
-    pub fn as_string(self) -> JsonResult<String> {
-        match self {
-            JsonValue::String(value) => Ok(value),
-            _                        => Err(JsonError::wrong_type("String"))
+    pub fn as_string(&self) -> JsonResult<&String> {
+        match *self {
+            JsonValue::String(ref value) => Ok(value),
+            _ => Err(JsonError::wrong_type("String"))
         }
     }
 
@@ -41,10 +41,10 @@ impl JsonValue {
         }
     }
 
-    pub fn as_number(self) -> JsonResult<f64> {
-        match self {
-            JsonValue::Number(value) => Ok(value),
-            _                        => Err(JsonError::wrong_type("Number"))
+    pub fn as_number(&self) -> JsonResult<&f64> {
+        match *self {
+            JsonValue::Number(ref value) => Ok(value),
+            _ => Err(JsonError::wrong_type("Number"))
         }
     }
 
@@ -69,10 +69,10 @@ impl JsonValue {
         }
     }
 
-    pub fn as_boolean(self) -> JsonResult<bool> {
-        match self {
-            JsonValue::Boolean(value) => Ok(value),
-            _                         => Err(JsonError::wrong_type("Boolean"))
+    pub fn as_boolean(&self) -> JsonResult<&bool> {
+        match *self {
+            JsonValue::Boolean(ref value) => Ok(value),
+            _ => Err(JsonError::wrong_type("Boolean"))
         }
     }
 
