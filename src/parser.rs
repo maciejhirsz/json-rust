@@ -174,7 +174,7 @@ impl<'a> Parser<'a> {
     fn consume(&mut self) -> JsonResult<Token> {
         match self.tokenizer.next() {
             Some(token) => Ok(token),
-            None        => Err(JsonError::custom("Unexpected end of JSON"))
+            None        => Err(JsonError::UnexpectedEndOfJson)
         }
     }
 

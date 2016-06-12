@@ -99,7 +99,7 @@ fn stringify_hash_map() {
 
 #[test]
 fn stringify_object_with_put() {
-    let mut object = object!{};
+    let mut object = JsonValue::new_object();
 
     object.put("a", 100).unwrap();
     object.put("b", false).unwrap();

@@ -25,7 +25,7 @@ pub fn stringify<T>(root: T) -> String where T: Into<JsonValue> {
 
 #[macro_export]
 macro_rules! array {
-    [] => (JsonValue::Array(Vec::new()));
+    [] => (JsonValue::new_array());
 
     [ $( $item:expr ),* ] => ({
         let mut array = Vec::new();
@@ -40,7 +40,7 @@ macro_rules! array {
 
 #[macro_export]
 macro_rules! object {
-    {} => (JsonValue::Object(BTreeMap::new()));
+    {} => (JsonValue::new_object());
 
     { $( $key:expr => $value:expr ),* } => ({
         let mut object = BTreeMap::new();

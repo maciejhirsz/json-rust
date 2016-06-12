@@ -12,6 +12,14 @@ pub enum JsonValue {
 }
 
 impl JsonValue {
+    pub fn new_object() -> JsonValue {
+        JsonValue::Object(BTreeMap::new())
+    }
+
+    pub fn new_array() -> JsonValue {
+        JsonValue::Array(Vec::new())
+    }
+
     pub fn is_string(&self) -> bool {
         match *self {
             JsonValue::String(_) => true,

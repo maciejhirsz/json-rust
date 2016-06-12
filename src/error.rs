@@ -1,20 +1,23 @@
+use parser::Token;
+
 #[derive(Debug)]
-pub struct JsonError(String);
+pub enum JsonError {
+    UnexpectedToken(String),
+    UnexpectedEndOfJson,
+    WrongType(String),
+    UndefinedField(String),
+}
 
 impl JsonError {
     pub fn unexpected_token(token: super::parser::Token) -> Self {
-        JsonError(format!("Unexpected token {:?}", token))
+        JsonError::UnexpectedToken(format!("{:?}", token))
     }
 
     pub fn wrong_type(expected: &str) -> Self {
-        JsonError(format!("Wrong type, expected {}", expected))
+        JsonError::WrongType(expected.into())
     }
 
     pub fn undefined(field: &str) -> Self {
-        JsonError(format!("Undefined field {}", field))
-    }
-
-    pub fn custom(msg: &str) -> Self {
-        JsonError(msg.into())
+        JsonError::UndefinedField(field.into())
     }
 }
