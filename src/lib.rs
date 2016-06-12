@@ -53,6 +53,37 @@ macro_rules! object {
     })
 }
 
+macro_rules! implement_extras {
+    ($from:ty) => {
+        impl Into<JsonValue> for Option<$from> {
+            fn into(self) -> JsonValue {
+                match self {
+                    Some(value) => value.into(),
+                    None        => Null,
+                }
+            }
+        }
+
+        impl Into<JsonValue> for Vec<$from> {
+            fn into(mut self) -> JsonValue {
+                JsonValue::Array(self.drain(..)
+                    .map(|value| value.into())
+                    .collect::<Vec<JsonValue>>()
+                )
+            }
+        }
+
+        impl Into<JsonValue> for Vec<Option<$from>> {
+            fn into(mut self) -> JsonValue {
+                JsonValue::Array(self.drain(..)
+                    .map(|item| item.into())
+                    .collect::<Vec<JsonValue>>()
+                )
+            }
+        }
+    }
+}
+
 macro_rules! implement {
     ($to:ident, $from:ty as $wanted:ty) => {
         impl Into<JsonValue> for $from {
@@ -61,14 +92,7 @@ macro_rules! implement {
             }
         }
 
-        impl Into<JsonValue> for Option<$from> {
-            fn into(self) -> JsonValue {
-                match self {
-                    Some(value) => JsonValue::$to(value as $wanted),
-                    None        => Null,
-                }
-            }
-        }
+        implement_extras!($from);
     };
     ($to:ident, $from:ty) => {
         impl Into<JsonValue> for $from {
@@ -77,14 +101,7 @@ macro_rules! implement {
             }
         }
 
-        impl Into<JsonValue> for Option<$from> {
-            fn into(self) -> JsonValue {
-                match self {
-                    Some(value) => JsonValue::$to(value),
-                    None        => Null,
-                }
-            }
-        }
+        implement_extras!($from);
     }
 }
 
@@ -134,6 +151,8 @@ impl Into<JsonValue> for Option<JsonValue> {
 }
 
 implement!(String, String);
+implement!(Number, isize as f64);
+implement!(Number, usize as f64);
 implement!(Number, i8 as f64);
 implement!(Number, i16 as f64);
 implement!(Number, i32 as f64);

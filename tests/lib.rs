@@ -6,6 +6,51 @@ use std::collections::HashMap;
 use json::{ stringify, parse, JsonValue, Null };
 
 #[test]
+fn is_as_string() {
+    let string = JsonValue::String("foo".to_string());
+
+    assert!(string.is_string());
+    assert_eq!(string.as_string().unwrap(), "foo".to_string());
+}
+
+#[test]
+fn is_as_number() {
+    let number = JsonValue::Number(42.0);
+
+    assert!(number.is_number());
+    assert_eq!(number.as_number().unwrap(), 42.0);
+}
+
+#[test]
+fn is_as_boolean() {
+    let boolean = JsonValue::Boolean(true);
+
+    assert!(boolean.is_boolean());
+    assert_eq!(boolean.as_boolean().unwrap(), true);
+}
+
+#[test]
+fn is_true() {
+    let boolean = JsonValue::Boolean(true);
+
+    assert!(boolean.is_true());
+}
+
+#[test]
+fn is_false() {
+    let boolean = JsonValue::Boolean(false);
+
+    assert!(boolean.is_false());
+}
+
+#[test]
+fn is_nul() {
+    let null = JsonValue::Null;
+
+    assert!(null.is_null());
+}
+
+#[test]
 fn stringify_null() {
     assert_eq!(stringify(Null), "null");
 }
@@ -59,12 +104,26 @@ fn stringify_array() {
 
 #[test]
 fn stringify_vec() {
-    let mut array = Vec::new();
+    let mut array: Vec<JsonValue> = Vec::new();
 
     array.push(10.into());
     array.push("Foo".into());
 
     assert_eq!(stringify(array), "[10,\"Foo\"]");
+}
+
+#[test]
+fn stringify_typed_vec() {
+    let array = vec![1, 2, 3];
+
+    assert_eq!(stringify(array), "[1,2,3]");
+}
+
+#[test]
+fn stringify_typed_opt_vec() {
+    let array = vec![Some(1), None, Some(2), None, Some(3)];
+
+    assert_eq!(stringify(array), "[1,null,2,null,3]");
 }
 
 #[test]
@@ -105,6 +164,18 @@ fn stringify_object_with_put() {
     object.put("b", false).unwrap();
 
     assert_eq!(stringify(object), "{\"a\":100,\"b\":false}");
+}
+
+#[test]
+fn stringify_array_with_push() {
+    let mut array = JsonValue::new_array();
+
+    array.push(100).unwrap();
+    array.push(Null).unwrap();
+    array.push(false).unwrap();
+    array.push(Some("foo".to_string())).unwrap();
+
+    assert_eq!(stringify(array), "[100,null,false,\"foo\"]");
 }
 
 #[test]
@@ -201,6 +272,17 @@ fn parse_and_get_from_object() {
     let pi = object.get("pi").unwrap();
 
     assert_eq!(*pi, 3.14.into());
+}
+
+#[test]
+fn parse_and_get_from_array() {
+    let array = parse("[100, 200, false, null, \"foo\"]").unwrap();
+
+    assert_eq!(*array.at(0).unwrap(), 100.into());
+    assert_eq!(*array.at(1).unwrap(), 200.into());
+    assert_eq!(*array.at(2).unwrap(), false.into());
+    assert_eq!(*array.at(3).unwrap(), Null);
+    assert_eq!(*array.at(4).unwrap(), "foo".into());
 }
 
 #[test]

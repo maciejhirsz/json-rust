@@ -27,6 +27,13 @@ impl JsonValue {
         }
     }
 
+    pub fn as_string(self) -> JsonResult<String> {
+        match self {
+            JsonValue::String(value) => Ok(value),
+            _                        => Err(JsonError::wrong_type("String"))
+        }
+    }
+
     pub fn is_number(&self) -> bool {
         match *self {
             JsonValue::Number(_) => true,
@@ -34,10 +41,38 @@ impl JsonValue {
         }
     }
 
+    pub fn as_number(self) -> JsonResult<f64> {
+        match self {
+            JsonValue::Number(value) => Ok(value),
+            _                        => Err(JsonError::wrong_type("Number"))
+        }
+    }
+
     pub fn is_boolean(&self) -> bool {
         match *self {
             JsonValue::Boolean(_) => true,
-            _                     => false,
+            _                     => false
+        }
+    }
+
+    pub fn is_true(&self) -> bool {
+        match *self {
+            JsonValue::Boolean(true) => true,
+            _                        => false
+        }
+    }
+
+    pub fn is_false(&self) -> bool {
+        match *self {
+            JsonValue::Boolean(false) => true,
+            _                         => false
+        }
+    }
+
+    pub fn as_boolean(self) -> JsonResult<bool> {
+        match self {
+            JsonValue::Boolean(value) => Ok(value),
+            _                         => Err(JsonError::wrong_type("Boolean"))
         }
     }
 
@@ -81,6 +116,25 @@ impl JsonValue {
                 _ => Err(JsonError::undefined(key))
             },
             _ => Err(JsonError::wrong_type("Object"))
+        }
+    }
+
+    #[must_use]
+    pub fn push<T>(&mut self, value: T) -> JsonResult<()>
+    where T: Into<JsonValue> {
+        match *self {
+            JsonValue::Array(ref mut vec) => {
+                vec.push(value.into());
+                Ok(())
+            },
+            _ => Err(JsonError::wrong_type("Array"))
+        }
+    }
+
+    pub fn at(&self, index: usize) -> JsonResult<&JsonValue> {
+        match *self {
+            JsonValue::Array(ref vec) => Ok(&vec[index]),
+            _ => Err(JsonError::wrong_type("Array"))
         }
     }
 }

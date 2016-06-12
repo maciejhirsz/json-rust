@@ -9,7 +9,7 @@ pub enum JsonError {
 }
 
 impl JsonError {
-    pub fn unexpected_token(token: super::parser::Token) -> Self {
+    pub fn unexpected_token(token: Token) -> Self {
         JsonError::UnexpectedToken(format!("{:?}", token))
     }
 
