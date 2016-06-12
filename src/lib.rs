@@ -1,3 +1,65 @@
+//! # JSON in Result
+//!
+//! Parse and serialize JSON with ease.
+//!
+//! ## Serialize with `json::stringify(value)`
+//!
+//! Primitives:
+//!
+//! ```
+//! assert_eq!(json::stringify("foobar"), "\"foobar\"");
+//! assert_eq!(json::stringify(42), "42");
+//! assert_eq!(json::stringify(true), "true");
+//! assert_eq!(json::stringify(false), "false");
+//! assert_eq!(json::stringify(json::Null), "null");
+//! ```
+//!
+//! Vector:
+//!
+//! ```
+//! let data = vec![1,2,3];
+//! assert_eq!(json::stringify(data), "[1,2,3]");
+//! ```
+//!
+//! Vector with optional values:
+//!
+//! ```
+//! let data = vec![Some(1), None, Some(2), None, Some(3)];
+//! assert_eq!(json::stringify(data), "[1,null,2,null,3]");
+//! ```
+//!
+//! `array!` macro:
+//!
+//! ```
+//! # #[macro_use] extern crate json;
+//! # fn main() {
+//! let data = array!["foo", "bar", 100, true, json::Null];
+//! assert_eq!(json::stringify(data), "[\"foo\",\"bar\",100,true,null]");
+//! # }
+//! ```
+//!
+//! `object!` macro:
+//!
+//! ```
+//! # #[macro_use] extern crate json;
+//! # fn main() {
+//! let data = object!{
+//!     "name"    => "John Doe",
+//!     "age"     => 30,
+//!     "canJSON" => true
+//! };
+//! assert_eq!(
+//!     json::stringify(data),
+//!     // Because object is internally using a BTreeMap,
+//!     // the key order is alphabetical
+//!     "{\"age\":30,\"canJSON\":true,\"name\":\"John Doe\"}"
+//! );
+//! # }
+//! ```
+//!
+//!
+//!
+
 mod codegen;
 mod parser;
 mod value;
@@ -25,7 +87,7 @@ pub fn stringify<T>(root: T) -> String where T: Into<JsonValue> {
 
 #[macro_export]
 macro_rules! array {
-    [] => (JsonValue::new_array());
+    [] => (json::JsonValue::new_array());
 
     [ $( $item:expr ),* ] => ({
         let mut array = Vec::new();
@@ -34,22 +96,22 @@ macro_rules! array {
             array.push($item.into());
         )*
 
-        JsonValue::Array(array)
+        json::JsonValue::Array(array)
     })
 }
 
 #[macro_export]
 macro_rules! object {
-    {} => (JsonValue::new_object());
+    {} => (json::JsonValue::new_object());
 
     { $( $key:expr => $value:expr ),* } => ({
-        let mut object = BTreeMap::new();
+        let mut object = std::collections::BTreeMap::new();
 
         $(
             object.insert($key.into(), $value.into());
         )*
 
-        JsonValue::Object(object)
+        json::JsonValue::Object(object)
     })
 }
 

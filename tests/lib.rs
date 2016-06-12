@@ -1,4 +1,4 @@
-#[macro_use(array, object)]
+#[macro_use]
 extern crate json;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
