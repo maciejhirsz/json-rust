@@ -286,6 +286,23 @@ fn parse_and_get_from_array() {
 }
 
 #[test]
+fn parse_and_use_with() {
+    let mut data = parse("{\"a\":{\"b\": 100}}").unwrap();
+
+    assert_eq!(*data.with("a").with("b"), 100.into());
+}
+
+#[test]
+fn parse_and_use_with_on_null() {
+    let mut data = parse("null").unwrap();
+
+    assert!(data.is_null());
+    assert!(data.with("a").with("b").is_null());
+    assert!(data.get("a").unwrap().is_object());
+    assert!(data.get("a").unwrap().get("b").unwrap().is_null());
+}
+
+#[test]
 fn parse_error() {
     assert!(parse("10 20").is_err());
 }

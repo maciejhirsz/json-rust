@@ -1,4 +1,4 @@
-//! # JSON in Result
+//! # JSON in Rust
 //!
 //! Parse and serialize JSON with ease.
 //!

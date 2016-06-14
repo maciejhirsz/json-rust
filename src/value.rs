@@ -119,6 +119,32 @@ impl JsonValue {
         }
     }
 
+    pub fn get_mut(&mut self, key: &str) -> JsonResult<&mut JsonValue> {
+        match *self {
+            JsonValue::Object(ref mut btree) => match btree.get_mut(key) {
+                Some(value) => Ok(value),
+                _ => Err(JsonError::undefined(key))
+            },
+            _ => Err(JsonError::wrong_type("Object"))
+        }
+    }
+
+    pub fn with(&mut self, key: &str) -> &mut JsonValue {
+        match *self {
+            JsonValue::Object(ref mut btree) => {
+                if !btree.contains_key(key) {
+                    btree.insert(key.to_string(), JsonValue::Null);
+                }
+                btree.get_mut(key).unwrap()
+            },
+            _ => {
+                *self = JsonValue::new_object();
+                self.put(key, JsonValue::Null).unwrap();
+                return self.get_mut(key).unwrap();
+            }
+        }
+    }
+
     #[must_use]
     pub fn push<T>(&mut self, value: T) -> JsonResult<()>
     where T: Into<JsonValue> {
