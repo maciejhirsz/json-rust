@@ -4,6 +4,7 @@ use parser::Token;
 pub enum JsonError {
     UnexpectedToken(String),
     UnexpectedEndOfJson,
+    ArrayIndexOutOfBounds,
     WrongType(String),
     UndefinedField(String),
 }

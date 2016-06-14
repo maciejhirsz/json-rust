@@ -33,14 +33,14 @@ fn is_as_boolean() {
 fn is_true() {
     let boolean = JsonValue::Boolean(true);
 
-    assert!(boolean.is_true());
+    assert!(boolean.is(true));
 }
 
 #[test]
 fn is_false() {
     let boolean = JsonValue::Boolean(false);
 
-    assert!(boolean.is_false());
+    assert!(boolean.is(false));
 }
 
 #[test]
@@ -180,27 +180,27 @@ fn stringify_array_with_push() {
 
 #[test]
 fn parse_true() {
-    assert_eq!(parse("true").unwrap(), true.into());
+    assert!(parse("true").unwrap().is(true));
 }
 
 #[test]
 fn parse_false() {
-    assert_eq!(parse("false").unwrap(), false.into());
+    assert!(parse("false").unwrap().is(false));
 }
 
 #[test]
 fn parse_null() {
-    assert_eq!(parse("null").unwrap(), Null);
+    assert!(parse("null").unwrap().is_null());
 }
 
 #[test]
 fn parse_number() {
-    assert_eq!(parse("3.14").unwrap(), 3.14.into())
+    assert!(parse("3.14").unwrap().is(3.14))
 }
 
 #[test]
 fn parse_integer() {
-    assert_eq!(parse("42").unwrap(), 42.into());
+    assert!(parse("42").unwrap().is(42));
 }
 
 #[test]
@@ -271,7 +271,7 @@ fn parse_and_get_from_object() {
     let object = parse("{ \"pi\": 3.14 }").unwrap();
     let pi = object.get("pi").unwrap();
 
-    assert_eq!(*pi, 3.14.into());
+    assert!(pi.is(3.14));
 }
 
 #[test]
@@ -279,36 +279,37 @@ fn parse_and_index_from_object() {
     let object = parse("{ \"pi\": 3.14 }").unwrap();
     let ref pi = object["pi"];
 
-    assert_eq!(*pi, 3.14.into());
+    assert!(pi.is(3.14));
 }
 
 #[test]
 fn parse_and_get_from_array() {
     let array = parse("[100, 200, false, null, \"foo\"]").unwrap();
 
-    assert_eq!(*array.at(0).unwrap(), 100.into());
-    assert_eq!(*array.at(1).unwrap(), 200.into());
-    assert_eq!(*array.at(2).unwrap(), false.into());
-    assert_eq!(*array.at(3).unwrap(), Null);
-    assert_eq!(*array.at(4).unwrap(), "foo".into());
+    assert!(array.at(0).unwrap().is(100));
+    assert!(array.at(1).unwrap().is(200));
+    assert!(array.at(2).unwrap().is(false));
+    assert!(array.at(3).unwrap().is_null());
+    assert!(array.at(4).unwrap().is("foo"));
 }
 
 #[test]
 fn parse_and_index_from_array() {
     let array = parse("[100, 200, false, null, \"foo\"]").unwrap();
 
-    assert_eq!(array[0], 100.into());
-    assert_eq!(array[1], 200.into());
-    assert_eq!(array[2], false.into());
-    assert_eq!(array[3], Null);
-    assert_eq!(array[4], "foo".into());
+    assert!(array[0].is(100));
+    assert!(array[1].is(200));
+    assert!(array[2].is(false));
+    assert!(array[3].is_null());
+    assert!(array[4].is("foo"));
+    assert!(array[5].is_null());
 }
 
 #[test]
 fn parse_and_use_with() {
     let mut data = parse("{\"a\":{\"b\": 100}}").unwrap();
 
-    assert_eq!(*data.with("a").with("b"), 100.into());
+    assert!(data.with("a").with("b").is(100));
 }
 
 #[test]

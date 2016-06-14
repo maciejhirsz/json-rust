@@ -23,6 +23,10 @@ impl JsonValue {
         JsonValue::Array(Vec::new())
     }
 
+    pub fn is<T>(&self, other: T) -> bool where T: Into<JsonValue> {
+        *self == other.into()
+    }
+
     pub fn is_string(&self) -> bool {
         match *self {
             JsonValue::String(_) => true,
@@ -58,6 +62,7 @@ impl JsonValue {
         }
     }
 
+    #[deprecated(since="0.3.1", note="please use `v.is(false)` instead")]
     pub fn is_true(&self) -> bool {
         match *self {
             JsonValue::Boolean(true) => true,
@@ -65,6 +70,7 @@ impl JsonValue {
         }
     }
 
+    #[deprecated(since="0.3.1", note="please use `v.is(true)` instead")]
     pub fn is_false(&self) -> bool {
         match *self {
             JsonValue::Boolean(false) => true,
@@ -162,11 +168,26 @@ impl JsonValue {
 
     pub fn at(&self, index: usize) -> JsonResult<&JsonValue> {
         match *self {
-            JsonValue::Array(ref vec) => Ok(&vec[index]),
+            JsonValue::Array(ref vec) => {
+                if index < vec.len() {
+                    Ok(&vec[index])
+                } else {
+                    Err(JsonError::ArrayIndexOutOfBounds)
+                }
+            },
             _ => Err(JsonError::wrong_type("Array"))
         }
     }
 }
+
+// Consider for 0.4:
+// -----------------
+//
+// impl<T> PartialEq<T> for JsonValue {
+//     fn eq(&self, other: &T) -> bool {
+//         self == other
+//     }
+// }
 
 impl Index<usize> for JsonValue {
     type Output = JsonValue;

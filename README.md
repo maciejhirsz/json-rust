@@ -8,34 +8,25 @@ extern crate json;
 use json::JsonValue;
 
 fn main() {
-    // stringify
     let data = object!{
         "a" => "bar",
         "b" => array![1,false,"foo"]
     };
-    let string = json::stringify(data);
-    assert_eq!(string, "{\"a\":\"bar\",\"b\":[1,false,\"foo\"]}");
 
-    // parse
-    let data = json::parse("
+    // Quickly access values without creating structs
+    assert!(data["a"].is("bar"));
+    assert!(data["b"][0].is(1));
+    assert!(data["b"][1].is(false));
+    assert!(data["b"][2].is("foo"));
 
-    {
-        \"features\": {
-            \"existing\": true
-        },
-        \"numbers\": [100, 200, 300]
-    }
+    // Missing data defaults to null
+    assert!(data["b"][3].is_null());
+    assert!(data["c"].is_null());
 
-    ").unwrap();
+    // Even nested data
+    assert!(data["c"]["d"]["e"].is_null());
 
-    // Dynamically read data
-    assert!(data["features"]["existing"].is_true());
-    assert!(data["features"]["nope"].is_null());
-    assert_eq!(data["numbers"][0], 100.into());
-
-    // Read into Rust primitives
-    let first_number: &f64 = data["numbers"][0].as_number().unwrap();
-    assert_eq!(first_number, &100.0);
+    assert_eq!(json::stringify(data), "{\"a\":\"bar\",\"b\":[1,false,\"foo\"]}");
 }
 ```
 
@@ -98,6 +89,17 @@ data.push("foo");
 data.push(false);
 
 assert_eq!(json::stringify(data), "[10,\"foo\",false]");
+```
+
+Putting fields on objects:
+
+```rust
+let mut data = json::JsonValue::new_object();
+
+data.put("answer", 42);
+data.put("foo", "bar");
+
+assert_eq!(json::stringify(data), "{\"answer\":42,\"foo\":\"bar\"}");
 ```
 
 `array!` macro:
