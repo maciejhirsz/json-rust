@@ -275,6 +275,14 @@ fn parse_and_get_from_object() {
 }
 
 #[test]
+fn parse_and_index_from_object() {
+    let object = parse("{ \"pi\": 3.14 }").unwrap();
+    let ref pi = object["pi"];
+
+    assert_eq!(*pi, 3.14.into());
+}
+
+#[test]
 fn parse_and_get_from_array() {
     let array = parse("[100, 200, false, null, \"foo\"]").unwrap();
 
@@ -283,6 +291,17 @@ fn parse_and_get_from_array() {
     assert_eq!(*array.at(2).unwrap(), false.into());
     assert_eq!(*array.at(3).unwrap(), Null);
     assert_eq!(*array.at(4).unwrap(), "foo".into());
+}
+
+#[test]
+fn parse_and_index_from_array() {
+    let array = parse("[100, 200, false, null, \"foo\"]").unwrap();
+
+    assert_eq!(array[0], 100.into());
+    assert_eq!(array[1], 200.into());
+    assert_eq!(array[2], false.into());
+    assert_eq!(array[3], Null);
+    assert_eq!(array[4], "foo".into());
 }
 
 #[test]

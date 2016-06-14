@@ -13,14 +13,29 @@ fn main() {
         "a" => "bar",
         "b" => array![1,false,"foo"]
     };
-    let string = json::stringify_ref(&data);
+    let string = json::stringify(data);
+    assert_eq!(string, "{\"a\":\"bar\",\"b\":[1,false,\"foo\"]}");
 
     // parse
-    let parsed_data = json::parse(&string).unwrap();
+    let data = json::parse("
 
-    assert_eq!(data, parsed_data);
-    assert_eq!(parsed_data.get("a").unwrap().as_string().unwrap(), "bar");
-    assert!(parsed_data.get("b").unwrap().at(0).unwrap().is_number());
+    {
+        \"features\": {
+            \"existing\": true
+        },
+        \"numbers\": [100, 200, 300]
+    }
+
+    ").unwrap();
+
+    // Dynamically read data
+    assert!(data["features"]["existing"].is_true());
+    assert!(data["features"]["nope"].is_null());
+    assert_eq!(data["numbers"][0], 100.into());
+
+    // Read into Rust primitives
+    let first_number: &f64 = data["numbers"][0].as_number().unwrap();
+    assert_eq!(first_number, &100.0);
 }
 ```
 

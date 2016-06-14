@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::ops::Index;
 use { JsonResult, JsonError };
 
 #[derive(Debug, PartialEq)]
@@ -10,6 +11,8 @@ pub enum JsonValue {
     Object(BTreeMap<String, JsonValue>),
     Array(Vec<JsonValue>),
 }
+
+static NULL: JsonValue = JsonValue::Null;
 
 impl JsonValue {
     pub fn new_object() -> JsonValue {
@@ -162,5 +165,21 @@ impl JsonValue {
             JsonValue::Array(ref vec) => Ok(&vec[index]),
             _ => Err(JsonError::wrong_type("Array"))
         }
+    }
+}
+
+impl Index<usize> for JsonValue {
+    type Output = JsonValue;
+
+    fn index<'a>(&'a self, index: usize) -> &'a JsonValue {
+        self.at(index).unwrap_or(&NULL)
+    }
+}
+
+impl<'b> Index<&'b str> for JsonValue {
+    type Output = JsonValue;
+
+    fn index<'a>(&'a self, index: &str) -> &'a JsonValue {
+        self.get(index).unwrap_or(&NULL)
     }
 }
