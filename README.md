@@ -4,7 +4,7 @@ Parse and serialize JSON with ease.
 
 **[Complete Documentation](http://terhix.com/doc/json/) - [Cargo](https://crates.io/crates/json) - [Repository](https://github.com/maciejhirsz/json-rust)**
 
-## Easily access data without using structs.
+## Easily access data without using structs
 
 ```rust
 #[macro_use]
@@ -17,7 +17,6 @@ fn main() {
         "b" => array![1, false, "foo"]
     };
 
-    // Quickly access values without creating structs
     assert!(data["a"].is("bar"));
     assert!(data["b"].is_array());
     assert!(data["b"][0].is(1));
