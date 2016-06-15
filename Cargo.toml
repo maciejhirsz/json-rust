@@ -1,9 +1,10 @@
 [package]
 name = "json"
-version = "0.3.1"
+version = "0.3.2"
 authors = ["Maciej Hirsz <maciej.hirsz@gmail.com>"]
 description = "JSON implementation in Rust"
 repository = "https://github.com/maciejhirsz/json-rust"
+documentation = "http://terhix.com/doc/json/"
 license = "MIT"
 
 [dependencies]
