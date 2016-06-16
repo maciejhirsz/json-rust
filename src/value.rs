@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::ops::Index;
 use { JsonResult, JsonError };
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum JsonValue {
     String(String),
     Number(f64),
@@ -208,6 +208,30 @@ impl JsonValue {
                 }
             },
             _ => Err(JsonError::wrong_type("Array"))
+        }
+    }
+
+    /// Works on `JsonValue::Array` - checks if the array contains a value
+    pub fn contains<T>(&self, item: T) -> bool where T: Into<JsonValue> {
+        match *self {
+            JsonValue::Array(ref vec) => {
+                vec.contains(&item.into())
+            },
+            _ => false
+        }
+    }
+
+    /// Returns length of array or object (number of keys), defaults to `0` for
+    /// other types.
+    pub fn len(&self) -> usize {
+        match *self {
+            JsonValue::Array(ref vec) => {
+                vec.len()
+            },
+            JsonValue::Object(ref btree) => {
+                btree.len()
+            },
+            _ => 0
         }
     }
 }

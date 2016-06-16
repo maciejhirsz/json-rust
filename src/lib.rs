@@ -4,7 +4,45 @@
 //!
 //! **[Complete Documentation](http://terhix.com/doc/json/) - [Cargo](https://crates.io/crates/json) - [Repository](https://github.com/maciejhirsz/json-rust)**
 //!
-//! ## Easily access data without using structs.
+//! # Why?
+//!
+//! JSON is a very loose format where anything goes - arrays can hold mixed
+//! types, object keys can change types between API calls or not include
+//! some keys under some conditions. Mapping that to idiomatic Rust structs
+//! introduces friction.
+//!
+//! This crate intends to avoid that friction by using extensive static dispatch
+//! and hiding type information behind enums, while still giving you all the safety
+//! guarantees of safe Rust code.
+//!
+//! ```
+//! let data = json::parse("
+//!
+//! {
+//!     \"code\": 200,
+//!     \"success\": true,
+//!     \"payload\": {
+//!         \"features\": [
+//!             \"awesome\",
+//!             \"easyAPI\",
+//!             \"lowLearningCurve\"
+//!         ]
+//!     }
+//! }
+//!
+//! ").unwrap();
+//!
+//! assert!(data["code"].is(200));
+//! assert!(data["success"].is(true));
+//! assert!(data["payload"]["features"].is_array());
+//! assert!(data["payload"]["features"][0].is("awesome"));
+//! assert!(data["payload"]["features"].contains("easyAPI"));
+//!
+//! // Error resilient: non-existent values default to null
+//! assert!(data["this"]["does"]["not"]["exist"].is_null());
+//! ```
+//!
+//! ## Easily create JSON data without defining structs
 //!
 //! ```
 //! #[macro_use]
@@ -15,19 +53,6 @@
 //!         "a" => "bar",
 //!         "b" => array![1, false, "foo"]
 //!     };
-//!
-//!     assert!(data["a"].is("bar"));
-//!     assert!(data["b"].is_array());
-//!     assert!(data["b"][0].is(1));
-//!     assert!(data["b"][1].is(false));
-//!     assert!(data["b"][2].is("foo"));
-//!
-//!     // Missing data defaults to null
-//!     assert!(data["b"][3].is_null());
-//!     assert!(data["c"].is_null());
-//!
-//!     // Even nested data
-//!     assert!(data["c"]["d"]["e"].is_null());
 //!
 //!     assert_eq!(json::stringify(data), "{\"a\":\"bar\",\"b\":[1,false,\"foo\"]}");
 //! }
@@ -167,7 +192,7 @@ pub fn stringify<T>(root: T) -> String where T: Into<JsonValue> {
 
 #[macro_export]
 macro_rules! array {
-    [] => (json::JsonValue::new_array());
+    [] => ($crate::JsonValue::new_array());
 
     [ $( $item:expr ),* ] => ({
         let mut array = Vec::new();
@@ -176,13 +201,13 @@ macro_rules! array {
             array.push($item.into());
         )*
 
-        json::JsonValue::Array(array)
+        $crate::JsonValue::Array(array)
     })
 }
 
 #[macro_export]
 macro_rules! object {
-    {} => (json::JsonValue::new_object());
+    {} => ($crate::JsonValue::new_object());
 
     { $( $key:expr => $value:expr ),* } => ({
         let mut object = std::collections::BTreeMap::new();
@@ -191,7 +216,7 @@ macro_rules! object {
             object.insert($key.into(), $value.into());
         )*
 
-        json::JsonValue::Object(object)
+        $crate::JsonValue::Object(object)
     })
 }
 

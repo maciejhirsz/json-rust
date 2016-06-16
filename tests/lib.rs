@@ -326,3 +326,41 @@ fn parse_and_use_with_on_null() {
 fn parse_error() {
     assert!(parse("10 20").is_err());
 }
+
+#[test]
+fn object_len() {
+    let data = object!{
+        "a" => true,
+        "b" => false
+    };
+
+    assert_eq!(data.len(), 2);
+}
+
+#[test]
+fn array_len() {
+    let data = array![0, 1, 2, 3];
+
+    assert_eq!(data.len(), 4);
+}
+
+#[test]
+fn array_contains() {
+    let data = array![true, Null, 3.14, "foo"];
+
+    assert!(data.contains(true));
+    assert!(data.contains(Null));
+    assert!(data.contains(3.14));
+    assert!(data.contains("foo"));
+
+    assert!(!data.contains(false));
+    assert!(!data.contains(42));
+    assert!(!data.contains("bar"));
+}
+
+#[test]
+fn null_len() {
+    let data = json::Null;
+
+    assert_eq!(data.len(), 0);
+}
