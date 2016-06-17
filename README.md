@@ -18,21 +18,21 @@ and hiding type information behind enums, while still giving you all the safety
 guarantees of safe Rust code.
 
 ```rust
-let data = json::parse("
+let data = json::parse(r#"
 
 {
-    \"code\": 200,
-    \"success\": true,
-    \"payload\": {
-        \"features\": [
-            \"awesome\",
-            \"easyAPI\",
-            \"lowLearningCurve\"
+    "code": 200,
+    "success": true,
+    "payload": {
+        "features": [
+            "awesome",
+            "easyAPI",
+            "lowLearningCurve"
         ]
     }
 }
 
-").unwrap();
+"#).unwrap();
 
 assert!(data["code"].is(200));
 assert!(data["success"].is(true));
@@ -56,7 +56,7 @@ fn main() {
         "b" => array![1, false, "foo"]
     };
 
-    assert_eq!(json::stringify(data), "{\"a\":\"bar\",\"b\":[1,false,\"foo\"]}");
+    assert_eq!(json::stringify(data), r#"{"a":"bar","b":[1,false,"foo"]}"#);
 }
 ```
 

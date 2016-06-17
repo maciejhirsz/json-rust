@@ -26,7 +26,26 @@ impl Generator {
 
     pub fn write_json(&mut self, json: &JsonValue) {
         match *json {
-            JsonValue::String(ref string) => self.write(&format!("{:?}", string)),
+            JsonValue::String(ref string) => {
+                self.write_char('"');
+
+                for ch in string.chars() {
+                    match ch {
+                        '\\' | '/' | '"' => {
+                            self.write_char('\\');
+                            self.write_char(ch);
+                        },
+                        '\n'       => self.write("\\n"),
+                        '\r'       => self.write("\\r"),
+                        '\t'       => self.write("\\t"),
+                        '\u{000C}' => self.write("\\f"),
+                        '\u{0008}' => self.write("\\b"),
+                        _          => self.write_char(ch)
+                    }
+                }
+
+                self.write_char('"');
+            },
             JsonValue::Number(ref number) => self.write(&number.to_string()),
             JsonValue::Boolean(ref value) => self.write(if *value { "true" } else { "false" }),
             JsonValue::Null               => self.write("null"),

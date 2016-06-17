@@ -1,4 +1,5 @@
 use std::str::Chars;
+use std::char;
 use std::iter::{ Peekable, Iterator };
 use std::collections::BTreeMap;
 use { JsonValue, JsonError, JsonResult };
@@ -37,6 +38,32 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
+    fn expect(&mut self) -> JsonResult<char> {
+        self.source.next().ok_or(JsonError::UnexpectedEndOfJson)
+    }
+
+    fn read_char_as_number(&mut self) -> JsonResult<u32> {
+        Ok(match try!(self.expect()) {
+            '0'       => 0,
+            '1'       => 1,
+            '2'       => 2,
+            '3'       => 3,
+            '4'       => 4,
+            '5'       => 5,
+            '6'       => 6,
+            '7'       => 7,
+            '8'       => 8,
+            '9'       => 9,
+            'a' | 'A' => 10,
+            'b' | 'B' => 11,
+            'c' | 'C' => 12,
+            'd' | 'D' => 13,
+            'e' | 'E' => 14,
+            'f' | 'F' => 15,
+            ch        => return Err(JsonError::UnexpectedCharacter(ch)),
+        })
+    }
+
     fn read_label(&mut self, first: char) -> String {
         let mut label = first.to_string();
 
@@ -53,31 +80,46 @@ impl<'a> Tokenizer<'a> {
         return label;
     }
 
-    fn read_string(&mut self, first: char) -> String {
+    fn read_codepoint(&mut self) -> JsonResult<char> {
+        let codepoint = try!(self.read_char_as_number()) << 12
+                      | try!(self.read_char_as_number()) << 8
+                      | try!(self.read_char_as_number()) << 4
+                      | try!(self.read_char_as_number());
+
+        char::from_u32(codepoint)
+            .ok_or(JsonError::CantCastCodepointToCharacter(codepoint))
+    }
+
+    fn read_string(&mut self, first: char) -> JsonResult<String> {
         let mut value = String::new();
         let mut escape = false;
 
         while let Some(ch) = self.source.next() {
             if ch == first && escape == false {
-                return value;
+                return Ok(value);
             }
-            match ch {
-                '\\' => {
-                    if escape {
-                        escape = false;
-                        value.push(ch);
-                    } else {
-                        escape = true;
-                    }
-                },
-                _ => {
-                    value.push(ch);
-                    escape = false;
-                },
+
+            if escape {
+                value.push(match ch {
+                    'b' => '\u{8}',
+                    'f' => '\u{c}',
+                    't' => '\t',
+                    'r' => '\r',
+                    'n' => '\n',
+                    'u' => try!(self.read_codepoint()),
+                    _   => ch,
+                });
+            } else if ch == '\\' {
+                escape = true;
+                continue;
+            } else {
+                value.push(ch);
             }
+
+            escape = false;
         }
 
-        return value;
+        Ok(value)
     }
 
     fn read_number(&mut self, first: char) -> f64 {
@@ -119,9 +161,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                 ']' => Token::BracketOff,
                 '{' => Token::BraceOn,
                 '}' => Token::BraceOff,
-                '"' => {
-                    Token::String(self.read_string(ch))
-                },
+                '"' => Token::String(self.read_string(ch).unwrap()),
                 '0'...'9' => Token::Number(self.read_number(ch)),
                 'a'...'z' => {
                     let label = self.read_label(ch);

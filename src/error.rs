@@ -3,7 +3,9 @@ use parser::Token;
 #[derive(Debug)]
 pub enum JsonError {
     UnexpectedToken(String),
+    UnexpectedCharacter(char),
     UnexpectedEndOfJson,
+    CantCastCodepointToCharacter(u32),
     ArrayIndexOutOfBounds,
     WrongType(String),
     UndefinedField(String),

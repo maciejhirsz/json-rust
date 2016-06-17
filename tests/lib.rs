@@ -179,6 +179,11 @@ fn stringify_array_with_push() {
 }
 
 #[test]
+fn stringify_escaped_characters() {
+    assert_eq!(stringify("\r\n\t\u{8}\u{c}\\/\""), r#""\r\n\t\b\f\\\/\"""#);
+}
+
+#[test]
 fn parse_true() {
     assert!(parse("true").unwrap().is(true));
 }
@@ -320,6 +325,29 @@ fn parse_and_use_with_on_null() {
     assert!(data.with("a").with("b").is_null());
     assert!(data.get("a").unwrap().is_object());
     assert!(data.get("a").unwrap().get("b").unwrap().is_null());
+}
+
+#[test]
+fn parse_escaped_characters() {
+    let data = parse(r#"
+
+    "\r\n\t\b\f\\\/\""
+
+    "#).unwrap();
+
+    assert!(data.is_string());
+    assert!(data.is("\r\n\t\u{8}\u{c}\\/\""));
+}
+
+#[test]
+fn parse_escaped_unicode() {
+    let data = parse(r#"
+
+    "\u2764\ufe0f"
+
+    "#).unwrap();
+
+    assert!(data.is("❤️"));
 }
 
 #[test]

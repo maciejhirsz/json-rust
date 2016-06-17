@@ -18,21 +18,21 @@
 //! guarantees of safe Rust code.
 //!
 //! ```
-//! let data = json::parse("
+//! let data = json::parse(r#"
 //!
 //! {
-//!     \"code\": 200,
-//!     \"success\": true,
-//!     \"payload\": {
-//!         \"features\": [
-//!             \"awesome\",
-//!             \"easyAPI\",
-//!             \"lowLearningCurve\"
+//!     "code": 200,
+//!     "success": true,
+//!     "payload": {
+//!         "features": [
+//!             "awesome",
+//!             "easyAPI",
+//!             "lowLearningCurve"
 //!         ]
 //!     }
 //! }
 //!
-//! ").unwrap();
+//! "#).unwrap();
 //!
 //! assert!(data["code"].is(200));
 //! assert!(data["success"].is(true));
@@ -56,7 +56,7 @@
 //!         "b" => array![1, false, "foo"]
 //!     };
 //!
-//!     assert_eq!(json::stringify(data), "{\"a\":\"bar\",\"b\":[1,false,\"foo\"]}");
+//!     assert_eq!(json::stringify(data), r#"{"a":"bar","b":[1,false,"foo"]}"#);
 //! }
 //! ```
 //!
