@@ -1,4 +1,6 @@
-# 🦄 JSON in Rust
+![](http://terhix.com/doc/json-rust-logo-small.png)
+
+# JSON in Rust
 
 Parse and serialize JSON with ease.
 
