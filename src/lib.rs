@@ -165,6 +165,7 @@ mod codegen;
 mod parser;
 mod value;
 mod error;
+pub mod iterators;
 
 pub use error::JsonError;
 pub use value::JsonValue;

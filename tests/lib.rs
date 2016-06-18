@@ -392,3 +392,82 @@ fn null_len() {
 
     assert_eq!(data.len(), 0);
 }
+
+#[test]
+fn iter_entries() {
+    let data = object!{
+        "a" => 1,
+        "b" => "foo"
+    };
+
+    for (_, value) in data.entries() {
+        assert!(!value.is_null());
+    }
+
+    let mut entries = data.entries();
+
+    {
+        let (key, value) = entries.next().unwrap();
+        assert_eq!(key, "a");
+        assert!(value.is(1));
+    }
+    {
+        let (key, value) = entries.next().unwrap();
+        assert_eq!(key, "b");
+        assert!(value.is("foo"));
+    }
+
+    assert!(entries.next().is_none());
+}
+
+#[test]
+fn iter_entries_mut() {
+    let mut data = object!{
+        "a" => Null,
+        "b" => Null
+    };
+
+    for (_, value) in data.entries_mut() {
+        assert!(value.is_null());
+        *value = 100.into();
+    }
+
+    assert_eq!(data, object!{
+        "a" => 100,
+        "b" => 100
+    });
+}
+
+#[test]
+fn iter_members() {
+    let data = array![1, "foo"];
+
+    for member in data.members() {
+        assert!(!member.is_null());
+    }
+
+    let mut members = data.members();
+
+    {
+        let member = members.next().unwrap();
+        assert!(member.is(1));
+    }
+    {
+        let member = members.next().unwrap();
+        assert!(member.is("foo"));
+    }
+
+    assert!(members.next().is_none());
+}
+
+#[test]
+fn iter_members_mut() {
+    let mut data = array![Null, Null];
+
+    for member in data.members_mut() {
+        assert!(member.is_null());
+        *member = 100.into();
+    }
+
+    assert_eq!(data, array![100, 100]);
+}

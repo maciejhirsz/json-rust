@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::ops::Index;
+use iterators::{ Members, MembersMut, Entries, EntriesMut };
 use { JsonResult, JsonError };
 
 #[derive(Debug, PartialEq, Clone)]
@@ -64,22 +65,6 @@ impl JsonValue {
         match *self {
             JsonValue::Boolean(_) => true,
             _                     => false
-        }
-    }
-
-    #[deprecated(since="0.3.1", note="please use `v.is(false)` instead")]
-    pub fn is_true(&self) -> bool {
-        match *self {
-            JsonValue::Boolean(true) => true,
-            _                        => false
-        }
-    }
-
-    #[deprecated(since="0.3.1", note="please use `v.is(true)` instead")]
-    pub fn is_false(&self) -> bool {
-        match *self {
-            JsonValue::Boolean(false) => true,
-            _                         => false
         }
     }
 
@@ -232,6 +217,44 @@ impl JsonValue {
                 btree.len()
             },
             _ => 0
+        }
+    }
+
+    pub fn members(&self) -> Members {
+        match *self {
+            JsonValue::Array(ref vec) => {
+                Members::Some(vec.iter())
+            },
+            _ => Members::None
+        }
+    }
+
+    pub fn members_mut(&mut self) -> MembersMut {
+        match *self {
+            JsonValue::Array(ref mut vec) => {
+                MembersMut::Some(vec.iter_mut())
+            },
+            _ => MembersMut::None
+        }
+    }
+
+    /// Works on `JsonValue::Object` - returns an iterator over entries.
+    pub fn entries(&self) -> Entries {
+        match *self {
+            JsonValue::Object(ref btree) => {
+                Entries::Some(btree.iter())
+            },
+            _ => Entries::None
+        }
+    }
+
+    /// Works on `JsonValue::Object` - returns a mutable iterator over entries.
+    pub fn entries_mut(&mut self) -> EntriesMut {
+        match *self {
+            JsonValue::Object(ref mut btree) => {
+                EntriesMut::Some(btree.iter_mut())
+            },
+            _ => EntriesMut::None
         }
     }
 }
