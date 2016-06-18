@@ -220,6 +220,7 @@ impl JsonValue {
         }
     }
 
+    /// Works on `JsonValue::Array` - returns an iterator over members.
     pub fn members(&self) -> Members {
         match *self {
             JsonValue::Array(ref vec) => {
@@ -229,6 +230,7 @@ impl JsonValue {
         }
     }
 
+    /// Works on `JsonValue::Array` - returns a mutable iterator over members.
     pub fn members_mut(&mut self) -> MembersMut {
         match *self {
             JsonValue::Array(ref mut vec) => {
@@ -238,7 +240,7 @@ impl JsonValue {
         }
     }
 
-    /// Works on `JsonValue::Object` - returns an iterator over entries.
+    /// Works on `JsonValue::Object` - returns an iterator over key value pairs.
     pub fn entries(&self) -> Entries {
         match *self {
             JsonValue::Object(ref btree) => {
@@ -248,7 +250,8 @@ impl JsonValue {
         }
     }
 
-    /// Works on `JsonValue::Object` - returns a mutable iterator over entries.
+    /// Works on `JsonValue::Object` - returns a mutable iterator over
+    /// key value pairs.
     pub fn entries_mut(&mut self) -> EntriesMut {
         match *self {
             JsonValue::Object(ref mut btree) => {
