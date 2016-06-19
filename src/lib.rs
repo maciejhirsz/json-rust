@@ -182,13 +182,24 @@ pub type Array = Vec<JsonValue>;
 pub type Object = BTreeMap<String, JsonValue>;
 
 pub fn stringify_ref(root: &JsonValue) -> String {
-    let mut gen = Generator::new(true);
+    let mut gen = Generator::new(true, 4);
     gen.write_json(root);
     gen.consume()
 }
 
 pub fn stringify<T>(root: T) -> String where T: Into<JsonValue> {
-    let mut gen = Generator::new(true);
+    let mut gen = Generator::new(true, 4);
+    gen.write_json(&root.into());
+    gen.consume()
+}
+pub fn stringify_ref_pretty(root: &JsonValue, step : u16) -> String {
+    let mut gen = Generator::new(false, step);
+    gen.write_json(root);
+    gen.consume()
+}
+
+pub fn stringify_pretty<T>(root: T, step: u16) -> String where T: Into<JsonValue> {
+    let mut gen = Generator::new(false, step);
     gen.write_json(&root.into());
     gen.consume()
 }
