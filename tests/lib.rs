@@ -186,8 +186,8 @@ fn stringify_escaped_characters() {
 #[test]
 fn stringify_pretty_object() {
     let object = object!{
-        "name" => "Maciej",
-        "age" => 30,
+        "name" => "Urlich",
+        "age" => 50,
         "parents" => object!{
             "mother" => "Helga",
             "father" => "Brutus"
@@ -195,9 +195,37 @@ fn stringify_pretty_object() {
         "cars" => array![ "Golf", "Mercedes", "Porsche" ]
     };
 
-    assert_eq!(stringify_pretty(object, 2),
-               "{\n  \"age\": 30,\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \
-                \"Porsche\"\n  ],\n  \"name\": \"Maciej\",\n  \"parents\": {\n    \"father\": \
+    assert_eq!(stringify_pretty(object, "  "),
+               "{\n  \"age\": 50,\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \
+                \"Porsche\"\n  ],\n  \"name\": \"Urlich\",\n  \"parents\": {\n    \"father\": \
+                \"Brutus\",\n    \"mother\": \"Helga\"\n  }\n}");
+}
+
+#[test]
+fn object_dump_minified() {
+    let object = object!{
+        "name" => "Maciej",
+        "age" => 30
+    };
+
+    assert_eq!(object.dump(), "{\"age\":30,\"name\":\"Maciej\"}");
+}
+
+#[test]
+fn object_dump_pretty() {
+    let object = object!{
+        "name" => "Urlich",
+        "age" => 50,
+        "parents" => object!{
+            "mother" => "Helga",
+            "father" => "Brutus"
+        },
+        "cars" => array![ "Golf", "Mercedes", "Porsche" ]
+    };
+
+    assert_eq!(object.pretty("  "),
+               "{\n  \"age\": 50,\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \
+                \"Porsche\"\n  ],\n  \"name\": \"Urlich\",\n  \"parents\": {\n    \"father\": \
                 \"Brutus\",\n    \"mother\": \"Helga\"\n  }\n}");
 }
 

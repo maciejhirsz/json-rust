@@ -56,7 +56,7 @@ fn main() {
         "b" => array![1, false, "foo"]
     };
 
-    assert_eq!(json::stringify(data), r#"{"a":"bar","b":[1,false,"foo"]}"#);
+    assert_eq!(data.dump(), r#"{"a":"bar","b":[1,false,"foo"]}"#);
 }
 ```
 
