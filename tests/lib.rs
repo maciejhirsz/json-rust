@@ -195,7 +195,7 @@ fn stringify_pretty_object() {
         "cars" => array![ "Golf", "Mercedes", "Porsche" ]
     };
 
-    assert_eq!(stringify_pretty(object, "  "),
+    assert_eq!(stringify_pretty(object, 2),
                "{\n  \"age\": 50,\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \
                 \"Porsche\"\n  ],\n  \"name\": \"Urlich\",\n  \"parents\": {\n    \"father\": \
                 \"Brutus\",\n    \"mother\": \"Helga\"\n  }\n}");
@@ -223,7 +223,7 @@ fn object_dump_pretty() {
         "cars" => array![ "Golf", "Mercedes", "Porsche" ]
     };
 
-    assert_eq!(object.pretty("  "),
+    assert_eq!(object.pretty(2),
                "{\n  \"age\": 50,\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \
                 \"Porsche\"\n  ],\n  \"name\": \"Urlich\",\n  \"parents\": {\n    \"father\": \
                 \"Brutus\",\n    \"mother\": \"Helga\"\n  }\n}");

@@ -1,27 +1,27 @@
 use JsonValue;
 
-pub struct Generator<'a> {
+pub struct Generator {
     pub minify: bool,
     code: String,
     dent: u16,
-    indent: &'a str,
+    spaces_per_indent: u16,
 }
 
-impl<'a> Generator<'a> {
-    pub fn new(indent: Option<&'a str>) -> Self {
+impl Generator {
+    pub fn new(minify: bool, spaces: u16) -> Self {
         Generator {
-            minify: indent.is_none(),
+            minify: minify,
             code: String::new(),
             dent: 0,
-            indent: indent.unwrap_or("")
+            spaces_per_indent: spaces
         }
     }
 
     pub fn new_line(&mut self) {
         if !self.minify {
             self.code.push('\n');
-            for _ in 0..(self.dent) {
-                self.code.push_str(self.indent);
+            for _ in 0..(self.dent * self.spaces_per_indent) {
+                self.code.push(' ');
             }
         }
     }

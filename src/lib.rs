@@ -184,14 +184,15 @@ pub type Object = BTreeMap<String, JsonValue>;
 impl JsonValue {
     /// Prints out the value as JSON string.
     pub fn dump(&self) -> String {
-        let mut gen = Generator::new(None);
+        let mut gen = Generator::new(true, 0);
         gen.write_json(self);
         gen.consume()
     }
 
-    /// Pretty prints out the value as JSON string.
-    pub fn pretty<'a>(&self, indent: &'a str) -> String {
-        let mut gen = Generator::new(Some(indent));
+    /// Pretty prints out the value as JSON string. Takes an argument that's
+    /// number of spaces to indent new blocks with.
+    pub fn pretty<'a>(&self, spaces: u16) -> String {
+        let mut gen = Generator::new(false, spaces);
         gen.write_json(self);
         gen.consume()
     }
@@ -202,14 +203,17 @@ pub fn stringify_ref(root: &JsonValue) -> String {
     root.dump()
 }
 
+/// Pretty prints out the value as JSON string.
 pub fn stringify<T>(root: T) -> String where T: Into<JsonValue> {
     let root: JsonValue = root.into();
     root.dump()
 }
 
-pub fn stringify_pretty<'a, T>(root: T, indent: &'a str) -> String where T: Into<JsonValue> {
+/// Pretty prints out the value as JSON string. Second argument is a
+/// number of spaces to indent new blocks with.
+pub fn stringify_pretty<'a, T>(root: T, spaces: u16) -> String where T: Into<JsonValue> {
     let root: JsonValue = root.into();
-    root.pretty(indent)
+    root.pretty(spaces)
 }
 
 #[macro_export]
