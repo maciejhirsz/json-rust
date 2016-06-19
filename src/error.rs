@@ -30,14 +30,14 @@ impl JsonError {
 impl fmt::Display for JsonError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use JsonError::*;
-        
+
         match *self {
             UnexpectedToken(ref s) => write!(f, "Unexpected token: {}", s),
             UnexpectedCharacter(c) => write!(f, "Unexpected character: {}", c),
             UnexpectedEndOfJson => write!(f, "Unexpected end of JSON"),
             CantCastCodepointToCharacter(i) => write!(f, "Cannot cast this codepoint to a character: {}", i),
             ArrayIndexOutOfBounds => write!(f, "Array index out of bounds!"),
-            WrongType(ref s) => write!(f, "Wrong type: {}", s),
+            WrongType(ref s) => write!(f, "Wrong type, expected: {}", s),
             UndefinedField(ref s) => write!(f, "Undefined field: {}", s)
         }
     }
@@ -45,12 +45,12 @@ impl fmt::Display for JsonError {
 
 impl Error for JsonError {
     fn description(&self) -> &str {
-        use JsonError::*;        
+        use JsonError::*;
         match *self {
             UnexpectedToken(_) => "Unexpected token",
             UnexpectedCharacter(_) => "Unexpected character",
             UnexpectedEndOfJson => "Unexpected end of JSON",
-            CantCastCodepointToCharacter(_) => "Cannot cast this codepoint to character",
+            CantCastCodepointToCharacter(_) => "Cannot cast this codepoint to a character",
             ArrayIndexOutOfBounds => "Array index out of bounds!",
             WrongType(_) => "Wrong type",
             UndefinedField(_) => "Undefined field",

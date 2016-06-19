@@ -213,7 +213,9 @@ macro_rules! object {
     {} => ($crate::JsonValue::new_object());
 
     { $( $key:expr => $value:expr ),* } => ({
-        let mut object = std::collections::BTreeMap::new();
+        use std::collections::BTreeMap;
+
+        let mut object = BTreeMap::new();
 
         $(
             object.insert($key.into(), $value.into());

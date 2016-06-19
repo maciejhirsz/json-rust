@@ -1,9 +1,9 @@
 #[macro_use]
 extern crate json;
-use std::collections::BTreeMap;
-use std::collections::HashMap;
 
 use json::{ stringify, parse, JsonValue, Null };
+use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 #[test]
 fn is_as_string() {
