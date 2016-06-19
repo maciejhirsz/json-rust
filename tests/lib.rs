@@ -227,6 +227,11 @@ fn parse_integer() {
 }
 
 #[test]
+fn parse_negative_integer() {
+    assert!(parse("-42").unwrap().is(-42));
+}
+
+#[test]
 fn parse_array() {
     assert_eq!(parse("[10, \"foo\", true, null]").unwrap(), array![
         10,

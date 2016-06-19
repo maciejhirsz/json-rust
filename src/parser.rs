@@ -162,7 +162,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                 '{' => Token::BraceOn,
                 '}' => Token::BraceOff,
                 '"' => Token::String(self.read_string(ch).unwrap()),
-                '0'...'9' => Token::Number(self.read_number(ch)),
+                '0'...'9' | '-' => Token::Number(self.read_number(ch)),
                 'a'...'z' => {
                     let label = self.read_label(ch);
                     match label.as_ref() {
