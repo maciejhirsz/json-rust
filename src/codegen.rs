@@ -4,24 +4,24 @@ pub struct Generator {
     pub minify: bool,
     code: String,
     dent: u16,
-    step: u16
+    spaces_per_indent: u16,
 }
 
 impl Generator {
-    pub fn new(minify: bool, step : u16) -> Self {
+    pub fn new(minify: bool, spaces: u16) -> Self {
         Generator {
             minify: minify,
             code: String::new(),
             dent: 0,
-            step: step
+            spaces_per_indent: spaces
         }
     }
 
     pub fn new_line(&mut self) {
         if !self.minify {
             self.code.push('\n');
-            for _ in 0..(self.dent*self.step) {
-                self.code.push_str(" ");
+            for _ in 0..(self.dent * self.spaces_per_indent) {
+                self.code.push(' ');
             }
         }
     }

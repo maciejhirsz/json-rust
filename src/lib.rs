@@ -56,7 +56,7 @@
 //!         "b" => array![1, false, "foo"]
 //!     };
 //!
-//!     assert_eq!(json::stringify(data), r#"{"a":"bar","b":[1,false,"foo"]}"#);
+//!     assert_eq!(data.dump(), r#"{"a":"bar","b":[1,false,"foo"]}"#);
 //! }
 //! ```
 //!
@@ -181,27 +181,39 @@ use std::collections::BTreeMap;
 pub type Array = Vec<JsonValue>;
 pub type Object = BTreeMap<String, JsonValue>;
 
+impl JsonValue {
+    /// Prints out the value as JSON string.
+    pub fn dump(&self) -> String {
+        let mut gen = Generator::new(true, 0);
+        gen.write_json(self);
+        gen.consume()
+    }
+
+    /// Pretty prints out the value as JSON string. Takes an argument that's
+    /// number of spaces to indent new blocks with.
+    pub fn pretty<'a>(&self, spaces: u16) -> String {
+        let mut gen = Generator::new(false, spaces);
+        gen.write_json(self);
+        gen.consume()
+    }
+}
+
+#[deprecated(since="0.5.0", note="Use `value.dump(0)` instead")]
 pub fn stringify_ref(root: &JsonValue) -> String {
-    let mut gen = Generator::new(true, 4);
-    gen.write_json(root);
-    gen.consume()
+    root.dump()
 }
 
+/// Pretty prints out the value as JSON string.
 pub fn stringify<T>(root: T) -> String where T: Into<JsonValue> {
-    let mut gen = Generator::new(true, 4);
-    gen.write_json(&root.into());
-    gen.consume()
-}
-pub fn stringify_ref_pretty(root: &JsonValue, step : u16) -> String {
-    let mut gen = Generator::new(false, step);
-    gen.write_json(root);
-    gen.consume()
+    let root: JsonValue = root.into();
+    root.dump()
 }
 
-pub fn stringify_pretty<T>(root: T, step: u16) -> String where T: Into<JsonValue> {
-    let mut gen = Generator::new(false, step);
-    gen.write_json(&root.into());
-    gen.consume()
+/// Pretty prints out the value as JSON string. Second argument is a
+/// number of spaces to indent new blocks with.
+pub fn stringify_pretty<'a, T>(root: T, spaces: u16) -> String where T: Into<JsonValue> {
+    let root: JsonValue = root.into();
+    root.pretty(spaces)
 }
 
 #[macro_export]
