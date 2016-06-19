@@ -4,22 +4,24 @@ pub struct Generator {
     pub minify: bool,
     code: String,
     dent: u16,
+    step: u16
 }
 
 impl Generator {
-    pub fn new(minify: bool) -> Self {
+    pub fn new(minify: bool, step : u16) -> Self {
         Generator {
             minify: minify,
             code: String::new(),
             dent: 0,
+            step: step
         }
     }
 
     pub fn new_line(&mut self) {
         if !self.minify {
             self.code.push('\n');
-            for _ in 0..self.dent {
-                self.code.push_str("    ");
+            for _ in 0..(self.dent*self.step) {
+                self.code.push_str(" ");
             }
         }
     }
@@ -51,26 +53,33 @@ impl Generator {
             JsonValue::Null               => self.write("null"),
             JsonValue::Array(ref array)   => {
                 self.write_char('[');
+                self.indent();
                 let mut first = true;
                 for item in array {
                     if first {
                         first = false;
+                        self.new_line();
                     } else {
-                        self.write_min(", ", ",");
+                        self.write(",");
+                        self.new_line();
                     }
                     self.write_json(item);
                 }
+                self.dedent();
+                self.new_line();
                 self.write_char(']');
             },
             JsonValue::Object(ref object) => {
-                let mut first = true;
                 self.write_char('{');
                 self.indent();
+                let mut first = true;
                 for (key, value) in object.iter() {
                     if first {
                         first = false;
+                        self.new_line();
                     } else {
-                        self.write_min(", ", ",");
+                        self.write(",");
+                        self.new_line();
                     }
                     self.write(&format!("{:?}", key));
                     self.write_min(": ", ":");

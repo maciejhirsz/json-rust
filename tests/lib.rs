@@ -3,7 +3,7 @@ extern crate json;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 
-use json::{ stringify, parse, JsonValue, Null };
+use json::{ stringify, stringify_pretty, parse, JsonValue, Null };
 
 #[test]
 fn is_as_string() {
@@ -181,6 +181,24 @@ fn stringify_array_with_push() {
 #[test]
 fn stringify_escaped_characters() {
     assert_eq!(stringify("\r\n\t\u{8}\u{c}\\/\""), r#""\r\n\t\b\f\\\/\"""#);
+}
+
+#[test]
+fn stringify_pretty_object() {
+    let object = object!{
+        "name" => "Maciej",
+        "age" => 30,
+        "parents" => object!{
+            "mother" => "Helga",
+            "father" => "Brutus"
+        },
+        "cars" => array![ "Golf", "Mercedes", "Porsche" ]
+    };
+
+    assert_eq!(stringify_pretty(object, 2),
+               "{\n  \"age\": 30,\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \
+                \"Porsche\"\n  ],\n  \"name\": \"Maciej\",\n  \"parents\": {\n    \"father\": \
+                \"Brutus\",\n    \"mother\": \"Helga\"\n  }\n}");
 }
 
 #[test]
