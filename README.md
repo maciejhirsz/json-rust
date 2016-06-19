@@ -13,8 +13,8 @@ types, object keys can change types between API calls or not include
 some keys under some conditions. Mapping that to idiomatic Rust structs
 introduces friction.
 
-This crate intends to avoid that friction by using extensive static dispatch
-and hiding type information behind enums, while still giving you all the safety
+This crate intends to avoid that friction by extensively using static dispatch
+and hiding type information behind enums, while still giving you all the
 guarantees of safe Rust code.
 
 ```rust
