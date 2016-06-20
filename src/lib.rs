@@ -210,9 +210,15 @@ impl JsonValue {
 impl fmt::Display for JsonValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if f.alternate() {
-            write!(f, "{}", self.pretty(2))
+            f.write_str(&self.pretty(4))
         } else {
-            write!(f, "{}", self.dump())
+            match *self {
+                JsonValue::String(ref value)  => value.fmt(f),
+                JsonValue::Number(ref value)  => value.fmt(f),
+                JsonValue::Boolean(ref value) => value.fmt(f),
+                JsonValue::Null               => f.write_str("null"),
+                _                             => f.write_str(&self.dump())
+            }
         }
     }
 }

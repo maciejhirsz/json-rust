@@ -565,3 +565,54 @@ fn iter_members_mut() {
 
     assert_eq!(data, array![100, 100]);
 }
+
+#[test]
+fn fmt_string() {
+    let data: JsonValue = "foobar".into();
+
+    assert_eq!(format!("{}", data), "foobar");
+    assert_eq!(format!("{:#}", data), r#""foobar""#);
+}
+
+#[test]
+fn fmt_number() {
+    let data: JsonValue = 42.into();
+
+    assert_eq!(format!("{}", data), "42");
+    assert_eq!(format!("{:#}", data), "42");
+}
+
+#[test]
+fn fmt_boolean() {
+    let data: JsonValue = true.into();
+
+    assert_eq!(format!("{}", data), "true");
+    assert_eq!(format!("{:#}", data), "true");
+}
+
+#[test]
+fn fmt_null() {
+    let data = Null;
+
+    assert_eq!(format!("{}", data), "null");
+    assert_eq!(format!("{:#}", data), "null");
+}
+
+#[test]
+fn fmt_array() {
+    let data = array![1, true, "three"];
+
+    assert_eq!(format!("{}", data), r#"[1,true,"three"]"#);
+    assert_eq!(format!("{:#}", data), "[\n    1,\n    true,\n    \"three\"\n]");
+}
+
+#[test]
+fn fmt_object() {
+    let data = object!{
+        "foo" => "bar",
+        "answer" => 42
+    };
+
+    assert_eq!(format!("{}", data), r#"{"answer":42,"foo":"bar"}"#);
+    assert_eq!(format!("{:#}", data), "{\n    \"answer\": 42,\n    \"foo\": \"bar\"\n}");
+}
