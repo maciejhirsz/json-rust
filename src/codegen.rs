@@ -33,7 +33,7 @@ impl Generator {
 
                 for ch in string.chars() {
                     match ch {
-                        '\\' | '/' | '"' => {
+                        '\\' | '"' => {
                             self.write_char('\\');
                             self.write_char(ch);
                         },

@@ -180,7 +180,12 @@ fn stringify_array_with_push() {
 
 #[test]
 fn stringify_escaped_characters() {
-    assert_eq!(stringify("\r\n\t\u{8}\u{c}\\/\""), r#""\r\n\t\b\f\\\/\"""#);
+    assert_eq!(stringify("\r\n\t\u{8}\u{c}\\\""), r#""\r\n\t\b\f\\\"""#);
+}
+
+#[test]
+fn stringify_dont_escape_forward_slash() {
+    assert_eq!(stringify("foo/bar"), r#""foo/bar""#);
 }
 
 #[test]
