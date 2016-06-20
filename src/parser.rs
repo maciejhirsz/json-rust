@@ -77,7 +77,7 @@ impl<'a> Tokenizer<'a> {
             }
         }
 
-        return label;
+        label
     }
 
     fn read_codepoint(&mut self) -> JsonResult<char> {
@@ -95,7 +95,7 @@ impl<'a> Tokenizer<'a> {
         let mut escape = false;
 
         while let Some(ch) = self.source.next() {
-            if ch == first && escape == false {
+            if ch == first && !escape {
                 return Ok(value);
             }
 
@@ -181,7 +181,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                 }
             });
         }
-        return None;
+        None
     }
 }
 
