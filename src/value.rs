@@ -268,7 +268,7 @@ impl JsonValue {
     }
 }
 
-/// Implements indexing by `usize` to easily access members of an array:
+/// Implements indexing by `usize` to easily access array members:
 ///
 /// ```
 /// # use json::JsonValue;
@@ -289,30 +289,20 @@ impl Index<usize> for JsonValue {
     }
 }
 
-/// Implements indexing by `&str` to easily access object members:
+/// Implements mutable indexing by `usie` to easily modify array members:
 ///
 /// ```
-/// # use json::JsonValue;
-/// let mut object = JsonValue::new_object();
+/// # #[macro_use]
+/// # extern crate json;
+/// #
+/// # fn main() {
+/// let mut array = array!["foo", 3.14];
 ///
-/// object.put("foo", "bar");
+/// array[1] = "bar".into();
 ///
-/// assert!(object["foo"].is("bar"));
+/// assert!(array[1].is("bar"));
+/// # }
 /// ```
-impl<'a> Index<&'a str> for JsonValue {
-    type Output = JsonValue;
-
-    fn index(&self, index: &str) -> &JsonValue {
-        match *self {
-            JsonValue::Object(ref btree) => match btree.get(index) {
-                Some(value) => value,
-                _ => &NULL
-            },
-            _ => &NULL
-        }
-    }
-}
-
 impl IndexMut<usize> for JsonValue {
     fn index_mut(&mut self, index: usize) -> &mut JsonValue {
         match *self {
@@ -335,6 +325,48 @@ impl IndexMut<usize> for JsonValue {
     }
 }
 
+/// Implements indexing by `&str` to easily access object members:
+///
+/// ```
+/// # #[macro_use]
+/// # extern crate json;
+/// #
+/// # fn main() {
+/// let object = object!{
+///     "foo" => "bar"
+/// };
+///
+/// assert!(object["foo"].is("bar"));
+/// # }
+/// ```
+impl<'a> Index<&'a str> for JsonValue {
+    type Output = JsonValue;
+
+    fn index(&self, index: &str) -> &JsonValue {
+        match *self {
+            JsonValue::Object(ref btree) => match btree.get(index) {
+                Some(value) => value,
+                _ => &NULL
+            },
+            _ => &NULL
+        }
+    }
+}
+
+/// Implements mutable indexing by `&str` to easily modify object members:
+///
+/// ```
+/// # #[macro_use]
+/// # extern crate json;
+/// #
+/// # fn main() {
+/// let mut object = object!{};
+///
+/// object["foo"] = 42.into();
+///
+/// assert!(object["foo"].is(42));
+/// # }
+/// ```
 impl<'a> IndexMut<&'a str> for JsonValue {
     fn index_mut(&mut self, index: &str) -> &mut JsonValue {
         match *self {

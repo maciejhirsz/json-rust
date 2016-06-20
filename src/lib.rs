@@ -44,7 +44,7 @@
 //! assert!(data["this"]["does"]["not"]["exist"].is_null());
 //! ```
 //!
-//! ## Easily create JSON data without defining structs
+//! ## Create JSON data without defining structs
 //!
 //! ```
 //! #[macro_use]
@@ -58,6 +58,27 @@
 //!
 //!     assert_eq!(data.dump(), r#"{"a":"bar","b":[1,false,"foo"]}"#);
 //! }
+//! ```
+//!
+//! ## Mutate simply by assigning new values
+//!
+//! ```
+//! let mut data = json::parse(r#"
+//!
+//! {
+//!     "name": "Bob",
+//!     "isAwesome": false
+//! }
+//!
+//! "#).unwrap();
+//!
+//! data["isAwesome"] = true.into();
+//! data["likes"] = "Rust".into();
+//!
+//! assert_eq!(data.dump(), r#"{"isAwesome":true,"likes":"Rust","name":"Bob"}"#);
+//!
+//! // Pretty print the output
+//! println!("{:#}", data);
 //! ```
 //!
 //! ## Serialize with `json::stringify(value)`
@@ -126,8 +147,8 @@
 //! ```
 //! let mut data = json::JsonValue::new_object();
 //!
-//! data.put("answer", 42);
-//! data.put("foo", "bar");
+//! data["answer"] = 42.into();
+//! data["foo"] = "bar".into();
 //!
 //! assert_eq!(json::stringify(data), "{\"answer\":42,\"foo\":\"bar\"}");
 //! ```
