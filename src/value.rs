@@ -148,7 +148,7 @@ impl JsonValue {
             _ => {
                 *self = JsonValue::new_object();
                 self.put(key, JsonValue::Null).unwrap();
-                return self.get_mut(key).unwrap();
+                self.get_mut(key).unwrap()
             }
         }
     }
@@ -275,7 +275,7 @@ impl JsonValue {
 impl Index<usize> for JsonValue {
     type Output = JsonValue;
 
-    fn index<'a>(&'a self, index: usize) -> &'a JsonValue {
+    fn index(&self, index: usize) -> &JsonValue {
         self.at(index).unwrap_or(&NULL)
     }
 }

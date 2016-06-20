@@ -191,7 +191,7 @@ impl JsonValue {
 
     /// Pretty prints out the value as JSON string. Takes an argument that's
     /// number of spaces to indent new blocks with.
-    pub fn pretty<'a>(&self, spaces: u16) -> String {
+    pub fn pretty(&self, spaces: u16) -> String {
         let mut gen = Generator::new(false, spaces);
         gen.write_json(self);
         gen.consume()
@@ -211,7 +211,7 @@ pub fn stringify<T>(root: T) -> String where T: Into<JsonValue> {
 
 /// Pretty prints out the value as JSON string. Second argument is a
 /// number of spaces to indent new blocks with.
-pub fn stringify_pretty<'a, T>(root: T, spaces: u16) -> String where T: Into<JsonValue> {
+pub fn stringify_pretty<T>(root: T, spaces: u16) -> String where T: Into<JsonValue> {
     let root: JsonValue = root.into();
     root.pretty(spaces)
 }
