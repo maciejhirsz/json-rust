@@ -177,6 +177,7 @@ use codegen::Generator;
 
 use std::collections::HashMap;
 use std::collections::BTreeMap;
+use std::fmt;
 
 pub type Array = Vec<JsonValue>;
 pub type Object = BTreeMap<String, JsonValue>;
@@ -195,6 +196,24 @@ impl JsonValue {
         let mut gen = Generator::new(false, spaces);
         gen.write_json(self);
         gen.consume()
+    }
+}
+
+/// Implements formatting
+///
+/// ```
+/// # use json;
+/// let data = json::parse(r#"{"url":"https://github.com/"}"#).unwrap();
+/// println!("{}", data);
+/// println!("{:#}", data);
+/// ```
+impl fmt::Display for JsonValue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if f.alternate() {
+            write!(f, "{}", self.pretty(2))
+        } else {
+            write!(f, "{}", self.dump())
+        }
     }
 }
 
