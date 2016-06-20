@@ -44,7 +44,7 @@ assert!(data["payload"]["features"].contains("easyAPI"));
 assert!(data["this"]["does"]["not"]["exist"].is_null());
 ```
 
-## Easily create JSON data without defining structs
+## Create JSON data without defining structs
 
 ```rust
 #[macro_use]
@@ -58,6 +58,27 @@ fn main() {
 
     assert_eq!(data.dump(), r#"{"a":"bar","b":[1,false,"foo"]}"#);
 }
+```
+
+## Mutate simply by assigning new values
+
+```rust
+let mut data = json::parse(r#"
+
+{
+    "name": "Bob",
+    "isAwesome": false
+}
+
+"#).unwrap();
+
+data["isAwesome"] = true.into();
+data["likes"] = "Rust".into();
+
+assert_eq!(data.dump(), r#"{"isAwesome":true,"likes":"Rust","name":"Bob"}"#);
+
+// Pretty print the output
+println!("{:#}", data);
 ```
 
 ## Installation

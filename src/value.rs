@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::ops::Index;
+use std::ops::{ Index, IndexMut };
 use iterators::{ Members, MembersMut, Entries, EntriesMut };
 use { JsonResult, JsonError };
 
@@ -98,6 +98,7 @@ impl JsonValue {
 
     /// Works on `JsonValue::Object` - create or override key with value.
     #[must_use]
+    #[deprecated(since="0.6.0", note="Use `object[key] = value.into()` instead")]
     pub fn put<T>(&mut self, key: &str, value: T) -> JsonResult<()>
     where T: Into<JsonValue> {
         match *self {
@@ -111,6 +112,7 @@ impl JsonValue {
 
     /// Works on `JsonValue::Object` - get a reference to a value behind key.
     /// For most purposes consider using `object[key]` instead.
+    #[deprecated(since="0.6.0", note="Use `object[key]` instead")]
     pub fn get(&self, key: &str) -> JsonResult<&JsonValue> {
         match *self {
             JsonValue::Object(ref btree) => match btree.get(key) {
@@ -123,6 +125,7 @@ impl JsonValue {
 
     /// Works on `JsonValue::Object` - get a mutable reference to a value behind
     /// the key.
+    #[deprecated(since="0.6.0", note="Use `object[key]` instead")]
     pub fn get_mut(&mut self, key: &str) -> JsonResult<&mut JsonValue> {
         match *self {
             JsonValue::Object(ref mut btree) => match btree.get_mut(key) {
@@ -137,7 +140,12 @@ impl JsonValue {
     /// object. If the reference doesn't exists, it will be created and
     /// assigned a null. If `self` is not an object, an empty object with
     /// null key will be created.
+    #[deprecated(since="0.6.0", note="Use `object[key]` instead")]
     pub fn with(&mut self, key: &str) -> &mut JsonValue {
+        if !self.is_object() {
+            *self = JsonValue::new_object();
+        }
+
         match *self {
             JsonValue::Object(ref mut btree) => {
                 if !btree.contains_key(key) {
@@ -145,11 +153,7 @@ impl JsonValue {
                 }
                 btree.get_mut(key).unwrap()
             },
-            _ => {
-                *self = JsonValue::new_object();
-                self.put(key, JsonValue::Null).unwrap();
-                self.get_mut(key).unwrap()
-            }
+            _ => unreachable!()
         }
     }
 
@@ -168,6 +172,7 @@ impl JsonValue {
 
     /// Works on `JsonValue::Array` - gets a reference to a value at index.
     /// For most purposes consider using `array[index]` instead.
+    #[deprecated(since="0.6.0", note="Use `array[index]` instead")]
     pub fn at(&self, index: usize) -> JsonResult<&JsonValue> {
         match *self {
             JsonValue::Array(ref vec) => {
@@ -183,6 +188,7 @@ impl JsonValue {
 
     /// Works on `JsonValue::Array` - gets a mutable reference to a value
     /// at index.
+    #[deprecated(since="0.6.0", note="Use `array[index]` instead")]
     pub fn at_mut(&mut self, index: usize) -> JsonResult<&mut JsonValue> {
         match *self {
             JsonValue::Array(ref mut vec) => {
@@ -262,7 +268,7 @@ impl JsonValue {
     }
 }
 
-/// Implements indexing by `usize` to easily access members of an array:
+/// Implements indexing by `usize` to easily access array members:
 ///
 /// ```
 /// # use json::JsonValue;
@@ -276,24 +282,104 @@ impl Index<usize> for JsonValue {
     type Output = JsonValue;
 
     fn index(&self, index: usize) -> &JsonValue {
-        self.at(index).unwrap_or(&NULL)
+        match *self {
+            JsonValue::Array(ref vec) => vec.get(index).unwrap_or(&NULL),
+            _ => &NULL
+        }
+    }
+}
+
+/// Implements mutable indexing by `usie` to easily modify array members:
+///
+/// ```
+/// # #[macro_use]
+/// # extern crate json;
+/// #
+/// # fn main() {
+/// let mut array = array!["foo", 3.14];
+///
+/// array[1] = "bar".into();
+///
+/// assert!(array[1].is("bar"));
+/// # }
+/// ```
+impl IndexMut<usize> for JsonValue {
+    fn index_mut(&mut self, index: usize) -> &mut JsonValue {
+        match *self {
+            JsonValue::Array(ref mut vec) => {
+                let in_bounds = index < vec.len();
+
+                if in_bounds {
+                    &mut vec[index]
+                } else {
+                    vec.push(JsonValue::Null);
+                    vec.last_mut().unwrap()
+                }
+            }
+            _ => {
+                *self = JsonValue::new_array();
+                self.push(JsonValue::Null).unwrap();
+                &mut self[0]
+            }
+        }
     }
 }
 
 /// Implements indexing by `&str` to easily access object members:
 ///
 /// ```
-/// # use json::JsonValue;
-/// let mut object = JsonValue::new_object();
-///
-/// object.put("foo", "bar");
+/// # #[macro_use]
+/// # extern crate json;
+/// #
+/// # fn main() {
+/// let object = object!{
+///     "foo" => "bar"
+/// };
 ///
 /// assert!(object["foo"].is("bar"));
+/// # }
 /// ```
-impl<'b> Index<&'b str> for JsonValue {
+impl<'a> Index<&'a str> for JsonValue {
     type Output = JsonValue;
 
-    fn index<'a>(&'a self, index: &str) -> &'a JsonValue {
-        self.get(index).unwrap_or(&NULL)
+    fn index(&self, index: &str) -> &JsonValue {
+        match *self {
+            JsonValue::Object(ref btree) => match btree.get(index) {
+                Some(value) => value,
+                _ => &NULL
+            },
+            _ => &NULL
+        }
+    }
+}
+
+/// Implements mutable indexing by `&str` to easily modify object members:
+///
+/// ```
+/// # #[macro_use]
+/// # extern crate json;
+/// #
+/// # fn main() {
+/// let mut object = object!{};
+///
+/// object["foo"] = 42.into();
+///
+/// assert!(object["foo"].is(42));
+/// # }
+/// ```
+impl<'a> IndexMut<&'a str> for JsonValue {
+    fn index_mut(&mut self, index: &str) -> &mut JsonValue {
+        match *self {
+            JsonValue::Object(ref mut btree) => {
+                if !btree.contains_key(index) {
+                    btree.insert(index.to_string(), JsonValue::Null);
+                }
+                btree.get_mut(index).unwrap()
+            },
+            _ => {
+                *self = JsonValue::new_object();
+                &mut self[index]
+            }
+        }
     }
 }

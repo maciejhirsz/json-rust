@@ -44,7 +44,7 @@
 //! assert!(data["this"]["does"]["not"]["exist"].is_null());
 //! ```
 //!
-//! ## Easily create JSON data without defining structs
+//! ## Create JSON data without defining structs
 //!
 //! ```
 //! #[macro_use]
@@ -58,6 +58,27 @@
 //!
 //!     assert_eq!(data.dump(), r#"{"a":"bar","b":[1,false,"foo"]}"#);
 //! }
+//! ```
+//!
+//! ## Mutate simply by assigning new values
+//!
+//! ```
+//! let mut data = json::parse(r#"
+//!
+//! {
+//!     "name": "Bob",
+//!     "isAwesome": false
+//! }
+//!
+//! "#).unwrap();
+//!
+//! data["isAwesome"] = true.into();
+//! data["likes"] = "Rust".into();
+//!
+//! assert_eq!(data.dump(), r#"{"isAwesome":true,"likes":"Rust","name":"Bob"}"#);
+//!
+//! // Pretty print the output
+//! println!("{:#}", data);
 //! ```
 //!
 //! ## Serialize with `json::stringify(value)`
@@ -126,8 +147,8 @@
 //! ```
 //! let mut data = json::JsonValue::new_object();
 //!
-//! data.put("answer", 42);
-//! data.put("foo", "bar");
+//! data["answer"] = 42.into();
+//! data["foo"] = "bar".into();
 //!
 //! assert_eq!(json::stringify(data), "{\"answer\":42,\"foo\":\"bar\"}");
 //! ```
@@ -177,6 +198,7 @@ use codegen::Generator;
 
 use std::collections::HashMap;
 use std::collections::BTreeMap;
+use std::fmt;
 
 pub type Array = Vec<JsonValue>;
 pub type Object = BTreeMap<String, JsonValue>;
@@ -195,6 +217,30 @@ impl JsonValue {
         let mut gen = Generator::new(false, spaces);
         gen.write_json(self);
         gen.consume()
+    }
+}
+
+/// Implements formatting
+///
+/// ```
+/// # use json;
+/// let data = json::parse(r#"{"url":"https://github.com/"}"#).unwrap();
+/// println!("{}", data);
+/// println!("{:#}", data);
+/// ```
+impl fmt::Display for JsonValue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if f.alternate() {
+            f.write_str(&self.pretty(4))
+        } else {
+            match *self {
+                JsonValue::String(ref value)  => value.fmt(f),
+                JsonValue::Number(ref value)  => value.fmt(f),
+                JsonValue::Boolean(ref value) => value.fmt(f),
+                JsonValue::Null               => f.write_str("null"),
+                _                             => f.write_str(&self.dump())
+            }
+        }
     }
 }
 
