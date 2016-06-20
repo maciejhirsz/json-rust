@@ -109,7 +109,7 @@ fn stringify_vec() {
     array.push(10.into());
     array.push("Foo".into());
 
-    assert_eq!(stringify(array), "[10,\"Foo\"]");
+    assert_eq!(stringify(array), r#"[10,"Foo"]"#);
 }
 
 #[test]
@@ -133,7 +133,7 @@ fn stringify_object() {
         "age" => 30
     };
 
-    assert_eq!(stringify(object), "{\"age\":30,\"name\":\"Maciej\"}");
+    assert_eq!(stringify(object), r#"{"age":30,"name":"Maciej"}"#);
 }
 
 #[test]
@@ -143,7 +143,7 @@ fn stringify_btree_map() {
     object.insert("name".into(), "Maciej".into());
     object.insert("age".into(), 30.into());
 
-    assert_eq!(stringify(object), "{\"age\":30,\"name\":\"Maciej\"}");
+    assert_eq!(stringify(object), r#"{"age":30,"name":"Maciej"}"#);
 }
 
 #[test]
@@ -153,17 +153,17 @@ fn stringify_hash_map() {
     object.insert("name".into(), "Maciej".into());
     object.insert("age".into(), 30.into());
 
-    assert_eq!(stringify(object), "{\"age\":30,\"name\":\"Maciej\"}");
+    assert_eq!(stringify(object), r#"{"age":30,"name":"Maciej"}"#);
 }
 
 #[test]
 fn stringify_object_with_put() {
     let mut object = JsonValue::new_object();
 
-    object.put("a", 100).unwrap();
-    object.put("b", false).unwrap();
+    object["a"] = 100.into();
+    object["b"] = false.into();
 
-    assert_eq!(stringify(object), "{\"a\":100,\"b\":false}");
+    assert_eq!(stringify(object), r#"{"a":100,"b":false}"#);
 }
 
 #[test]
@@ -346,14 +346,6 @@ fn parse_nested_object() {
 }
 
 #[test]
-fn parse_and_get_from_object() {
-    let data = parse("{ \"pi\": 3.14 }").unwrap();
-    let pi = data.get("pi").unwrap();
-
-    assert!(pi.is(3.14));
-}
-
-#[test]
 fn parse_and_index_from_object() {
     let data = parse("{ \"pi\": 3.14 }").unwrap();
     let ref pi = data["pi"];
@@ -373,9 +365,9 @@ fn parse_and_index_mut_from_object() {
 
     assert!(data["foo"].is(100));
 
-    data["foo"].assign(200);
+    data["foo"] = 200.into();
 
-    assert!(data["foo"].is(200))
+    assert!(data["foo"].is(200));
 }
 
 #[test]
@@ -387,23 +379,12 @@ fn parse_and_index_mut_from_null() {
     // test that data didn't coerece to object
     assert!(data.is_null());
 
-    data["foo"]["bar"].assign(100);
+    data["foo"]["bar"] = 100.into();
 
     assert!(data.is_object());
     assert!(data["foo"]["bar"].is(100));
 
     assert_eq!(data.dump(), r#"{"foo":{"bar":100}}"#);
-}
-
-#[test]
-fn parse_and_get_from_array() {
-    let data = parse("[100, 200, false, null, \"foo\"]").unwrap();
-
-    assert!(data.at(0).unwrap().is(100));
-    assert!(data.at(1).unwrap().is(200));
-    assert!(data.at(2).unwrap().is(false));
-    assert!(data.at(3).unwrap().is_null());
-    assert!(data.at(4).unwrap().is("foo"));
 }
 
 #[test]
@@ -425,28 +406,11 @@ fn parse_and_index_mut_from_array() {
     assert!(data[3].is_null());
     assert!(data[5].is_null());
 
-    data[3].assign("modified");
-    data[5].assign("implicid push");
+    data[3] = "modified".into();
+    data[5] = "implicid push".into();
 
     assert!(data[3].is("modified"));
     assert!(data[5].is("implicid push"));
-}
-
-#[test]
-fn parse_and_use_with() {
-    let mut data = parse("{\"a\":{\"b\": 100}}").unwrap();
-
-    assert!(data.with("a").with("b").is(100));
-}
-
-#[test]
-fn parse_and_use_with_on_null() {
-    let mut data = parse("null").unwrap();
-
-    assert!(data.is_null());
-    assert!(data.with("a").with("b").is_null());
-    assert!(data["a"].is_object());
-    assert!(data["a"]["b"].is_null());
 }
 
 #[test]
