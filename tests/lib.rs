@@ -265,6 +265,24 @@ fn parse_negative_integer() {
 }
 
 #[test]
+fn parse_number_with_e() {
+    assert!(parse("5e2").unwrap().is(500));
+    assert!(parse("5E2").unwrap().is(500));
+}
+
+#[test]
+fn parse_number_with_positive_e() {
+    assert!(parse("5e+2").unwrap().is(500));
+    assert!(parse("5E+2").unwrap().is(500));
+}
+
+#[test]
+fn parse_number_with_negative_e() {
+    assert!(parse("5e-2").unwrap().is(0.05));
+    assert!(parse("5E-2").unwrap().is(0.05));
+}
+
+#[test]
 fn parse_array() {
     assert_eq!(parse(r#"[10, "foo", true, null]"#).unwrap(), array![
         10,

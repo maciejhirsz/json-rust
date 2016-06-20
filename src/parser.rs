@@ -29,12 +29,14 @@ pub enum Token {
 
 struct Tokenizer<'a> {
     source: Peekable<Chars<'a>>,
+    buffer: String,
 }
 
 impl<'a> Tokenizer<'a> {
     pub fn new(source: &'a str) -> Self {
         Tokenizer {
             source: source.chars().peekable(),
+            buffer: String::new()
         }
     }
 
@@ -64,20 +66,21 @@ impl<'a> Tokenizer<'a> {
         })
     }
 
-    fn read_label(&mut self, first: char) -> String {
-        let mut label = first.to_string();
+    fn read_label(&mut self, first: char) -> &String {
+        self.buffer.clear();
+        self.buffer.push(first);
 
         while let Some(&ch) = self.source.peek() {
             match ch {
                 'a'...'z' => {
-                    label.push(ch);
+                    self.buffer.push(ch);
                     self.source.next();
                 },
                 _ => break,
             }
         }
 
-        label
+        &self.buffer
     }
 
     fn read_codepoint(&mut self) -> JsonResult<char> {
@@ -122,30 +125,53 @@ impl<'a> Tokenizer<'a> {
         Ok(value)
     }
 
+    fn read_digits_to_buffer(&mut self) {
+        while let Some(&ch) = self.source.peek() {
+            match ch {
+                '0' ... '9' => {
+                    self.buffer.push(ch);
+                    self.source.next();
+                },
+                _ => break
+            }
+        }
+    }
+
     fn read_number(&mut self, first: char) -> f64 {
-        let mut value = first.to_string();
+        self.buffer.clear();
+        self.buffer.push(first);
+        self.read_digits_to_buffer();
+
         let mut period = false;
 
         while let Some(&ch) = self.source.peek() {
             match ch {
-                '0'...'9' => {
-                    value.push(ch);
-                    self.source.next();
-                },
                 '.' => {
-                    if !period {
-                        period = true;
-                        value.push(ch);
-                        self.source.next();
-                    } else {
-                        return value.parse::<f64>().unwrap();
+                    if period {
+                        panic!("Invalid character `{:?}`", ch);
                     }
+                    period = true;
+                    self.buffer.push(ch);
+                    self.source.next();
+                    self.read_digits_to_buffer();
                 },
-                _ => return value.parse::<f64>().unwrap(),
+                'e' | 'E' => {
+                    self.buffer.push(ch);
+                    self.source.next();
+                    match self.source.peek() {
+                        Some(&'-') | Some(&'+') => {
+                            self.buffer.push(self.source.next().unwrap());
+                        },
+                        _ => {}
+                    }
+                    self.read_digits_to_buffer();
+                    break;
+                },
+                _ => break
             }
         }
 
-        value.parse::<f64>().unwrap()
+        self.buffer.parse::<f64>().unwrap()
     }
 }
 
