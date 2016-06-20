@@ -266,7 +266,7 @@ fn parse_negative_integer() {
 
 #[test]
 fn parse_array() {
-    assert_eq!(parse("[10, \"foo\", true, null]").unwrap(), array![
+    assert_eq!(parse(r#"[10, "foo", true, null]"#).unwrap(), array![
         10,
         "foo",
         true,
@@ -276,14 +276,14 @@ fn parse_array() {
 
 #[test]
 fn parse_object() {
-    assert_eq!(parse("
+    assert_eq!(parse(r#"
 
     {
-        \"foo\": \"bar\",
-        \"num\": 10
+        "foo": "bar",
+        "num": 10
     }
 
-    ").unwrap(), object!{
+    "#).unwrap(), object!{
         "foo" => "bar",
         "num" => 10
     });
@@ -291,32 +291,32 @@ fn parse_object() {
 
 #[test]
 fn parse_object_with_array(){
-    assert_eq!(parse("
+    assert_eq!(parse(r#"
 
     {
-        \"foo\": [1, 2, 3]
+        "foo": [1, 2, 3]
     }
 
-    ").unwrap(), object!{
+    "#).unwrap(), object!{
         "foo" => array![1, 2, 3]
     });
 }
 
 #[test]
 fn parse_nested_object() {
-    assert_eq!(parse("
+    assert_eq!(parse(r#"
 
     {
-        \"l10n\": [ {
-          \"product\": {
-            \"inStock\": {
-              \"DE\": \"Lieferung innerhalb von 1-3 Werktagen\"
+        "l10n": [ {
+            "product": {
+                "inStock": {
+                    "DE": "Lieferung innerhalb von 1-3 Werktagen"
+                }
             }
-          }
         } ]
     }
 
-    ").unwrap(), object!{
+    "#).unwrap(), object!{
         "l10n" => array![ object!{
             "product" => object!{
                 "inStock" => object!{
@@ -329,41 +329,89 @@ fn parse_nested_object() {
 
 #[test]
 fn parse_and_get_from_object() {
-    let object = parse("{ \"pi\": 3.14 }").unwrap();
-    let pi = object.get("pi").unwrap();
+    let data = parse("{ \"pi\": 3.14 }").unwrap();
+    let pi = data.get("pi").unwrap();
 
     assert!(pi.is(3.14));
 }
 
 #[test]
 fn parse_and_index_from_object() {
-    let object = parse("{ \"pi\": 3.14 }").unwrap();
-    let ref pi = object["pi"];
+    let data = parse("{ \"pi\": 3.14 }").unwrap();
+    let ref pi = data["pi"];
 
     assert!(pi.is(3.14));
 }
 
 #[test]
-fn parse_and_get_from_array() {
-    let array = parse("[100, 200, false, null, \"foo\"]").unwrap();
+fn parse_and_index_mut_from_object() {
+    let mut data = parse(r#"
 
-    assert!(array.at(0).unwrap().is(100));
-    assert!(array.at(1).unwrap().is(200));
-    assert!(array.at(2).unwrap().is(false));
-    assert!(array.at(3).unwrap().is_null());
-    assert!(array.at(4).unwrap().is("foo"));
+    {
+        "foo": 100
+    }
+
+    "#).unwrap();
+
+    assert!(data["foo"].is(100));
+
+    data["foo"].assign(200);
+
+    assert!(data["foo"].is(200))
+}
+
+#[test]
+fn parse_and_index_mut_from_null() {
+    let mut data = parse("null").unwrap();
+
+    assert!(data["foo"]["bar"].is_null());
+
+    // test that data didn't coerece to object
+    assert!(data.is_null());
+
+    data["foo"]["bar"].assign(100);
+
+    assert!(data.is_object());
+    assert!(data["foo"]["bar"].is(100));
+
+    assert_eq!(data.dump(), r#"{"foo":{"bar":100}}"#);
+}
+
+#[test]
+fn parse_and_get_from_array() {
+    let data = parse("[100, 200, false, null, \"foo\"]").unwrap();
+
+    assert!(data.at(0).unwrap().is(100));
+    assert!(data.at(1).unwrap().is(200));
+    assert!(data.at(2).unwrap().is(false));
+    assert!(data.at(3).unwrap().is_null());
+    assert!(data.at(4).unwrap().is("foo"));
 }
 
 #[test]
 fn parse_and_index_from_array() {
-    let array = parse("[100, 200, false, null, \"foo\"]").unwrap();
+    let data = parse(r#"[100, 200, false, null, "foo"]"#).unwrap();
 
-    assert!(array[0].is(100));
-    assert!(array[1].is(200));
-    assert!(array[2].is(false));
-    assert!(array[3].is_null());
-    assert!(array[4].is("foo"));
-    assert!(array[5].is_null());
+    assert!(data[0].is(100));
+    assert!(data[1].is(200));
+    assert!(data[2].is(false));
+    assert!(data[3].is_null());
+    assert!(data[4].is("foo"));
+    assert!(data[5].is_null());
+}
+
+#[test]
+fn parse_and_index_mut_from_array() {
+    let mut data = parse(r#"[100, 200, false, null, "foo"]"#).unwrap();
+
+    assert!(data[3].is_null());
+    assert!(data[5].is_null());
+
+    data[3].assign("modified");
+    data[5].assign("implicid push");
+
+    assert!(data[3].is("modified"));
+    assert!(data[5].is("implicid push"));
 }
 
 #[test]
@@ -379,8 +427,8 @@ fn parse_and_use_with_on_null() {
 
     assert!(data.is_null());
     assert!(data.with("a").with("b").is_null());
-    assert!(data.get("a").unwrap().is_object());
-    assert!(data.get("a").unwrap().get("b").unwrap().is_null());
+    assert!(data["a"].is_object());
+    assert!(data["a"]["b"].is_null());
 }
 
 #[test]
@@ -462,16 +510,13 @@ fn iter_entries() {
 
     let mut entries = data.entries();
 
-    {
-        let (key, value) = entries.next().unwrap();
-        assert_eq!(key, "a");
-        assert!(value.is(1));
-    }
-    {
-        let (key, value) = entries.next().unwrap();
-        assert_eq!(key, "b");
-        assert!(value.is("foo"));
-    }
+    let (key, value) = entries.next().unwrap();
+    assert_eq!(key, "a");
+    assert!(value.is(1));
+
+    let (key, value) = entries.next().unwrap();
+    assert_eq!(key, "b");
+    assert!(value.is("foo"));
 
     assert!(entries.next().is_none());
 }
@@ -504,15 +549,8 @@ fn iter_members() {
 
     let mut members = data.members();
 
-    {
-        let member = members.next().unwrap();
-        assert!(member.is(1));
-    }
-    {
-        let member = members.next().unwrap();
-        assert!(member.is("foo"));
-    }
-
+    assert!(members.next().unwrap().is(1));
+    assert!(members.next().unwrap().is("foo"));
     assert!(members.next().is_none());
 }
 

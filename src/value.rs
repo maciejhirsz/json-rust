@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::ops::Index;
+use std::ops::{ Index, IndexMut };
 use iterators::{ Members, MembersMut, Entries, EntriesMut };
 use { JsonResult, JsonError };
 
@@ -31,6 +31,11 @@ impl JsonValue {
     /// Checks if the value stored matches `other`.
     pub fn is<T>(&self, other: T) -> bool where T: Into<JsonValue> {
         *self == other.into()
+    }
+
+    /// Assign value of `other` to self.
+    pub fn assign<T>(&mut self, other: T) where T: Into<JsonValue> {
+        *self = other.into();
     }
 
     pub fn is_string(&self) -> bool {
@@ -290,10 +295,38 @@ impl Index<usize> for JsonValue {
 ///
 /// assert!(object["foo"].is("bar"));
 /// ```
-impl<'b> Index<&'b str> for JsonValue {
+impl<'a> Index<&'a str> for JsonValue {
     type Output = JsonValue;
 
-    fn index<'a>(&'a self, index: &str) -> &'a JsonValue {
+    fn index(&self, index: &str) -> &JsonValue {
         self.get(index).unwrap_or(&NULL)
+    }
+}
+
+impl IndexMut<usize> for JsonValue {
+    fn index_mut(&mut self, index: usize) -> &mut JsonValue {
+        match *self {
+            JsonValue::Array(ref mut vec) => {
+                let in_bounds = index < vec.len();
+
+                if in_bounds {
+                    &mut vec[index]
+                } else {
+                    vec.push(JsonValue::Null);
+                    vec.last_mut().unwrap()
+                }
+            }
+            _ => {
+                *self = JsonValue::new_array();
+                self.push(JsonValue::Null).unwrap();
+                &mut self[0]
+            }
+        }
+    }
+}
+
+impl<'a> IndexMut<&'a str> for JsonValue {
+    fn index_mut(&mut self, index: &str) -> &mut JsonValue {
+        self.with(index)
     }
 }
