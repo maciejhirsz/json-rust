@@ -7,18 +7,50 @@ use json::{ stringify, stringify_pretty, parse, JsonValue, Null };
 
 #[test]
 fn is_as_string() {
-    let string = JsonValue::String("foo".to_string());
+    let string = JsonValue::from("foo");
 
     assert!(string.is_string());
-    assert_eq!(*string.as_string().unwrap(), "foo".to_string());
+    assert_eq!(string.as_str().unwrap(), "foo");
 }
 
 #[test]
 fn is_as_number() {
-    let number = JsonValue::Number(42.0);
+    let number = JsonValue::from(42);
 
     assert!(number.is_number());
-    assert_eq!(*number.as_number().unwrap(), 42.0);
+    assert_eq!(number.as_f64().unwrap(), 42.0f64);
+    assert_eq!(number.as_f32().unwrap(), 42.0f32);
+    assert_eq!(number.as_u64().unwrap(), 42u64);
+    assert_eq!(number.as_u32().unwrap(), 42u32);
+    assert_eq!(number.as_u16().unwrap(), 42u16);
+    assert_eq!(number.as_u8().unwrap(), 42u8);
+    assert_eq!(number.as_usize().unwrap(), 42usize);
+    assert_eq!(number.as_i64().unwrap(), 42i64);
+    assert_eq!(number.as_i32().unwrap(), 42i32);
+    assert_eq!(number.as_i16().unwrap(), 42i16);
+    assert_eq!(number.as_i8().unwrap(), 42i8);
+    assert_eq!(number.as_isize().unwrap(), 42isize);
+
+    let number = JsonValue::from(-1);
+
+    assert_eq!(number.as_u64(), None);
+    assert_eq!(number.as_u32(), None);
+    assert_eq!(number.as_u16(), None);
+    assert_eq!(number.as_u8(), None);
+    assert_eq!(number.as_usize(), None);
+    assert_eq!(number.as_i64(), Some(-1));
+    assert_eq!(number.as_i32(), Some(-1));
+    assert_eq!(number.as_i16(), Some(-1));
+    assert_eq!(number.as_i8(), Some(-1));
+    assert_eq!(number.as_isize(), Some(-1));
+
+    let number = JsonValue::from(40_000);
+
+    assert_eq!(number.as_u8(), None);
+    assert_eq!(number.as_u16(), Some(40_000));
+    assert_eq!(number.as_i8(), None);
+    assert_eq!(number.as_i16(), None);
+    assert_eq!(number.as_i32(), Some(40_000));
 }
 
 #[test]
@@ -26,7 +58,7 @@ fn is_as_boolean() {
     let boolean = JsonValue::Boolean(true);
 
     assert!(boolean.is_boolean());
-    assert_eq!(*boolean.as_boolean().unwrap(), true);
+    assert_eq!(boolean.as_bool().unwrap(), true);
 }
 
 #[test]

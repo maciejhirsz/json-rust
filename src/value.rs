@@ -2,6 +2,27 @@ use std::collections::BTreeMap;
 use std::ops::{ Index, IndexMut };
 use iterators::{ Members, MembersMut, Entries, EntriesMut };
 use { JsonResult, JsonError };
+use std::{ usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32 };
+
+macro_rules! f64_to_unsinged {
+    ($unsigned:ident, $value:expr) => {
+        if $value < 0.0 || $value > $unsigned::MAX as f64 {
+            None
+        } else {
+            Some($value as $unsigned)
+        }
+    }
+}
+
+macro_rules! f64_to_singed {
+    ($signed:ident, $value:expr) => {
+        if $value < $signed::MIN as f64 || $value > $signed::MAX as f64 {
+            None
+        } else {
+            Some($value as $signed)
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum JsonValue {
@@ -40,10 +61,20 @@ impl JsonValue {
         }
     }
 
+    /// Deprecated because the return type is planned to change to
+    /// `Option<String>` eventually down the road.
+    #[deprecated(since="0.6.1", note="Use `as_str` instead")]
     pub fn as_string(&self) -> JsonResult<&String> {
         match *self {
             JsonValue::String(ref value) => Ok(value),
             _ => Err(JsonError::wrong_type("String"))
+        }
+    }
+
+    pub fn as_str(&self) -> Option<&str> {
+        match *self {
+            JsonValue::String(ref value) => Some(value.as_ref()),
+            _                            => None
         }
     }
 
@@ -54,11 +85,63 @@ impl JsonValue {
         }
     }
 
+    #[deprecated(since="0.6.1", note="Use `as_f64` instead")]
     pub fn as_number(&self) -> JsonResult<&f64> {
         match *self {
             JsonValue::Number(ref value) => Ok(value),
             _ => Err(JsonError::wrong_type("Number"))
         }
+    }
+
+    pub fn as_f64(&self) -> Option<f64> {
+        match *self {
+            JsonValue::Number(ref value) => Some(*value),
+            _                            => None
+        }
+    }
+
+    pub fn as_f32(&self) -> Option<f32> {
+        self.as_f64().and_then(|value| f64_to_singed!(f32, value))
+    }
+
+    pub fn as_u64(&self) -> Option<u64> {
+        self.as_f64().and_then(|value| f64_to_unsinged!(u64, value))
+    }
+
+    pub fn as_u32(&self) -> Option<u32> {
+        self.as_f64().and_then(|value| f64_to_unsinged!(u32, value))
+    }
+
+    pub fn as_u16(&self) -> Option<u16> {
+        self.as_f64().and_then(|value| f64_to_unsinged!(u16, value))
+    }
+
+    pub fn as_u8(&self) -> Option<u8> {
+        self.as_f64().and_then(|value| f64_to_unsinged!(u8, value))
+    }
+
+    pub fn as_usize(&self) -> Option<usize> {
+        self.as_f64().and_then(|value| f64_to_unsinged!(usize, value))
+    }
+
+    pub fn as_i64(&self) -> Option<i64> {
+        self.as_f64().and_then(|value| f64_to_singed!(i64, value))
+    }
+
+    pub fn as_i32(&self) -> Option<i32> {
+        self.as_f64().and_then(|value| f64_to_singed!(i32, value))
+    }
+
+    pub fn as_i16(&self) -> Option<i16> {
+        self.as_f64().and_then(|value| f64_to_singed!(i16, value))
+    }
+
+    pub fn as_i8(&self) -> Option<i8> {
+        self.as_f64().and_then(|value| f64_to_singed!(i8, value))
+    }
+
+    pub fn as_isize(&self) -> Option<isize> {
+        self.as_f64().and_then(|value| f64_to_singed!(isize, value))
     }
 
     pub fn is_boolean(&self) -> bool {
@@ -68,10 +151,18 @@ impl JsonValue {
         }
     }
 
+    #[deprecated(since="0.6.1", note="Unnecessary, use `as_bool` instead")]
     pub fn as_boolean(&self) -> JsonResult<&bool> {
         match *self {
             JsonValue::Boolean(ref value) => Ok(value),
             _ => Err(JsonError::wrong_type("Boolean"))
+        }
+    }
+
+    pub fn as_bool(&self) -> Option<bool> {
+        match *self {
+            JsonValue::Boolean(ref value) => Some(*value),
+            _                             => None
         }
     }
 

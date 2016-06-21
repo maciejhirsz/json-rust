@@ -296,7 +296,7 @@ macro_rules! object {
 
 macro_rules! implement_extras {
     ($from:ty) => {
-        impl From<Option<$from>> for JsonValue{
+        impl From<Option<$from>> for JsonValue {
             fn from(val: Option<$from>) -> JsonValue {
                 match val {
                     Some(value) => value.into(),
@@ -305,7 +305,7 @@ macro_rules! implement_extras {
             }
         }
 
-        impl From<Vec<$from>> for JsonValue{
+        impl From<Vec<$from>> for JsonValue {
             fn from(mut val: Vec<$from>) -> JsonValue {
                 JsonValue::Array(val.drain(..)
                     .map(|value| value.into())
