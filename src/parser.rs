@@ -4,15 +4,6 @@ use std::iter::{ Peekable, Iterator };
 use std::collections::BTreeMap;
 use { JsonValue, JsonError, JsonResult };
 
-macro_rules! expect {
-    ($tokenizer:ident, $p:pat) => (
-        match $tokenizer.next() {
-            Some($p) => {},
-            token    => panic!("WAT"),
-        }
-    )
-}
-
 #[derive(Debug)]
 pub enum Token {
     Comma,
@@ -137,7 +128,7 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    fn read_number(&mut self, first: char) -> f64 {
+    fn read_number(&mut self, first: char) -> JsonResult<f64> {
         self.buffer.clear();
         self.buffer.push(first);
         self.read_digits_to_buffer();
@@ -148,7 +139,7 @@ impl<'a> Tokenizer<'a> {
             match ch {
                 '.' => {
                     if period {
-                        panic!("Invalid character `{:?}`", ch);
+                        return Err(JsonError::UnexpectedCharacter(ch));
                     }
                     period = true;
                     self.buffer.push(ch);
@@ -171,43 +162,41 @@ impl<'a> Tokenizer<'a> {
             }
         }
 
-        self.buffer.parse::<f64>().unwrap()
+        Ok(self.buffer.parse::<f64>().unwrap())
     }
-}
 
-impl<'a> Iterator for Tokenizer<'a> {
-    type Item = Token;
-
-    fn next(&mut self) -> Option<Token> {
-        'lex: while let Some(ch) = self.source.next() {
-            return Some(match ch {
+    fn next(&mut self) -> JsonResult<Token> {
+        while let Some(ch) = self.source.next() {
+            return Ok(match ch {
                 ',' => Token::Comma,
                 ':' => Token::Colon,
                 '[' => Token::BracketOn,
                 ']' => Token::BracketOff,
                 '{' => Token::BraceOn,
                 '}' => Token::BraceOff,
-                '"' => Token::String(self.read_string(ch).unwrap()),
-                '0'...'9' | '-' => Token::Number(self.read_number(ch)),
+                '"' => Token::String(try!(self.read_string(ch))),
+                '0'...'9' | '-' => Token::Number(try!(self.read_number(ch))),
                 'a'...'z' => {
                     let label = self.read_label(ch);
                     match label.as_ref() {
                         "true"  => Token::Boolean(true),
                         "false" => Token::Boolean(false),
                         "null"  => Token::Null,
-                        _       => panic!("Invalid label `{:?}`", label)
+                        _       => {
+                            return Err(JsonError::UnexpectedToken(label.clone()));
+                        }
                     }
                 },
                 _  => {
                     if ch.is_whitespace() {
-                        continue 'lex;
+                        continue;
                     } else {
-                        panic!("Invalid character `{:?}`", ch);
+                        return Err(JsonError::UnexpectedCharacter(ch));
                     }
                 }
             });
         }
-        None
+        Err(JsonError::UnexpectedEndOfJson)
     }
 }
 
@@ -238,17 +227,15 @@ impl<'a> Parser<'a> {
     }
 
     fn consume(&mut self) -> JsonResult<Token> {
-        match self.tokenizer.next() {
-            Some(token) => Ok(token),
-            None        => Err(JsonError::UnexpectedEndOfJson)
-        }
+        self.tokenizer.next()
     }
 
     #[must_use]
     fn ensure_end(&mut self) -> JsonResult<()> {
         match self.tokenizer.next() {
-            Some(token) => Err(JsonError::unexpected_token(token)),
-            None        => Ok(())
+            Ok(token) => Err(JsonError::unexpected_token(token)),
+            Err(JsonError::UnexpectedEndOfJson) => Ok(()),
+            Err(error)                          => Err(error)
         }
     }
 

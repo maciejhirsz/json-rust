@@ -1,6 +1,6 @@
 ![](http://terhix.com/doc/json-rust-logo-small.png)
 
-# JSON in Rust
+# json-rust
 
 Parse and serialize JSON with ease.
 
