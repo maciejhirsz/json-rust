@@ -1,5 +1,6 @@
-use std::str::Chars;
 use std::char;
+use std::str;
+use std::str::Bytes;
 use std::iter::{ Peekable, Iterator };
 use std::collections::BTreeMap;
 use { JsonValue, JsonError, JsonResult };
@@ -19,51 +20,51 @@ pub enum Token {
 }
 
 struct Tokenizer<'a> {
-    source: Peekable<Chars<'a>>,
-    buffer: String,
+    source: Peekable<Bytes<'a>>,
+    buffer: Vec<u8>,
 }
 
 impl<'a> Tokenizer<'a> {
     pub fn new(source: &'a str) -> Self {
         Tokenizer {
-            source: source.chars().peekable(),
-            buffer: String::new()
+            source: source.bytes().peekable(),
+            buffer: Vec::new()
         }
     }
 
-    fn expect(&mut self) -> JsonResult<char> {
+    fn expect(&mut self) -> JsonResult<u8> {
         self.source.next().ok_or(JsonError::UnexpectedEndOfJson)
     }
 
     fn read_char_as_number(&mut self) -> JsonResult<u32> {
         Ok(match try!(self.expect()) {
-            '0'       => 0,
-            '1'       => 1,
-            '2'       => 2,
-            '3'       => 3,
-            '4'       => 4,
-            '5'       => 5,
-            '6'       => 6,
-            '7'       => 7,
-            '8'       => 8,
-            '9'       => 9,
-            'a' | 'A' => 10,
-            'b' | 'B' => 11,
-            'c' | 'C' => 12,
-            'd' | 'D' => 13,
-            'e' | 'E' => 14,
-            'f' | 'F' => 15,
-            ch        => return Err(JsonError::UnexpectedCharacter(ch)),
+            b'0'        => 0,
+            b'1'        => 1,
+            b'2'        => 2,
+            b'3'        => 3,
+            b'4'        => 4,
+            b'5'        => 5,
+            b'6'        => 6,
+            b'7'        => 7,
+            b'8'        => 8,
+            b'9'        => 9,
+            b'a' | b'A' => 10,
+            b'b' | b'B' => 11,
+            b'c' | b'C' => 12,
+            b'd' | b'D' => 13,
+            b'e' | b'E' => 14,
+            b'f' | b'F' => 15,
+            ch          => return Err(JsonError::UnexpectedCharacter(ch)),
         })
     }
 
-    fn read_label(&mut self, first: char) -> &String {
+    fn read_label(&mut self, first: u8) -> &[u8] {
         self.buffer.clear();
         self.buffer.push(first);
 
         while let Some(&ch) = self.source.peek() {
             match ch {
-                'a'...'z' => {
+                b'a' ... b'z' => {
                     self.buffer.push(ch);
                     self.source.next();
                 },
@@ -74,52 +75,67 @@ impl<'a> Tokenizer<'a> {
         &self.buffer
     }
 
-    fn read_codepoint(&mut self) -> JsonResult<char> {
+    fn read_codepoint(&mut self) -> JsonResult<()> {
         let codepoint = try!(self.read_char_as_number()) << 12
                       | try!(self.read_char_as_number()) << 8
                       | try!(self.read_char_as_number()) << 4
                       | try!(self.read_char_as_number());
 
-        char::from_u32(codepoint)
-            .ok_or(JsonError::CantCastCodepointToCharacter(codepoint))
+        let ch = try!(
+            char::from_u32(codepoint).ok_or(JsonError::UnableToReadStringValue)
+        );
+
+        let mut buffer = String::new();
+        buffer.push(ch);
+
+        self.buffer.extend_from_slice(buffer.as_bytes());
+        Ok(())
     }
 
-    fn read_string(&mut self, first: char) -> JsonResult<String> {
-        let mut value = String::new();
+    fn read_string(&mut self, first: u8) -> JsonResult<String> {
+        self.buffer.clear();
         let mut escape = false;
 
         while let Some(ch) = self.source.next() {
             if ch == first && !escape {
-                return Ok(value);
+                break;
             }
 
             if escape {
-                value.push(match ch {
-                    'b' => '\u{8}',
-                    'f' => '\u{c}',
-                    't' => '\t',
-                    'r' => '\r',
-                    'n' => '\n',
-                    'u' => try!(self.read_codepoint()),
-                    _   => ch,
-                });
-            } else if ch == '\\' {
+                let ch = match ch {
+                    b'b' => 0x8,
+                    b'f' => 0xC,
+                    b't' => b'\t',
+                    b'r' => b'\r',
+                    b'n' => b'\n',
+                    b'u' => {
+                        try!(self.read_codepoint());
+                        escape = false;
+                        continue;
+                    },
+                    _    => ch,
+                };
+
+                self.buffer.push(ch);
+            } else if ch == b'\\' {
                 escape = true;
                 continue;
             } else {
-                value.push(ch);
+                self.buffer.push(ch);
             }
 
             escape = false;
         }
 
-        Ok(value)
+        str::from_utf8(&self.buffer).ok()
+            .and_then(|slice| Some(slice.to_string()))
+            .ok_or(JsonError::UnableToReadStringValue)
     }
 
     fn read_digits_to_buffer(&mut self) {
         while let Some(&ch) = self.source.peek() {
             match ch {
-                '0' ... '9' => {
+                b'0' ... b'9' => {
                     self.buffer.push(ch);
                     self.source.next();
                 },
@@ -128,7 +144,7 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    fn read_number(&mut self, first: char) -> JsonResult<f64> {
+    fn read_number(&mut self, first: u8) -> JsonResult<f64> {
         self.buffer.clear();
         self.buffer.push(first);
         self.read_digits_to_buffer();
@@ -137,7 +153,7 @@ impl<'a> Tokenizer<'a> {
 
         while let Some(&ch) = self.source.peek() {
             match ch {
-                '.' => {
+                b'.' => {
                     if period {
                         return Err(JsonError::UnexpectedCharacter(ch));
                     }
@@ -146,11 +162,11 @@ impl<'a> Tokenizer<'a> {
                     self.source.next();
                     self.read_digits_to_buffer();
                 },
-                'e' | 'E' => {
+                b'e' | b'E' => {
                     self.buffer.push(ch);
                     self.source.next();
                     match self.source.peek() {
-                        Some(&'-') | Some(&'+') => {
+                        Some(&b'-') | Some(&b'+') => {
                             self.buffer.push(self.source.next().unwrap());
                         },
                         _ => {}
@@ -162,38 +178,37 @@ impl<'a> Tokenizer<'a> {
             }
         }
 
-        Ok(self.buffer.parse::<f64>().unwrap())
+        str::from_utf8(&self.buffer).ok()
+            .and_then(|slice| slice.parse::<f64>().ok())
+            .ok_or(JsonError::UnableToReadStringValue)
     }
 
     fn next(&mut self) -> JsonResult<Token> {
         while let Some(ch) = self.source.next() {
             return Ok(match ch {
-                ',' => Token::Comma,
-                ':' => Token::Colon,
-                '[' => Token::BracketOn,
-                ']' => Token::BracketOff,
-                '{' => Token::BraceOn,
-                '}' => Token::BraceOff,
-                '"' => Token::String(try!(self.read_string(ch))),
-                '0'...'9' | '-' => Token::Number(try!(self.read_number(ch))),
-                'a'...'z' => {
-                    let label = self.read_label(ch);
-                    match label.as_ref() {
-                        "true"  => Token::Boolean(true),
-                        "false" => Token::Boolean(false),
-                        "null"  => Token::Null,
-                        _       => {
-                            return Err(JsonError::UnexpectedToken(label.clone()));
+                b',' => Token::Comma,
+                b':' => Token::Colon,
+                b'[' => Token::BracketOn,
+                b']' => Token::BracketOff,
+                b'{' => Token::BraceOn,
+                b'}' => Token::BraceOff,
+                b'"' => Token::String(try!(self.read_string(ch))),
+                b'0' ... b'9' | b'-' => Token::Number(try!(self.read_number(ch))),
+                b'a' ... b'z' => {
+                    match self.read_label(ch) {
+                        b"true"  => Token::Boolean(true),
+                        b"false" => Token::Boolean(false),
+                        b"null"  => Token::Null,
+                        label    => {
+                            return Err(JsonError::UnexpectedToken(
+                                String::from_utf8(label.into())
+                                    .unwrap_or("unknown".into())
+                            ));
                         }
                     }
                 },
-                _  => {
-                    if ch.is_whitespace() {
-                        continue;
-                    } else {
-                        return Err(JsonError::UnexpectedCharacter(ch));
-                    }
-                }
+                b' ' | b'\r' | b'\n' | b'\t' | 0xA0 => continue,
+                _ => return Err(JsonError::UnexpectedCharacter(ch))
             });
         }
         Err(JsonError::UnexpectedEndOfJson)
