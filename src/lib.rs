@@ -139,7 +139,7 @@
 //! data.push("foo");
 //! data.push(false);
 //!
-//! assert_eq!(json::stringify(data), "[10,\"foo\",false]");
+//! assert_eq!(data.dump(), r#"[10,"foo",false]"#);
 //! ```
 //!
 //! Putting fields on objects:
@@ -150,7 +150,7 @@
 //! data["answer"] = 42.into();
 //! data["foo"] = "bar".into();
 //!
-//! assert_eq!(json::stringify(data), "{\"answer\":42,\"foo\":\"bar\"}");
+//! assert_eq!(data.dump(), r#"{"answer":42,"foo":"bar"}"#);
 //! ```
 //!
 //! `array!` macro:
@@ -159,7 +159,7 @@
 //! # #[macro_use] extern crate json;
 //! # fn main() {
 //! let data = array!["foo", "bar", 100, true, json::Null];
-//! assert_eq!(json::stringify(data), "[\"foo\",\"bar\",100,true,null]");
+//! assert_eq!(data.dump(), r#"["foo","bar",100,true,null]"#);
 //! # }
 //! ```
 //!
@@ -174,10 +174,10 @@
 //!     "canJSON" => true
 //! };
 //! assert_eq!(
-//!     json::stringify(data),
+//!     data.dump(),
 //!     // Because object is internally using a BTreeMap,
 //!     // the key order is alphabetical
-//!     "{\"age\":30,\"canJSON\":true,\"name\":\"John Doe\"}"
+//!     r#"{"age":30,"canJSON":true,"name":"John Doe"}"#
 //! );
 //! # }
 //! ```
@@ -296,27 +296,27 @@ macro_rules! object {
 
 macro_rules! implement_extras {
     ($from:ty) => {
-        impl Into<JsonValue> for Option<$from> {
-            fn into(self) -> JsonValue {
-                match self {
+        impl From<Option<$from>> for JsonValue{
+            fn from(val: Option<$from>) -> JsonValue {
+                match val {
                     Some(value) => value.into(),
                     None        => Null,
                 }
             }
         }
 
-        impl Into<JsonValue> for Vec<$from> {
-            fn into(mut self) -> JsonValue {
-                JsonValue::Array(self.drain(..)
+        impl From<Vec<$from>> for JsonValue{
+            fn from(mut val: Vec<$from>) -> JsonValue {
+                JsonValue::Array(val.drain(..)
                     .map(|value| value.into())
                     .collect::<Vec<JsonValue>>()
                 )
             }
         }
 
-        impl Into<JsonValue> for Vec<Option<$from>> {
-            fn into(mut self) -> JsonValue {
-                JsonValue::Array(self.drain(..)
+        impl From<Vec<Option<$from>>> for JsonValue {
+            fn from(mut val: Vec<Option<$from>>) -> JsonValue {
+                JsonValue::Array(val.drain(..)
                     .map(|item| item.into())
                     .collect::<Vec<JsonValue>>()
                 )
@@ -327,18 +327,18 @@ macro_rules! implement_extras {
 
 macro_rules! implement {
     ($to:ident, $from:ty as $wanted:ty) => {
-        impl Into<JsonValue> for $from {
-            fn into(self) -> JsonValue {
-                JsonValue::$to(self as $wanted)
+        impl From<$from> for JsonValue {
+            fn from(val: $from) -> JsonValue {
+                JsonValue::$to(val as $wanted)
             }
         }
 
         implement_extras!($from);
     };
     ($to:ident, $from:ty) => {
-        impl Into<JsonValue> for $from {
-            fn into(self) -> JsonValue {
-                JsonValue::$to(self)
+        impl From<$from> for JsonValue {
+            fn from(val: $from) -> JsonValue {
+                JsonValue::$to(val)
             }
         }
 
@@ -346,26 +346,26 @@ macro_rules! implement {
     }
 }
 
-impl<'a> Into<JsonValue> for &'a str {
-    fn into(self) -> JsonValue {
-        JsonValue::String(self.to_string())
+impl<'a> From<&'a str> for JsonValue {
+    fn from(val: &'a str) -> JsonValue {
+        JsonValue::String(val.to_string())
     }
 }
 
-impl<'a> Into<JsonValue> for Option<&'a str> {
-    fn into(self) -> JsonValue {
-        match self {
+impl<'a> From<Option<&'a str>> for JsonValue {
+    fn from(val: Option<&'a str>) -> JsonValue {
+        match val {
             Some(value) => value.into(),
             None        => Null,
         }
     }
 }
 
-impl Into<JsonValue> for HashMap<String, JsonValue> {
-    fn into(mut self) -> JsonValue {
+impl From<HashMap<String, JsonValue>> for JsonValue {
+    fn from(mut val: HashMap<String, JsonValue>) -> JsonValue {
         let mut object = BTreeMap::new();
 
-        for (key, value) in self.drain() {
+        for (key, value) in val.drain() {
             object.insert(key, value);
         }
 
@@ -373,18 +373,18 @@ impl Into<JsonValue> for HashMap<String, JsonValue> {
     }
 }
 
-impl Into<JsonValue> for Option<HashMap<String, JsonValue>> {
-    fn into(self) -> JsonValue {
-        match self {
+impl From<Option<HashMap<String, JsonValue>>> for JsonValue {
+    fn from(val: Option<HashMap<String, JsonValue>>) -> JsonValue {
+        match val {
             Some(value) => value.into(),
             None        => Null,
         }
     }
 }
 
-impl Into<JsonValue> for Option<JsonValue> {
-    fn into(self) -> JsonValue {
-        match self {
+impl From<Option<JsonValue>> for JsonValue {
+    fn from(val: Option<JsonValue>) -> JsonValue {
+        match val {
             Some(value) => value,
             None        => Null,
         }
