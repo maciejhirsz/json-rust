@@ -34,10 +34,10 @@
 //!
 //! "#).unwrap();
 //!
-//! assert!(data["code"].is(200));
-//! assert!(data["success"].is(true));
+//! assert!(data["code"] == 200);
+//! assert!(data["success"] == true);
 //! assert!(data["payload"]["features"].is_array());
-//! assert!(data["payload"]["features"][0].is("awesome"));
+//! assert!(data["payload"]["features"][0] == "awesome");
 //! assert!(data["payload"]["features"].contains("easyAPI"));
 //!
 //! // Error resilient: non-existent values default to null
@@ -333,12 +333,66 @@ macro_rules! implement {
             }
         }
 
+        impl PartialEq<$from> for JsonValue {
+            fn eq(&self, other: &$from) -> bool {
+                match *self {
+                    JsonValue::$to(ref value) => value == &(*other as $wanted),
+                    _ => false
+                }
+            }
+        }
+
+        impl<'a> PartialEq<$from> for &'a JsonValue {
+            fn eq(&self, other: &$from) -> bool {
+                match **self {
+                    JsonValue::$to(ref value) => value == &(*other as $wanted),
+                    _ => false
+                }
+            }
+        }
+
+        impl PartialEq<JsonValue> for $from {
+            fn eq(&self, other: &JsonValue) -> bool {
+                match *other {
+                    JsonValue::$to(ref value) => value == &(*self as $wanted),
+                    _ => false
+                }
+            }
+        }
+
         implement_extras!($from);
     };
     ($to:ident, $from:ty) => {
         impl From<$from> for JsonValue {
             fn from(val: $from) -> JsonValue {
                 JsonValue::$to(val)
+            }
+        }
+
+        impl PartialEq<$from> for JsonValue {
+            fn eq(&self, other: &$from) -> bool {
+                match *self {
+                    JsonValue::$to(ref value) => value == other,
+                    _                         => false
+                }
+            }
+        }
+
+        impl<'a> PartialEq<$from> for &'a JsonValue {
+            fn eq(&self, other: &$from) -> bool {
+                match **self {
+                    JsonValue::$to(ref value) => value == other,
+                    _                         => false
+                }
+            }
+        }
+
+        impl PartialEq<JsonValue> for $from {
+            fn eq(&self, other: &JsonValue) -> bool {
+                match *other {
+                    JsonValue::$to(ref value) => value == self,
+                    _ => false
+                }
             }
         }
 
@@ -387,6 +441,42 @@ impl From<Option<JsonValue>> for JsonValue {
         match val {
             Some(value) => value,
             None        => Null,
+        }
+    }
+}
+
+impl<'a> PartialEq<&'a str> for JsonValue {
+    fn eq(&self, other: &&str) -> bool {
+        match *self {
+            JsonValue::String(ref value) => value == *other,
+            _ => false
+        }
+    }
+}
+
+impl<'a> PartialEq<JsonValue> for &'a str {
+    fn eq(&self, other: &JsonValue) -> bool {
+        match *other {
+            JsonValue::String(ref value) => value == *self,
+            _ => false
+        }
+    }
+}
+
+impl PartialEq<str> for JsonValue {
+    fn eq(&self, other: &str) -> bool {
+        match *self {
+            JsonValue::String(ref value) => value == other,
+            _ => false
+        }
+    }
+}
+
+impl<'a> PartialEq<JsonValue> for str {
+    fn eq(&self, other: &JsonValue) -> bool {
+        match *other {
+            JsonValue::String(ref value) => value == self,
+            _ => false
         }
     }
 }

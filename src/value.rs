@@ -50,6 +50,7 @@ impl JsonValue {
     }
 
     /// Checks if the value stored matches `other`.
+    #[deprecated(since="0.7.0", note="Use `value == other` instead")]
     pub fn is<T>(&self, other: T) -> bool where T: Into<JsonValue> {
         *self == other.into()
     }
@@ -151,7 +152,7 @@ impl JsonValue {
         }
     }
 
-    #[deprecated(since="0.6.1", note="Unnecessary, use `as_bool` instead")]
+    #[deprecated(since="0.6.1", note="Use `as_bool` instead")]
     pub fn as_boolean(&self) -> JsonResult<&bool> {
         match *self {
             JsonValue::Boolean(ref value) => Ok(value),
