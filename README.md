@@ -1,12 +1,12 @@
 ![](http://terhix.com/doc/json-rust-logo-small.png)
 
-# JSON in Rust
+# json-rust
 
-Parse and serialize JSON with ease.
+Parse and serialize [JSON](http://json.org/) with ease.
 
 **[Complete Documentation](http://terhix.com/doc/json/) - [Cargo](https://crates.io/crates/json) - [Repository](https://github.com/maciejhirsz/json-rust)**
 
-# Why?
+## Why?
 
 JSON is a very loose format where anything goes - arrays can hold mixed
 types, object keys can change types between API calls or not include
