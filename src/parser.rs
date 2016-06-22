@@ -36,25 +36,13 @@ impl<'a> Tokenizer<'a> {
         self.source.next().ok_or(JsonError::UnexpectedEndOfJson)
     }
 
-    fn read_char_as_number(&mut self) -> JsonResult<u32> {
-        Ok(match try!(self.expect()) {
-            b'0'        => 0,
-            b'1'        => 1,
-            b'2'        => 2,
-            b'3'        => 3,
-            b'4'        => 4,
-            b'5'        => 5,
-            b'6'        => 6,
-            b'7'        => 7,
-            b'8'        => 8,
-            b'9'        => 9,
-            b'a' | b'A' => 10,
-            b'b' | b'B' => 11,
-            b'c' | b'C' => 12,
-            b'd' | b'D' => 13,
-            b'e' | b'E' => 14,
-            b'f' | b'F' => 15,
-            ch          => return Err(JsonError::UnexpectedCharacter(ch)),
+    fn read_char_as_hexnumber(&mut self) -> JsonResult<u32> {
+        let ch = try!(self.expect());
+        Ok(match ch {
+            b'0' ... b'9' => (ch - b'0') as u32,
+            b'a' ... b'f' => (ch + 10 - b'a') as u32,
+            b'A' ... b'F' => (ch + 10 - b'A') as u32,
+            ch            => return Err(JsonError::unexpected_character(ch)),
         })
     }
 
@@ -76,13 +64,13 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn read_codepoint(&mut self) -> JsonResult<()> {
-        let codepoint = try!(self.read_char_as_number()) << 12
-                      | try!(self.read_char_as_number()) << 8
-                      | try!(self.read_char_as_number()) << 4
-                      | try!(self.read_char_as_number());
+        let codepoint = try!(self.read_char_as_hexnumber()) << 12
+                      | try!(self.read_char_as_hexnumber()) << 8
+                      | try!(self.read_char_as_hexnumber()) << 4
+                      | try!(self.read_char_as_hexnumber());
 
         let ch = try!(
-            char::from_u32(codepoint).ok_or(JsonError::UnableToReadStringValue)
+            char::from_u32(codepoint).ok_or(JsonError::FailedUtf8Parsing)
         );
 
         let mut buffer = String::new();
@@ -129,7 +117,7 @@ impl<'a> Tokenizer<'a> {
 
         str::from_utf8(&self.buffer).ok()
             .and_then(|slice| Some(slice.to_string()))
-            .ok_or(JsonError::UnableToReadStringValue)
+            .ok_or(JsonError::FailedUtf8Parsing)
     }
 
     fn read_digits_to_buffer(&mut self) {
@@ -155,7 +143,7 @@ impl<'a> Tokenizer<'a> {
             match ch {
                 b'.' => {
                     if period {
-                        return Err(JsonError::UnexpectedCharacter(ch));
+                        return Err(JsonError::unexpected_character(ch));
                     }
                     period = true;
                     self.buffer.push(ch);
@@ -180,7 +168,7 @@ impl<'a> Tokenizer<'a> {
 
         str::from_utf8(&self.buffer).ok()
             .and_then(|slice| slice.parse::<f64>().ok())
-            .ok_or(JsonError::UnableToReadStringValue)
+            .ok_or(JsonError::FailedUtf8Parsing)
     }
 
     fn next(&mut self) -> JsonResult<Token> {
@@ -208,7 +196,7 @@ impl<'a> Tokenizer<'a> {
                     }
                 },
                 b' ' | b'\r' | b'\n' | b'\t' | 0xA0 => continue,
-                _ => return Err(JsonError::UnexpectedCharacter(ch))
+                _ => return Err(JsonError::unexpected_character(ch))
             });
         }
         Err(JsonError::UnexpectedEndOfJson)
