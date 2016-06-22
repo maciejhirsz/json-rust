@@ -150,7 +150,7 @@ impl<'a> Tokenizer<'a> {
             Some(b'.') | Some(b'e') | Some(b'E') => {},
             _ => {
                 return if first == b'-' {
-                    Ok((num as f64) * -1.0)
+                    Ok(-(num as f64))
                 } else {
                     Ok(num as f64)
                 };

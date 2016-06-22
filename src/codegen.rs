@@ -34,10 +34,48 @@ pub trait Generator {
         self.write_char(b'"');
     }
 
+    fn write_digits_from_u64(&mut self, mut num: u64, length: &mut u8) {
+        let digit = (num % 10) as u8;
+        num /= 10;
+        if num > 0 {
+            self.write_digits_from_u64(num, length);
+        }
+        *length += 1;
+        self.write_char(digit + b'0');
+    }
+
+    fn write_number(&mut self, mut num: f64) {
+        let mut length = 0;
+        if num < 0.0 {
+            num = -num;
+            self.write_char(b'-');
+        }
+
+        self.write_digits_from_u64(num as u64, &mut length);
+
+        let mut fract = num.fract();
+        if fract < 1e-10 {
+            return;
+        }
+
+        fract *= 10.0;
+        self.write_char(b'.');
+        self.write_char((fract as u8) + b'0');
+        fract = fract.fract();
+        length += 2;
+
+        while length < 17 && fract > 0.01 {
+            fract *= 10.0;
+            self.write_char((fract as u8) + b'0');
+            fract = fract.fract();
+            length += 1;
+        }
+    }
+
     fn write_json(&mut self, json: &JsonValue) {
         match *json {
             JsonValue::String(ref string) => self.write_string(string),
-            JsonValue::Number(ref number) => self.write(number.to_string().as_bytes()),
+            JsonValue::Number(ref number) => self.write_number(*number),
             JsonValue::Boolean(ref value) => self.write(if *value { b"true" } else { b"false" }),
             JsonValue::Null               => self.write(b"null"),
             JsonValue::Array(ref array)   => {
