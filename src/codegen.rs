@@ -3,43 +3,45 @@ use JsonValue;
 pub trait Generator {
     fn new_line(&mut self) {}
 
-    fn write(&mut self, slice: &str);
+    fn write(&mut self, slice: &[u8]);
 
-    fn write_min(&mut self, slice: &str, minslice: &str);
+    fn write_min(&mut self, slice: &[u8], minslice: &[u8]);
 
-    fn write_char(&mut self, ch: char);
+    fn write_char(&mut self, ch: u8);
 
     fn indent(&mut self) {}
 
     fn dedent(&mut self) {}
 
+    fn write_string(&mut self, string: &str) {
+        self.write_char(b'"');
+
+        for ch in string.bytes() {
+            match ch {
+                b'\\' | b'"' => {
+                    self.write_char(b'\\');
+                    self.write_char(ch);
+                },
+                b'\n' => self.write(b"\\n"),
+                b'\r' => self.write(b"\\r"),
+                b'\t' => self.write(b"\\t"),
+                0xC   => self.write(b"\\f"),
+                0x8   => self.write(b"\\b"),
+                _     => self.write_char(ch)
+            }
+        }
+
+        self.write_char(b'"');
+    }
+
     fn write_json(&mut self, json: &JsonValue) {
         match *json {
-            JsonValue::String(ref string) => {
-                self.write_char('"');
-
-                for ch in string.chars() {
-                    match ch {
-                        '\\' | '"' => {
-                            self.write_char('\\');
-                            self.write_char(ch);
-                        },
-                        '\n'       => self.write("\\n"),
-                        '\r'       => self.write("\\r"),
-                        '\t'       => self.write("\\t"),
-                        '\u{000C}' => self.write("\\f"),
-                        '\u{0008}' => self.write("\\b"),
-                        _          => self.write_char(ch)
-                    }
-                }
-
-                self.write_char('"');
-            },
-            JsonValue::Number(ref number) => self.write(&number.to_string()),
-            JsonValue::Boolean(ref value) => self.write(if *value { "true" } else { "false" }),
-            JsonValue::Null               => self.write("null"),
+            JsonValue::String(ref string) => self.write_string(string),
+            JsonValue::Number(ref number) => self.write(number.to_string().as_bytes()),
+            JsonValue::Boolean(ref value) => self.write(if *value { b"true" } else { b"false" }),
+            JsonValue::Null               => self.write(b"null"),
             JsonValue::Array(ref array)   => {
-                self.write_char('[');
+                self.write_char(b'[');
                 self.indent();
                 let mut first = true;
                 for item in array {
@@ -47,17 +49,17 @@ pub trait Generator {
                         first = false;
                         self.new_line();
                     } else {
-                        self.write(",");
+                        self.write(b",");
                         self.new_line();
                     }
                     self.write_json(item);
                 }
                 self.dedent();
                 self.new_line();
-                self.write_char(']');
+                self.write_char(b']');
             },
             JsonValue::Object(ref object) => {
-                self.write_char('{');
+                self.write_char(b'{');
                 self.indent();
                 let mut first = true;
                 for (key, value) in object.iter() {
@@ -65,16 +67,16 @@ pub trait Generator {
                         first = false;
                         self.new_line();
                     } else {
-                        self.write(",");
+                        self.write(b",");
                         self.new_line();
                     }
-                    self.write(&format!("{:?}", key));
-                    self.write_min(": ", ":");
+                    self.write_string(key);
+                    self.write_min(b": ", b":");
                     self.write_json(value);
                 }
                 self.dedent();
                 self.new_line();
-                self.write_char('}');
+                self.write_char(b'}');
             }
         }
     }
@@ -83,37 +85,37 @@ pub trait Generator {
 }
 
 pub struct DumpGenerator {
-    code: String,
+    code: Vec<u8>,
 }
 
 impl DumpGenerator {
     pub fn new() -> Self {
         DumpGenerator {
-            code: String::with_capacity(1024),
+            code: Vec::with_capacity(1024),
         }
     }
 }
 
 impl Generator for DumpGenerator {
-    fn write(&mut self, slice: &str) {
-        self.code.push_str(slice);
+    fn write(&mut self, slice: &[u8]) {
+        self.code.extend_from_slice(slice);
     }
 
-    fn write_min(&mut self, _: &str, minslice: &str) {
-        self.write(minslice);
+    fn write_min(&mut self, _: &[u8], minslice: &[u8]) {
+        self.code.extend_from_slice(minslice);
     }
 
-    fn write_char(&mut self, ch: char) {
+    fn write_char(&mut self, ch: u8) {
         self.code.push(ch);
     }
 
     fn consume(self) -> String {
-        self.code
+        String::from_utf8(self.code).unwrap()
     }
 }
 
 pub struct PrettyGenerator {
-    code: String,
+    code: Vec<u8>,
     dent: u16,
     spaces_per_indent: u16,
 }
@@ -121,7 +123,7 @@ pub struct PrettyGenerator {
 impl PrettyGenerator {
     pub fn new(spaces: u16) -> Self {
         PrettyGenerator {
-            code: String::with_capacity(1024),
+            code: Vec::with_capacity(1024),
             dent: 0,
             spaces_per_indent: spaces
         }
@@ -130,21 +132,21 @@ impl PrettyGenerator {
 
 impl Generator for PrettyGenerator {
     fn new_line(&mut self) {
-        self.code.push('\n');
+        self.code.push(b'\n');
         for _ in 0..(self.dent * self.spaces_per_indent) {
-            self.code.push(' ');
+            self.code.push(b' ');
         }
     }
 
-    fn write(&mut self, slice: &str) {
-        self.code.push_str(slice);
+    fn write(&mut self, slice: &[u8]) {
+        self.code.extend_from_slice(slice);
     }
 
-    fn write_min(&mut self, slice: &str, _: &str) {
-        self.write(slice);
+    fn write_min(&mut self, slice: &[u8], _: &[u8]) {
+        self.code.extend_from_slice(slice);
     }
 
-    fn write_char(&mut self, ch: char) {
+    fn write_char(&mut self, ch: u8) {
         self.code.push(ch);
     }
 
@@ -157,6 +159,6 @@ impl Generator for PrettyGenerator {
     }
 
     fn consume(self) -> String {
-        self.code
+        String::from_utf8(self.code).unwrap()
     }
 }
