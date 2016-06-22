@@ -111,7 +111,7 @@ fn stringify_string() {
 
 #[test]
 fn stringify_number() {
-    assert_eq!(stringify(3.14), "3.14");
+    assert_eq!(stringify(3.141592653589793), "3.141592653589793");
 }
 
 #[test]
@@ -283,7 +283,7 @@ fn parse_null() {
 
 #[test]
 fn parse_number() {
-    assert_eq!(parse("3.14").unwrap(), 3.14);
+    assert_eq!(parse("3.141592653589793").unwrap(), 3.141592653589793);
 }
 
 #[test]
