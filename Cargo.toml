@@ -10,3 +10,4 @@ license = "MIT"
 [dev-dependencies]
 serde = "*"
 serde_json = "*"
+rustc-serialize = "*"
