@@ -109,25 +109,13 @@ impl<'a> Tokenizer<'a> {
         .or(Err(JsonError::FailedUtf8Parsing))
     }
 
-    fn read_digits_to_buffer(&mut self) {
-        while let Some(&ch) = self.source.peek() {
-            match ch {
-                b'0' ... b'9' => {
-                    self.buffer.push(ch);
-                    self.source.next();
-                },
-                _ => break
-            }
-        }
-    }
-
     fn read_number(&mut self, first: u8) -> JsonResult<f64> {
         let mut num = if first == b'-' { 0 } else { (first - b'0') as u64 };
 
         while let Some(&ch) = self.source.peek() {
             match ch {
                 b'0' ... b'9' => {
-                    num = (num * 10) + (ch - b'0') as u64;
+                    num = num * 10 + (ch - b'0') as u64;
                 },
                 _ => break
             }
@@ -143,38 +131,55 @@ impl<'a> Tokenizer<'a> {
             })
         }
 
-        self.buffer.clear();
-        self.buffer.extend_from_slice(num.to_string().as_bytes());
+        let mut num = num as f64;
 
         if let Some(&b'.') = self.source.peek() {
-            self.buffer.push(b'.');
             self.source.next();
-            self.read_digits_to_buffer();
+
+            let mut precision = -1;
+            while let Some(&ch) = self.source.peek() {
+                match ch {
+                    b'0' ... b'9' => {
+                        num += ((ch - b'0') as f64) * 10f64.powi(precision);
+                        precision -= 1;
+                    },
+                    _ => break
+                }
+                self.source.next();
+            }
         }
 
         match self.source.peek() {
             Some(&b'e') | Some(&b'E') => {
-                self.buffer.push(b'e');
                 self.source.next();
-                match self.source.peek() {
+
+                let mut e = 0;
+                let sign = match self.source.peek() {
                     Some(&b'-') => {
-                        self.buffer.push(b'-');
                         self.source.next();
+                        -1
                     },
                     Some(&b'+') => {
-                        self.buffer.push(b'+');
                         self.source.next();
+                        1
                     },
-                    _ => {}
+                    _ => 1
+                };
+
+                while let Some(&ch) = self.source.peek() {
+                    match ch {
+                        b'0' ... b'9' => e = e * 10 + (ch - b'0') as i32,
+                        _ => break
+                    }
+                    self.source.next();
                 }
-                self.read_digits_to_buffer();
+
+                num *= 10f64.powi(e * sign);
             },
             _ => {}
         }
 
-        str::from_utf8(&self.buffer).ok()
-            .and_then(|slice| slice.parse::<f64>().ok())
-            .ok_or(JsonError::FailedUtf8Parsing)
+        Ok(if first == b'-' { num * -1.0 } else { num })
     }
 
     fn next(&mut self) -> JsonResult<Token> {
