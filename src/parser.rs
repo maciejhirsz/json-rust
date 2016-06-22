@@ -1,7 +1,6 @@
 use std::char;
 use std::str;
 use std::str::Bytes;
-use std::iter::{ Peekable, Iterator };
 use std::collections::BTreeMap;
 use { JsonValue, JsonError, JsonResult };
 
@@ -29,26 +28,63 @@ macro_rules! expect_char {
     }
 }
 
+macro_rules! read_num {
+    ($tok:ident, $num:ident, $then:expr) => {
+        while let Some(ch) = $tok.next_byte() {
+            match ch {
+                b'0' ... b'9' => {
+                    let $num = ch - b'0';
+                    $then;
+                },
+                ch => {
+                    $tok.left_over = Some(ch);
+                    break;
+                }
+            }
+        }
+    }
+}
+
 struct Tokenizer<'a> {
-    source: Peekable<Bytes<'a>>,
+    source: Bytes<'a>,
     buffer: Vec<u8>,
+    left_over: Option<u8>,
 }
 
 impl<'a> Tokenizer<'a> {
     pub fn new(source: &'a str) -> Self {
         Tokenizer {
-            source: source.bytes().peekable(),
-            buffer: Vec::with_capacity(500)
+            source: source.bytes(),
+            buffer: Vec::with_capacity(512),
+            left_over: None,
         }
     }
 
+    fn peek_byte(&mut self) -> Option<u8> {
+        if self.left_over.is_none() {
+            self.left_over = self.source.next();
+        }
+
+        return self.left_over;
+    }
+
+    fn next_byte(&mut self) -> Option<u8> {
+        if self.left_over.is_some() {
+            let byte = self.left_over;
+            self.left_over = None;
+            return byte;
+        }
+
+        self.source.next()
+    }
+
     #[inline(always)]
-    fn expect(&mut self) -> JsonResult<u8> {
-        self.source.next().ok_or(JsonError::UnexpectedEndOfJson)
+    fn expect_byte(&mut self) -> JsonResult<u8> {
+        self.next_byte().ok_or(JsonError::UnexpectedEndOfJson)
     }
 
     fn read_char_as_hexnumber(&mut self) -> JsonResult<u32> {
-        let ch = try!(self.expect());
+        let ch = try!(self.expect_byte());
         Ok(match ch {
             b'0' ... b'9' => (ch - b'0') as u32,
             b'a' ... b'f' => (ch + 10 - b'a') as u32,
@@ -78,11 +114,11 @@ impl<'a> Tokenizer<'a> {
         self.buffer.clear();
 
         loop {
-            let ch = try!(self.expect());
+            let ch = try!(self.expect_byte());
             match ch {
                 b'"'  => break,
                 b'\\' => {
-                    let ch = try!(self.expect());
+                    let ch = try!(self.expect_byte());
                     let ch = match ch {
                         b'b' => 0x8,
                         b'f' => 0xC,
@@ -108,71 +144,49 @@ impl<'a> Tokenizer<'a> {
     fn read_number(&mut self, first: u8) -> JsonResult<f64> {
         let mut num = if first == b'-' { 0 } else { (first - b'0') as u64 };
 
-        while let Some(&ch) = self.source.peek() {
-            match ch {
-                b'0' ... b'9' => {
-                    num = num * 10 + (ch - b'0') as u64;
-                },
-                _ => break
-            }
-            self.source.next();
-        }
+        read_num!(self, digit, num = num * 10 + digit as u64);
 
-        match self.source.peek() {
-            Some(&b'.') | Some(&b'e') | Some(&b'E') => {},
-            _ => return Ok(if first == b'-' {
-                (num as f64) * -1.0
-            } else {
-                num as f64
-            })
+        match self.peek_byte() {
+            Some(b'.') | Some(b'e') | Some(b'E') => {},
+            _ => {
+                return if first == b'-' {
+                    Ok((num as f64) * -1.0)
+                } else {
+                    Ok(num as f64)
+                };
+            }
         }
 
         let mut num = num as f64;
 
-        if let Some(&b'.') = self.source.peek() {
-            self.source.next();
+        if let Some(b'.') = self.peek_byte() {
+            self.next_byte();
 
             let mut precision = -1;
-            while let Some(&ch) = self.source.peek() {
-                match ch {
-                    b'0' ... b'9' => {
-                        num += ((ch - b'0') as f64) * 10f64.powi(precision);
-                        precision -= 1;
-                    },
-                    _ => break
-                }
-                self.source.next();
-            }
+
+            read_num!(self, digit, {
+                num += (digit as f64) * 10_f64.powi(precision);
+                precision -= 1;
+            });
         }
 
-        match self.source.peek() {
-            Some(&b'e') | Some(&b'E') => {
-                self.source.next();
-
+        match self.next_byte() {
+            Some(b'e') | Some(b'E') => {
                 let mut e = 0;
-                let sign = match self.source.peek() {
-                    Some(&b'-') => {
-                        self.source.next();
-                        -1
-                    },
-                    Some(&b'+') => {
-                        self.source.next();
+                let sign = match self.next_byte() {
+                    Some(b'-') => -1,
+                    Some(b'+') => 1,
+                    byte => {
+                        self.left_over = byte;
                         1
                     },
-                    _ => 1
                 };
 
-                while let Some(&ch) = self.source.peek() {
-                    match ch {
-                        b'0' ... b'9' => e = e * 10 + (ch - b'0') as i32,
-                        _ => break
-                    }
-                    self.source.next();
-                }
+                read_num!(self, digit, e = e * 10 + digit as i32);
 
                 num *= 10f64.powi(e * sign);
             },
-            _ => {}
+            byte => self.left_over = byte
         }
 
         Ok(if first == b'-' { num * -1.0 } else { num })
@@ -180,7 +194,7 @@ impl<'a> Tokenizer<'a> {
 
     fn next(&mut self) -> JsonResult<Token> {
         loop {
-            let ch = try!(self.expect());
+            let ch = try!(self.expect_byte());
             return Ok(match ch {
                 b',' => Token::Comma,
                 b':' => Token::Colon,

@@ -11,7 +11,7 @@ impl Generator {
     pub fn new(minify: bool, spaces: u16) -> Self {
         Generator {
             minify: minify,
-            code: String::new(),
+            code: String::with_capacity(1024),
             dent: 0,
             spaces_per_indent: spaces
         }
