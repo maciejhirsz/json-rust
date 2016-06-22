@@ -74,25 +74,6 @@ impl<'a> Tokenizer<'a> {
         Ok(())
     }
 
-    fn read_escaped_char(&mut self) -> JsonResult<()> {
-        let ch = try!(self.expect());
-        let ch = match ch {
-            b'b' => 0x8,
-            b'f' => 0xC,
-            b't' => b'\t',
-            b'r' => b'\r',
-            b'n' => b'\n',
-            b'u' => {
-                try!(self.read_codepoint());
-                return Ok(());
-            },
-            _   => ch
-        };
-        self.buffer.push(ch);
-
-        Ok(())
-    }
-
     fn read_string(&mut self) -> JsonResult<String> {
         self.buffer.clear();
 
@@ -100,7 +81,22 @@ impl<'a> Tokenizer<'a> {
             let ch = try!(self.expect());
             match ch {
                 b'"'  => break,
-                b'\\' => try!(self.read_escaped_char()),
+                b'\\' => {
+                    let ch = try!(self.expect());
+                    let ch = match ch {
+                        b'b' => 0x8,
+                        b'f' => 0xC,
+                        b't' => b'\t',
+                        b'r' => b'\r',
+                        b'n' => b'\n',
+                        b'u' => {
+                            try!(self.read_codepoint());
+                            continue;
+                        },
+                        _   => ch
+                    };
+                    self.buffer.push(ch);
+                },
                 _     => self.buffer.push(ch)
             }
         }
@@ -222,16 +218,18 @@ impl<'a> Tokenizer<'a> {
 }
 
 macro_rules! expect {
-    ($parser:ident, $p:pat => $value:ident) => (
-        match try!($parser.consume()) {
-            $p    => $value,
-            token => return Err(JsonError::unexpected_token(token))
+    ($parser:ident, $token:pat => $value:ident) => (
+        match $parser.consume() {
+            Ok($token) => $value,
+            Ok(token)  => return Err(JsonError::unexpected_token(token)),
+            Err(error) => return Err(error),
         }
     );
     ($parser:ident, $token:pat) => ({
-        match try!($parser.consume()) {
-            $token => {}
-            token  => return Err(JsonError::unexpected_token(token))
+        match $parser.consume() {
+            Ok($token) => {},
+            Ok(token)  => return Err(JsonError::unexpected_token(token)),
+            Err(error) => return Err(error),
         }
     })
 }
