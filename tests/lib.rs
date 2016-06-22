@@ -65,14 +65,14 @@ fn is_as_boolean() {
 fn is_true() {
     let boolean = JsonValue::Boolean(true);
 
-    assert!(boolean.is(true));
+    assert_eq!(boolean, true);
 }
 
 #[test]
 fn is_false() {
     let boolean = JsonValue::Boolean(false);
 
-    assert!(boolean.is(false));
+    assert_eq!(boolean, false);
 }
 
 #[test]
@@ -268,12 +268,12 @@ fn object_dump_pretty() {
 
 #[test]
 fn parse_true() {
-    assert!(parse("true").unwrap().is(true));
+    assert_eq!(parse("true").unwrap(), true);
 }
 
 #[test]
 fn parse_false() {
-    assert!(parse("false").unwrap().is(false));
+    assert_eq!(parse("false").unwrap(), false);
 }
 
 #[test]
@@ -283,35 +283,35 @@ fn parse_null() {
 
 #[test]
 fn parse_number() {
-    assert!(parse("3.14").unwrap().is(3.14))
+    assert_eq!(parse("3.14").unwrap(), 3.14);
 }
 
 #[test]
 fn parse_integer() {
-    assert!(parse("42").unwrap().is(42));
+    assert_eq!(parse("42").unwrap(), 42);
 }
 
 #[test]
 fn parse_negative_integer() {
-    assert!(parse("-42").unwrap().is(-42));
+    assert_eq!(parse("-42").unwrap(), -42);
 }
 
 #[test]
 fn parse_number_with_e() {
-    assert!(parse("5e2").unwrap().is(500));
-    assert!(parse("5E2").unwrap().is(500));
+    assert_eq!(parse("5e2").unwrap(), 500);
+    assert_eq!(parse("5E2").unwrap(), 500);
 }
 
 #[test]
 fn parse_number_with_positive_e() {
-    assert!(parse("5e+2").unwrap().is(500));
-    assert!(parse("5E+2").unwrap().is(500));
+    assert_eq!(parse("5e+2").unwrap(), 500);
+    assert_eq!(parse("5E+2").unwrap(), 500);
 }
 
 #[test]
 fn parse_number_with_negative_e() {
-    assert!(parse("5e-2").unwrap().is(0.05));
-    assert!(parse("5E-2").unwrap().is(0.05));
+    assert_eq!(parse("5e-2").unwrap(), 0.05);
+    assert_eq!(parse("5E-2").unwrap(), 0.05);
 }
 
 #[test]
@@ -382,7 +382,7 @@ fn parse_and_index_from_object() {
     let data = parse("{ \"pi\": 3.14 }").unwrap();
     let ref pi = data["pi"];
 
-    assert!(pi.is(3.14));
+    assert_eq!(pi, 3.14);
 }
 
 #[test]
@@ -395,11 +395,11 @@ fn parse_and_index_mut_from_object() {
 
     "#).unwrap();
 
-    assert!(data["foo"].is(100));
+    assert_eq!(data["foo"], 100);
 
     data["foo"] = 200.into();
 
-    assert!(data["foo"].is(200));
+    assert_eq!(data["foo"], 200);
 }
 
 #[test]
@@ -414,7 +414,7 @@ fn parse_and_index_mut_from_null() {
     data["foo"]["bar"] = 100.into();
 
     assert!(data.is_object());
-    assert!(data["foo"]["bar"].is(100));
+    assert_eq!(data["foo"]["bar"], 100);
 
     assert_eq!(data.dump(), r#"{"foo":{"bar":100}}"#);
 }
@@ -423,12 +423,12 @@ fn parse_and_index_mut_from_null() {
 fn parse_and_index_from_array() {
     let data = parse(r#"[100, 200, false, null, "foo"]"#).unwrap();
 
-    assert!(data[0].is(100));
-    assert!(data[1].is(200));
-    assert!(data[2].is(false));
-    assert!(data[3].is_null());
-    assert!(data[4].is("foo"));
-    assert!(data[5].is_null());
+    assert_eq!(data[0], 100);
+    assert_eq!(data[1], 200);
+    assert_eq!(data[2], false);
+    assert_eq!(data[3], Null);
+    assert_eq!(data[4], "foo");
+    assert_eq!(data[5], Null);
 }
 
 #[test]
@@ -441,8 +441,8 @@ fn parse_and_index_mut_from_array() {
     data[3] = "modified".into();
     data[5] = "implicid push".into();
 
-    assert!(data[3].is("modified"));
-    assert!(data[5].is("implicid push"));
+    assert_eq!(data[3], "modified");
+    assert_eq!(data[5], "implicid push");
 }
 
 #[test]
@@ -454,7 +454,7 @@ fn parse_escaped_characters() {
     "#).unwrap();
 
     assert!(data.is_string());
-    assert!(data.is("\r\n\t\u{8}\u{c}\\/\""));
+    assert_eq!(data, "\r\n\t\u{8}\u{c}\\/\"");
 }
 
 #[test]
@@ -465,7 +465,7 @@ fn parse_escaped_unicode() {
 
     "#).unwrap();
 
-    assert!(data.is("❤️"));
+    assert_eq!(data, "❤️");
 }
 
 #[test]
@@ -526,11 +526,11 @@ fn iter_entries() {
 
     let (key, value) = entries.next().unwrap();
     assert_eq!(key, "a");
-    assert!(value.is(1));
+    assert_eq!(value, 1);
 
     let (key, value) = entries.next().unwrap();
     assert_eq!(key, "b");
-    assert!(value.is("foo"));
+    assert_eq!(value, "foo");
 
     assert!(entries.next().is_none());
 }
@@ -563,8 +563,8 @@ fn iter_members() {
 
     let mut members = data.members();
 
-    assert!(members.next().unwrap().is(1));
-    assert!(members.next().unwrap().is("foo"));
+    assert_eq!(members.next().unwrap(), 1);
+    assert_eq!(members.next().unwrap(), "foo");
     assert!(members.next().is_none());
 }
 

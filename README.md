@@ -38,10 +38,10 @@ let data = json::parse(r#"
 
 "#).unwrap();
 
-assert!(data["code"].is(200));
-assert!(data["success"].is(true));
+assert!(data["code"] == 200);
+assert!(data["success"] == true));
 assert!(data["payload"]["features"].is_array());
-assert!(data["payload"]["features"][0].is("awesome"));
+assert!(data["payload"]["features"][0] == "awesome");
 assert!(data["payload"]["features"].contains("easyAPI"));
 
 // Error resilient: non-existent values default to null
