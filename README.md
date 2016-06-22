@@ -2,6 +2,10 @@
 
 # json-rust
 
+![](https://img.shields.io/travis/maciejhirsz/json-rust.svg)
+![](https://img.shields.io/crates/v/json.svg)
+![](https://img.shields.io/crates/l/json.svg)
+
 Parse and serialize [JSON](http://json.org/) with ease.
 
 **[Complete Documentation](http://terhix.com/doc/json/) - [Cargo](https://crates.io/crates/json) - [Repository](https://github.com/maciejhirsz/json-rust)**
