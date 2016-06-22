@@ -1,32 +1,19 @@
 use JsonValue;
 
-pub struct Generator {
-    pub minify: bool,
-    code: String,
-    dent: u16,
-    spaces_per_indent: u16,
-}
+pub trait Generator {
+    fn new_line(&mut self) {}
 
-impl Generator {
-    pub fn new(minify: bool, spaces: u16) -> Self {
-        Generator {
-            minify: minify,
-            code: String::with_capacity(1024),
-            dent: 0,
-            spaces_per_indent: spaces
-        }
-    }
+    fn write(&mut self, slice: &str);
 
-    pub fn new_line(&mut self) {
-        if !self.minify {
-            self.code.push('\n');
-            for _ in 0..(self.dent * self.spaces_per_indent) {
-                self.code.push(' ');
-            }
-        }
-    }
+    fn write_min(&mut self, slice: &str, minslice: &str);
 
-    pub fn write_json(&mut self, json: &JsonValue) {
+    fn write_char(&mut self, ch: char);
+
+    fn indent(&mut self) {}
+
+    fn dedent(&mut self) {}
+
+    fn write_json(&mut self, json: &JsonValue) {
         match *json {
             JsonValue::String(ref string) => {
                 self.write_char('"');
@@ -92,31 +79,84 @@ impl Generator {
         }
     }
 
-    pub fn write(&mut self, slice: &str) {
+    fn consume(self) -> String;
+}
+
+pub struct DumpGenerator {
+    code: String,
+}
+
+impl DumpGenerator {
+    pub fn new() -> Self {
+        DumpGenerator {
+            code: String::with_capacity(1024),
+        }
+    }
+}
+
+impl Generator for DumpGenerator {
+    fn write(&mut self, slice: &str) {
         self.code.push_str(slice);
     }
 
-    pub fn write_min(&mut self, slice: &str, minslice: &str) {
-        if self.minify {
-            self.write(minslice);
-        } else {
-            self.write(slice);
-        }
+    fn write_min(&mut self, _: &str, minslice: &str) {
+        self.write(minslice);
     }
 
-    pub fn write_char(&mut self, ch: char) {
+    fn write_char(&mut self, ch: char) {
         self.code.push(ch);
     }
 
-    pub fn indent(&mut self) {
+    fn consume(self) -> String {
+        self.code
+    }
+}
+
+pub struct PrettyGenerator {
+    code: String,
+    dent: u16,
+    spaces_per_indent: u16,
+}
+
+impl PrettyGenerator {
+    pub fn new(spaces: u16) -> Self {
+        PrettyGenerator {
+            code: String::with_capacity(1024),
+            dent: 0,
+            spaces_per_indent: spaces
+        }
+    }
+}
+
+impl Generator for PrettyGenerator {
+    fn new_line(&mut self) {
+        self.code.push('\n');
+        for _ in 0..(self.dent * self.spaces_per_indent) {
+            self.code.push(' ');
+        }
+    }
+
+    fn write(&mut self, slice: &str) {
+        self.code.push_str(slice);
+    }
+
+    fn write_min(&mut self, slice: &str, _: &str) {
+        self.write(slice);
+    }
+
+    fn write_char(&mut self, ch: char) {
+        self.code.push(ch);
+    }
+
+    fn indent(&mut self) {
         self.dent += 1;
     }
 
-    pub fn dedent(&mut self) {
+    fn dedent(&mut self) {
         self.dent -= 1;
     }
 
-    pub fn consume(self) -> String {
+    fn consume(self) -> String {
         self.code
     }
 }

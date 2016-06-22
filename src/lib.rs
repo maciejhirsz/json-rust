@@ -194,7 +194,7 @@ pub use value::JsonValue::Null;
 pub type JsonResult<T> = Result<T, JsonError>;
 
 pub use parser::parse;
-use codegen::Generator;
+use codegen::{ Generator, PrettyGenerator, DumpGenerator };
 
 use std::collections::HashMap;
 use std::collections::BTreeMap;
@@ -206,7 +206,7 @@ pub type Object = BTreeMap<String, JsonValue>;
 impl JsonValue {
     /// Prints out the value as JSON string.
     pub fn dump(&self) -> String {
-        let mut gen = Generator::new(true, 0);
+        let mut gen = DumpGenerator::new();
         gen.write_json(self);
         gen.consume()
     }
@@ -214,7 +214,7 @@ impl JsonValue {
     /// Pretty prints out the value as JSON string. Takes an argument that's
     /// number of spaces to indent new blocks with.
     pub fn pretty(&self, spaces: u16) -> String {
-        let mut gen = Generator::new(false, spaces);
+        let mut gen = PrettyGenerator::new(spaces);
         gen.write_json(self);
         gen.consume()
     }
