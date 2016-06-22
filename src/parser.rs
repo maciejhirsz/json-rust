@@ -42,6 +42,7 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
+    #[inline(always)]
     fn expect(&mut self) -> JsonResult<u8> {
         self.source.next().ok_or(JsonError::UnexpectedEndOfJson)
     }
@@ -54,31 +55,6 @@ impl<'a> Tokenizer<'a> {
             b'A' ... b'F' => (ch + 10 - b'A') as u32,
             ch            => return Err(JsonError::unexpected_character(ch)),
         })
-    }
-
-    fn read_true(&mut self) -> JsonResult<()> {
-        expect_char!(self, b'r');
-        expect_char!(self, b'u');
-        expect_char!(self, b'e');
-
-        Ok(())
-    }
-
-    fn read_false(&mut self) -> JsonResult<()> {
-        expect_char!(self, b'a');
-        expect_char!(self, b'l');
-        expect_char!(self, b's');
-        expect_char!(self, b'e');
-
-        Ok(())
-    }
-
-    fn read_null(&mut self) -> JsonResult<()> {
-        expect_char!(self, b'u');
-        expect_char!(self, b'l');
-        expect_char!(self, b'l');
-
-        Ok(())
     }
 
     fn read_codepoint(&mut self) -> JsonResult<()> {
@@ -214,18 +190,26 @@ impl<'a> Tokenizer<'a> {
                 b'"' => Token::String(try!(self.read_string())),
                 b'0' ... b'9' | b'-' => Token::Number(try!(self.read_number(ch))),
                 b't' => {
-                    try!(self.read_true());
+                    expect_char!(self, b'r');
+                    expect_char!(self, b'u');
+                    expect_char!(self, b'e');
                     Token::Boolean(true)
                 },
                 b'f' => {
-                    try!(self.read_false());
+                    expect_char!(self, b'a');
+                    expect_char!(self, b'l');
+                    expect_char!(self, b's');
+                    expect_char!(self, b'e');
                     Token::Boolean(false)
                 },
                 b'n' => {
-                    try!(self.read_null());
+                    expect_char!(self, b'u');
+                    expect_char!(self, b'l');
+                    expect_char!(self, b'l');
                     Token::Null
                 },
-                b' ' | b'\r' | b'\n' | b'\t' | 0xA0 => continue,
+                // whitespace
+                9 ... 13 | 32 | 133 | 160 => continue,
                 _ => return Err(JsonError::unexpected_character(ch))
             });
         }
@@ -275,7 +259,7 @@ impl<'a> Parser<'a> {
         let mut array = Vec::new();
 
         match try!(self.consume()) {
-            Token::BracketOff => return Ok(array.into()),
+            Token::BracketOff => return Ok(JsonValue::Array(array)),
             token             => array.push(try!(self.value_from(token))),
         }
 
@@ -290,18 +274,17 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Ok(array.into())
+        Ok(JsonValue::Array(array))
     }
 
     fn object(&mut self) -> JsonResult<JsonValue> {
         let mut object = BTreeMap::new();
 
         match try!(self.consume()) {
-            Token::BraceOff    => return Ok(object.into()),
+            Token::BraceOff    => return Ok(JsonValue::Object(object)),
             Token::String(key) => {
                 expect!(self, Token::Colon);
-                let value = try!(self.value());
-                object.insert(key, value);
+                object.insert(key, try!(self.value()));
             },
             token => return Err(JsonError::unexpected_token(token))
         }
@@ -313,8 +296,7 @@ impl<'a> Parser<'a> {
                         Token::String(key) => key
                     );
                     expect!(self, Token::Colon);
-                    let value = try!(self.value());
-                    object.insert(key, value);
+                    object.insert(key, try!(self.value()));
                     continue
                 },
                 Token::BraceOff => break,
@@ -322,7 +304,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Ok(object.into())
+        Ok(JsonValue::Object(object))
     }
 
     fn value_from(&mut self, token: Token) -> JsonResult<JsonValue> {
