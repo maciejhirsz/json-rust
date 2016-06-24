@@ -8,7 +8,9 @@
 
 Parse and serialize [JSON](http://json.org/) with ease.
 
-**[Complete Documentation](http://terhix.com/doc/json/) - [Cargo](https://crates.io/crates/json) - [Repository](https://github.com/maciejhirsz/json-rust)**
+**[Complete Documentation](http://terhix.com/doc/json/) -**
+**[Cargo](https://crates.io/crates/json) -**
+**[Repository](https://github.com/maciejhirsz/json-rust)**
 
 ## Why?
 

@@ -4,7 +4,9 @@
 //!
 //! Parse and serialize [JSON](http://json.org/) with ease.
 //!
-//! **[Complete Documentation](http://terhix.com/doc/json/) - [Cargo](https://crates.io/crates/json) - [Repository](https://github.com/maciejhirsz/json-rust)**
+//! **[Complete Documentation](http://terhix.com/doc/json/) -**
+//! **[Cargo](https://crates.io/crates/json) -**
+//! **[Repository](https://github.com/maciejhirsz/json-rust)**
 //!
 //! ## Why?
 //!
@@ -244,6 +246,11 @@ impl fmt::Display for JsonValue {
     }
 }
 
+/// Convenience for `JsonValue::from(value)`
+pub fn from<T>(value: T) -> JsonValue where T: Into<JsonValue> {
+    value.into()
+}
+
 #[deprecated(since="0.5.0", note="Use `value.dump(0)` instead")]
 pub fn stringify_ref(root: &JsonValue) -> String {
     root.dump()
@@ -261,6 +268,7 @@ pub fn stringify_pretty<T>(root: T, spaces: u16) -> String where T: Into<JsonVal
     let root: JsonValue = root.into();
     root.pretty(spaces)
 }
+
 
 #[macro_export]
 macro_rules! array {
@@ -307,18 +315,20 @@ macro_rules! implement_extras {
 
         impl From<Vec<$from>> for JsonValue {
             fn from(mut val: Vec<$from>) -> JsonValue {
-                JsonValue::Array(val.drain(..)
-                    .map(|value| value.into())
-                    .collect::<Vec<JsonValue>>()
+                JsonValue::Array(
+                    val.drain(..)
+                       .map(|value| value.into())
+                       .collect()
                 )
             }
         }
 
         impl From<Vec<Option<$from>>> for JsonValue {
             fn from(mut val: Vec<Option<$from>>) -> JsonValue {
-                JsonValue::Array(val.drain(..)
-                    .map(|item| item.into())
-                    .collect::<Vec<JsonValue>>()
+                JsonValue::Array(
+                    val.drain(..)
+                       .map(|item| item.into())
+                       .collect()
                 )
             }
         }
