@@ -107,12 +107,12 @@ impl JsonValue {
     /// - empty object (`object!{}`)
     pub fn is_empty(&self) -> bool {
         match *self {
-            JsonValue::String(ref string)   => string.is_empty(),
-            JsonValue::Number(ref float)    => !float.is_normal(),
-            JsonValue::Boolean(ref boolean) => !boolean,
-            JsonValue::Null                 => true,
-            JsonValue::Array(ref vec)       => vec.is_empty(),
-            JsonValue::Object(ref btree)    => btree.is_empty(),
+            JsonValue::String(ref value)  => value.is_empty(),
+            JsonValue::Number(ref value)  => !value.is_normal(),
+            JsonValue::Boolean(ref value) => !value,
+            JsonValue::Null               => true,
+            JsonValue::Array(ref value)   => value.is_empty(),
+            JsonValue::Object(ref value)  => value.is_empty(),
         }
     }
 
@@ -462,7 +462,7 @@ impl IndexMut<usize> for JsonValue {
             _ => {
                 *self = JsonValue::new_array();
                 self.push(JsonValue::Null).unwrap();
-                &mut self[0]
+                self.index_mut(index)
             }
         }
     }
@@ -521,7 +521,7 @@ impl<'a> IndexMut<&'a str> for JsonValue {
             },
             _ => {
                 *self = JsonValue::new_object();
-                &mut self[index]
+                self.index_mut(index)
             }
         }
     }

@@ -54,7 +54,7 @@ pub trait Generator {
         self.write_digits_from_u64(num as u64, &mut length);
 
         let mut fract = num.fract();
-        if fract < 1e-10 {
+        if fract < 1e-16 {
             return;
         }
 
@@ -64,7 +64,7 @@ pub trait Generator {
         fract = fract.fract();
         length += 2;
 
-        while length < 17 && fract > 0.01 {
+        while length < 17 && fract > 1e-15 {
             fract *= 10.0;
             self.write_char((fract as u8) + b'0');
             fract = fract.fract();

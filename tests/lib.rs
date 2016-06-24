@@ -136,6 +136,11 @@ fn stringify_integer() {
 }
 
 #[test]
+fn stringify_small_number() {
+    assert_eq!(stringify(0.000000000000001), "0.000000000000001");
+}
+
+#[test]
 fn stringify_true() {
     assert_eq!(stringify(true), "true");
 }
