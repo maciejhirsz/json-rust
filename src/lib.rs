@@ -246,6 +246,11 @@ impl fmt::Display for JsonValue {
     }
 }
 
+/// Convenience for `JsonValue::from(value)`
+pub fn from<T>(value: T) -> JsonValue where T: Into<JsonValue> {
+    value.into()
+}
+
 #[deprecated(since="0.5.0", note="Use `value.dump(0)` instead")]
 pub fn stringify_ref(root: &JsonValue) -> String {
     root.dump()
@@ -263,6 +268,7 @@ pub fn stringify_pretty<T>(root: T, spaces: u16) -> String where T: Into<JsonVal
     let root: JsonValue = root.into();
     root.pretty(spaces)
 }
+
 
 #[macro_export]
 macro_rules! array {
@@ -296,27 +302,27 @@ macro_rules! object {
     })
 }
 
-macro_rules! partial_eq {
-    ($to:ident, $from:ty, $self_cast:expr => $from_cast:expr) => {
-        impl PartialEq<$from> for JsonValue {
-            fn eq(&self, other: &$from) -> bool {
-                match *self {
-                    JsonValue::$to(ref value) => value == $from_cast,
-                    _ => false
-                }
-            }
-        }
+// macro_rules! partial_eq {
+//     ($to:ident, $from:ty, $self_cast:expr => $from_cast:expr) => {
+//         impl PartialEq<$from> for JsonValue {
+//             fn eq(&self, other: &$from) -> bool {
+//                 match *self {
+//                     JsonValue::$to(ref value) => value == $from_cast,
+//                     _ => false
+//                 }
+//             }
+//         }
 
-        impl<'a> PartialEq<JsonValue> for $from {
-            fn eq(&self, other: &JsonValue) -> bool {
-                match *other {
-                    JsonValue::$to(ref value) => value == $self_cast,
-                    _ => false
-                }
-            }
-        }
-    }
-}
+//         impl<'a> PartialEq<JsonValue> for $from {
+//             fn eq(&self, other: &JsonValue) -> bool {
+//                 match *other {
+//                     JsonValue::$to(ref value) => value == $self_cast,
+//                     _ => false
+//                 }
+//             }
+//         }
+//     }
+// }
 
 macro_rules! implement_extras {
     ($from:ty) => {

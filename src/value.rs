@@ -97,6 +97,14 @@ impl JsonValue {
         }
     }
 
+    /// Checks whether the value is empty. Returns true for:
+    ///
+    /// - empty string (`""`)
+    /// - number `0`
+    /// - boolean `false`
+    /// - null
+    /// - empty array (`array![]`)
+    /// - empty object (`object!{}`)
     pub fn is_empty(&self) -> bool {
         match *self {
             JsonValue::String(ref string)   => string.is_empty(),
