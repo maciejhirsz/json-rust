@@ -62,8 +62,52 @@ impl JsonValue {
         }
     }
 
-    /// Deprecated because the return type is planned to change to
-    /// `Option<String>` eventually down the road.
+    pub fn is_number(&self) -> bool {
+        match *self {
+            JsonValue::Number(_) => true,
+            _                    => false,
+        }
+    }
+
+    pub fn is_boolean(&self) -> bool {
+        match *self {
+            JsonValue::Boolean(_) => true,
+            _                     => false
+        }
+    }
+
+    pub fn is_null(&self) -> bool {
+        match *self {
+            JsonValue::Null => true,
+            _               => false,
+        }
+    }
+
+    pub fn is_object(&self) -> bool {
+        match *self {
+            JsonValue::Object(_) => true,
+            _                    => false,
+        }
+    }
+
+    pub fn is_array(&self) -> bool {
+        match *self {
+            JsonValue::Array(_) => true,
+            _                   => false,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match *self {
+            JsonValue::String(ref string)   => string.is_empty(),
+            JsonValue::Number(ref float)    => !float.is_normal(),
+            JsonValue::Boolean(ref boolean) => !boolean,
+            JsonValue::Null                 => true,
+            JsonValue::Array(ref vec)       => vec.is_empty(),
+            JsonValue::Object(ref btree)    => btree.is_empty(),
+        }
+    }
+
     #[deprecated(since="0.6.1", note="Use `as_str` instead")]
     pub fn as_string(&self) -> JsonResult<&String> {
         match *self {
@@ -76,13 +120,6 @@ impl JsonValue {
         match *self {
             JsonValue::String(ref value) => Some(value.as_ref()),
             _                            => None
-        }
-    }
-
-    pub fn is_number(&self) -> bool {
-        match *self {
-            JsonValue::Number(_) => true,
-            _                    => false,
         }
     }
 
@@ -145,10 +182,10 @@ impl JsonValue {
         self.as_f64().and_then(|value| f64_to_singed!(isize, value))
     }
 
-    pub fn is_boolean(&self) -> bool {
+    pub fn as_bool(&self) -> Option<bool> {
         match *self {
-            JsonValue::Boolean(_) => true,
-            _                     => false
+            JsonValue::Boolean(ref value) => Some(*value),
+            _                             => None
         }
     }
 
@@ -157,34 +194,6 @@ impl JsonValue {
         match *self {
             JsonValue::Boolean(ref value) => Ok(value),
             _ => Err(JsonError::wrong_type("Boolean"))
-        }
-    }
-
-    pub fn as_bool(&self) -> Option<bool> {
-        match *self {
-            JsonValue::Boolean(ref value) => Some(*value),
-            _                             => None
-        }
-    }
-
-    pub fn is_null(&self) -> bool {
-        match *self {
-            JsonValue::Null => true,
-            _               => false,
-        }
-    }
-
-    pub fn is_object(&self) -> bool {
-        match *self {
-            JsonValue::Object(_) => true,
-            _                    => false,
-        }
-    }
-
-    pub fn is_array(&self) -> bool {
-        match *self {
-            JsonValue::Array(_) => true,
-            _                   => false,
         }
     }
 
@@ -259,6 +268,17 @@ impl JsonValue {
                 Ok(())
             },
             _ => Err(JsonError::wrong_type("Array"))
+        }
+    }
+
+    /// Works on `JsonValue::Array` - remove and return last element from
+    /// an array. On failure returns a null.
+    pub fn pop(&mut self) -> JsonValue {
+        match *self {
+            JsonValue::Array(ref mut vec) => {
+                vec.pop().unwrap_or(JsonValue::Null)
+            },
+            _ => JsonValue::Null
         }
     }
 
@@ -356,6 +376,29 @@ impl JsonValue {
                 EntriesMut::Some(btree.iter_mut())
             },
             _ => EntriesMut::None
+        }
+    }
+
+    /// Works on `JsonValue::Object` - remove a key and return the value it held.
+    /// If the key was not present, the method is called on anything but an
+    /// object, it will return a null.
+    pub fn remove(&mut self, key: &str) -> JsonValue {
+        match *self {
+            JsonValue::Object(ref mut btree) => {
+                btree.remove(key).unwrap_or(JsonValue::Null)
+            },
+            _ => JsonValue::Null
+        }
+    }
+
+    /// When called on an array or an object, will wipe them clean. When called
+    /// on a string will clear the string. Numbers and booleans become null.
+    pub fn clear(&mut self) {
+        match *self {
+            JsonValue::String(ref mut string) => string.clear(),
+            JsonValue::Object(ref mut btree)  => btree.clear(),
+            JsonValue::Array(ref mut vec)     => vec.clear(),
+            _                                 => *self = JsonValue::Null,
         }
     }
 }

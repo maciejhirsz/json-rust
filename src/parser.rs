@@ -19,12 +19,14 @@ pub enum Token {
 }
 
 macro_rules! expect_char {
-    ($tok:ident, $ch:pat) => {
-        match $tok.source.next() {
-            Some($ch) => {},
-            Some(ch)  => return Err(JsonError::unexpected_character(ch)),
-            None      => return Err(JsonError::UnexpectedEndOfJson)
-        }
+    ($tok:ident, $( $ch:pat ),*) => {
+        $(
+            match $tok.source.next() {
+                Some($ch) => {},
+                Some(ch)  => return Err(JsonError::unexpected_character(ch)),
+                None      => return Err(JsonError::UnexpectedEndOfJson)
+            }
+        )*
     }
 }
 
@@ -205,22 +207,15 @@ impl<'a> Tokenizer<'a> {
                 b'"' => Token::String(try!(self.read_string())),
                 b'0' ... b'9' | b'-' => Token::Number(try!(self.read_number(ch))),
                 b't' => {
-                    expect_char!(self, b'r');
-                    expect_char!(self, b'u');
-                    expect_char!(self, b'e');
+                    expect_char!(self, b'r', b'u', b'e');
                     Token::Boolean(true)
                 },
                 b'f' => {
-                    expect_char!(self, b'a');
-                    expect_char!(self, b'l');
-                    expect_char!(self, b's');
-                    expect_char!(self, b'e');
+                    expect_char!(self, b'a', b'l', b's', b'e');
                     Token::Boolean(false)
                 },
                 b'n' => {
-                    expect_char!(self, b'u');
-                    expect_char!(self, b'l');
-                    expect_char!(self, b'l');
+                    expect_char!(self, b'u', b'l', b'l');
                     Token::Null
                 },
                 // whitespace
@@ -326,13 +321,15 @@ impl<'a> Parser<'a> {
 
     fn value_from(&mut self, token: Token) -> JsonResult<JsonValue> {
         Ok(match token {
-            Token::String(value)  => JsonValue::String(value),
-            Token::Number(value)  => JsonValue::Number(value),
-            Token::Boolean(value) => JsonValue::Boolean(value),
-            Token::Null           => JsonValue::Null,
-            Token::BracketOn      => return self.array(),
-            Token::BraceOn        => return self.object(),
-            token => return Err(JsonError::unexpected_token(token))
+            Token::String(value)    => JsonValue::String(value),
+            Token::Number(value)    => JsonValue::Number(value),
+            Token::Boolean(value)   => JsonValue::Boolean(value),
+            Token::Null             => JsonValue::Null,
+            Token::BracketOn        => return self.array(),
+            Token::BraceOn          => return self.object(),
+            token                   => {
+                return Err(JsonError::unexpected_token(token))
+            }
         })
     }
 

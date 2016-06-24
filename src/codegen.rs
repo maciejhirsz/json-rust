@@ -36,8 +36,8 @@ pub trait Generator {
 
     fn write_digits_from_u64(&mut self, mut num: u64, length: &mut u8) {
         let digit = (num % 10) as u8;
-        num /= 10;
-        if num > 0 {
+        if num > 9 {
+            num /= 10;
             self.write_digits_from_u64(num, length);
         }
         *length += 1;

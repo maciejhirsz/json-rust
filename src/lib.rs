@@ -4,7 +4,9 @@
 //!
 //! Parse and serialize [JSON](http://json.org/) with ease.
 //!
-//! **[Complete Documentation](http://terhix.com/doc/json/) - [Cargo](https://crates.io/crates/json) - [Repository](https://github.com/maciejhirsz/json-rust)**
+//! **[Complete Documentation](http://terhix.com/doc/json/) -**
+//! **[Cargo](https://crates.io/crates/json) -**
+//! **[Repository](https://github.com/maciejhirsz/json-rust)**
 //!
 //! ## Why?
 //!
@@ -294,6 +296,28 @@ macro_rules! object {
     })
 }
 
+macro_rules! partial_eq {
+    ($to:ident, $from:ty, $self_cast:expr => $from_cast:expr) => {
+        impl PartialEq<$from> for JsonValue {
+            fn eq(&self, other: &$from) -> bool {
+                match *self {
+                    JsonValue::$to(ref value) => value == $from_cast,
+                    _ => false
+                }
+            }
+        }
+
+        impl<'a> PartialEq<JsonValue> for $from {
+            fn eq(&self, other: &JsonValue) -> bool {
+                match *other {
+                    JsonValue::$to(ref value) => value == $self_cast,
+                    _ => false
+                }
+            }
+        }
+    }
+}
+
 macro_rules! implement_extras {
     ($from:ty) => {
         impl From<Option<$from>> for JsonValue {
@@ -307,18 +331,20 @@ macro_rules! implement_extras {
 
         impl From<Vec<$from>> for JsonValue {
             fn from(mut val: Vec<$from>) -> JsonValue {
-                JsonValue::Array(val.drain(..)
-                    .map(|value| value.into())
-                    .collect::<Vec<JsonValue>>()
+                JsonValue::Array(
+                    val.drain(..)
+                       .map(|value| value.into())
+                       .collect()
                 )
             }
         }
 
         impl From<Vec<Option<$from>>> for JsonValue {
             fn from(mut val: Vec<Option<$from>>) -> JsonValue {
-                JsonValue::Array(val.drain(..)
-                    .map(|item| item.into())
-                    .collect::<Vec<JsonValue>>()
+                JsonValue::Array(
+                    val.drain(..)
+                       .map(|item| item.into())
+                       .collect()
                 )
             }
         }
