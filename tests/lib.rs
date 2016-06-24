@@ -76,10 +76,26 @@ fn is_false() {
 }
 
 #[test]
-fn is_nul() {
+fn is_null() {
     let null = JsonValue::Null;
 
     assert!(null.is_null());
+}
+
+#[test]
+fn is_empty() {
+    assert!(Null.is_empty());
+    assert!(json::from(0).is_empty());
+    assert!(json::from("").is_empty());
+    assert!(json::from(false).is_empty());
+    assert!(array![].is_empty());
+    assert!(object!{}.is_empty());
+
+    assert!(!json::from(1).is_empty());
+    assert!(!json::from("foo").is_empty());
+    assert!(!json::from(true).is_empty());
+    assert!(!array![0].is_empty());
+    assert!(!object!{ "foo" => false }.is_empty());
 }
 
 #[test]
@@ -117,6 +133,11 @@ fn stringify_number() {
 #[test]
 fn stringify_integer() {
     assert_eq!(stringify(42), "42");
+}
+
+#[test]
+fn stringify_small_number() {
+    assert_eq!(stringify(0.000000000000001), "0.000000000000001");
 }
 
 #[test]
@@ -233,34 +254,6 @@ fn stringify_pretty_object() {
     };
 
     assert_eq!(stringify_pretty(object, 2),
-               "{\n  \"age\": 50,\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \
-                \"Porsche\"\n  ],\n  \"name\": \"Urlich\",\n  \"parents\": {\n    \"father\": \
-                \"Brutus\",\n    \"mother\": \"Helga\"\n  }\n}");
-}
-
-#[test]
-fn object_dump_minified() {
-    let object = object!{
-        "name" => "Maciej",
-        "age" => 30
-    };
-
-    assert_eq!(object.dump(), "{\"age\":30,\"name\":\"Maciej\"}");
-}
-
-#[test]
-fn object_dump_pretty() {
-    let object = object!{
-        "name" => "Urlich",
-        "age" => 50,
-        "parents" => object!{
-            "mother" => "Helga",
-            "father" => "Brutus"
-        },
-        "cars" => array![ "Golf", "Mercedes", "Porsche" ]
-    };
-
-    assert_eq!(object.pretty(2),
                "{\n  \"age\": 50,\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \
                 \"Porsche\"\n  ],\n  \"name\": \"Urlich\",\n  \"parents\": {\n    \"father\": \
                 \"Brutus\",\n    \"mother\": \"Helga\"\n  }\n}");
@@ -474,16 +467,6 @@ fn parse_error() {
 }
 
 #[test]
-fn object_len() {
-    let data = object!{
-        "a" => true,
-        "b" => false
-    };
-
-    assert_eq!(data.len(), 2);
-}
-
-#[test]
 fn array_len() {
     let data = array![0, 1, 2, 3];
 
@@ -505,14 +488,72 @@ fn array_contains() {
 }
 
 #[test]
-fn null_len() {
-    let data = json::Null;
+fn array_push() {
+    let mut data = array![1, 2];
 
-    assert_eq!(data.len(), 0);
+    data.push(3).unwrap();
+
+    assert_eq!(data, array![1, 2, 3]);
 }
 
 #[test]
-fn iter_entries() {
+fn array_pop() {
+    let mut data = array![1, 2, 3];
+
+    assert_eq!(data.pop(), 3);
+    assert_eq!(data, array![1, 2]);
+}
+
+#[test]
+fn array_members() {
+    let data = array![1, "foo"];
+
+    for member in data.members() {
+        assert!(!member.is_null());
+    }
+
+    let mut members = data.members();
+
+    assert_eq!(members.next().unwrap(), 1);
+    assert_eq!(members.next().unwrap(), "foo");
+    assert!(members.next().is_none());
+}
+
+#[test]
+fn array_members_mut() {
+    let mut data = array![Null, Null];
+
+    for member in data.members_mut() {
+        assert!(member.is_null());
+        *member = 100.into();
+    }
+
+    assert_eq!(data, array![100, 100]);
+}
+
+#[test]
+fn object_len() {
+    let data = object!{
+        "a" => true,
+        "b" => false
+    };
+
+    assert_eq!(data.len(), 2);
+}
+
+#[test]
+fn object_remove() {
+    let mut data = object!{
+        "foo" => "bar",
+        "answer" => 42
+    };
+
+    assert_eq!(data.remove("foo"), "bar");
+    assert_eq!(data, object!{ "answer" => 42 });
+}
+
+#[test]
+fn object_entries() {
     let data = object!{
         "a" => 1,
         "b" => "foo"
@@ -536,7 +577,7 @@ fn iter_entries() {
 }
 
 #[test]
-fn iter_entries_mut() {
+fn object_entries_mut() {
     let mut data = object!{
         "a" => Null,
         "b" => Null
@@ -554,30 +595,38 @@ fn iter_entries_mut() {
 }
 
 #[test]
-fn iter_members() {
-    let data = array![1, "foo"];
+fn object_dump_minified() {
+    let object = object!{
+        "name" => "Maciej",
+        "age" => 30
+    };
 
-    for member in data.members() {
-        assert!(!member.is_null());
-    }
-
-    let mut members = data.members();
-
-    assert_eq!(members.next().unwrap(), 1);
-    assert_eq!(members.next().unwrap(), "foo");
-    assert!(members.next().is_none());
+    assert_eq!(object.dump(), "{\"age\":30,\"name\":\"Maciej\"}");
 }
 
 #[test]
-fn iter_members_mut() {
-    let mut data = array![Null, Null];
+fn object_dump_pretty() {
+    let object = object!{
+        "name" => "Urlich",
+        "age" => 50,
+        "parents" => object!{
+            "mother" => "Helga",
+            "father" => "Brutus"
+        },
+        "cars" => array![ "Golf", "Mercedes", "Porsche" ]
+    };
 
-    for member in data.members_mut() {
-        assert!(member.is_null());
-        *member = 100.into();
-    }
+    assert_eq!(object.pretty(2),
+               "{\n  \"age\": 50,\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \
+                \"Porsche\"\n  ],\n  \"name\": \"Urlich\",\n  \"parents\": {\n    \"father\": \
+                \"Brutus\",\n    \"mother\": \"Helga\"\n  }\n}");
+}
 
-    assert_eq!(data, array![100, 100]);
+#[test]
+fn null_len() {
+    let data = json::Null;
+
+    assert_eq!(data.len(), 0);
 }
 
 #[test]
