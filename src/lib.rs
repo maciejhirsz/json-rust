@@ -302,28 +302,6 @@ macro_rules! object {
     })
 }
 
-// macro_rules! partial_eq {
-//     ($to:ident, $from:ty, $self_cast:expr => $from_cast:expr) => {
-//         impl PartialEq<$from> for JsonValue {
-//             fn eq(&self, other: &$from) -> bool {
-//                 match *self {
-//                     JsonValue::$to(ref value) => value == $from_cast,
-//                     _ => false
-//                 }
-//             }
-//         }
-
-//         impl<'a> PartialEq<JsonValue> for $from {
-//             fn eq(&self, other: &JsonValue) -> bool {
-//                 match *other {
-//                     JsonValue::$to(ref value) => value == $self_cast,
-//                     _ => false
-//                 }
-//             }
-//         }
-//     }
-// }
-
 macro_rules! implement_extras {
     ($from:ty) => {
         impl From<Option<$from>> for JsonValue {
