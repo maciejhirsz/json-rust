@@ -76,7 +76,8 @@ pub trait Generator {
         match *json {
             JsonValue::String(ref string) => self.write_string(string),
             JsonValue::Number(ref number) => self.write_number(*number),
-            JsonValue::Boolean(ref value) => self.write(if *value { b"true" } else { b"false" }),
+            JsonValue::Boolean(true)      => self.write(b"true"),
+            JsonValue::Boolean(false)     => self.write(b"false"),
             JsonValue::Null               => self.write(b"null"),
             JsonValue::Array(ref array)   => {
                 self.write_char(b'[');

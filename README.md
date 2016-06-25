@@ -19,12 +19,10 @@ types, object keys can change types between API calls or not include
 some keys under some conditions. Mapping that to idiomatic Rust structs
 introduces friction.
 
-This crate intends to avoid that friction by extensively using static dispatch
-and hiding type information behind enums, while still giving you all the
-guarantees of safe Rust code.
+This crate intends to avoid that friction.
 
 ```rust
-let data = json::parse(r#"
+let parsed = json::parse(r#"
 
 {
     "code": 200,
@@ -40,50 +38,59 @@ let data = json::parse(r#"
 
 "#).unwrap();
 
-assert!(data["code"] == 200);
-assert!(data["success"] == true));
-assert!(data["payload"]["features"].is_array());
-assert!(data["payload"]["features"][0] == "awesome");
-assert!(data["payload"]["features"].contains("easyAPI"));
+let instantiated = object!{
+    "code" => 200,
+    "success" => true,
+    "payload" => object!{
+        "features" => array![
+            "awesome",
+            "easyAPI",
+            "lowLearningCurve"
+        ]
+    }
+};
 
-// Error resilient: non-existent values default to null
+assert_eq!(parsed, instantiated);
+```
+
+## First class citizen
+
+Using macros and easy indexing, it's easy to work with the data.
+
+```rust
+let mut data = object!{
+    "foo" => false,
+    "bar" => json::Null,
+    "answer" => 42,
+    "list" => array![json::Null, "world", true]
+};
+
+// Partial equality is implemented for most raw types:
+assert!(data["foo"] == false);
+
+// And it's type aware, `null` and `false` are different values:
+assert!(data["bar"] != false);
+
+// But you can use any Rust number types:
+assert!(data["answer"] == 42);
+assert!(data["answer"] == 42.0);
+assert!(data["answer"] == 42isize);
+
+// Access nested structures, arrays and objects:
+assert!(data["list"][0].is_null());
+assert!(data["list"][1] == "world");
+assert!(data["list"][2] == true);
+
+// Error resilient - accessing properties that don't exist yield null:
 assert!(data["this"]["does"]["not"]["exist"].is_null());
-```
 
-## Create JSON data without defining structs
+// Mutate by assigning:
+data["list"][0] = "Hello".into();
 
-```rust
-#[macro_use]
-extern crate json;
+// Use the `dump` method to serialize the data:
+assert_eq!(data.dump(), r#"{"answer":42,"bar":null,"foo":false,"list":["Hello","world",true]}"#);
 
-fn main() {
-    let data = object!{
-        "a" => "bar",
-        "b" => array![1, false, "foo"]
-    };
-
-    assert_eq!(data.dump(), r#"{"a":"bar","b":[1,false,"foo"]}"#);
-}
-```
-
-## Mutate simply by assigning new values
-
-```rust
-let mut data = json::parse(r#"
-
-{
-    "name": "Bob",
-    "isAwesome": false
-}
-
-"#).unwrap();
-
-data["isAwesome"] = true.into();
-data["likes"] = "Rust".into();
-
-assert_eq!(data.dump(), r#"{"isAwesome":true,"likes":"Rust","name":"Bob"}"#);
-
-// Pretty print the output
+// Or pretty print it out:
 println!("{:#}", data);
 ```
 
@@ -102,3 +109,13 @@ Then import it in your `main.rs` / `lib.rs` file:
 #[macro_use]
 extern crate json;
 ```
+
+## Performance
+
+While performance is not the main goal of this crate, it is still relevant, and it's doing pretty well in the company:
+
+![](http://terhix.com/json-perf.png)
+
+[The benchmarks](https://github.com/maciejhirsz/json-rust/blob/benches/benches/log.rs) were run on 2012 MacBook Air, your results may vary. Many thanks to @dtolnay for providing the baseline struct and test data the tests could be run on.
+
+While this is not necessarily a be-all end-all benchmark, the main takeaway from this is that Serde parsing is much faster when parsing to a struct, since the parser knows exactly the kind of data it needs, and doesn't pay the (re)allocation costs of pushing data to a map. Also worth noting, rustc-serialize suffers since it first has to parse JSON to generic enum-based values, and only then map those onto structs.

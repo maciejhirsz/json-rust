@@ -18,7 +18,7 @@ pub enum Token {
     Null,
 }
 
-macro_rules! expect_char {
+macro_rules! sequence {
     ($tok:ident, $( $ch:pat ),*) => {
         $(
             match $tok.source.next() {
@@ -62,6 +62,10 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
+    fn next_byte(&mut self) -> Option<u8> {
+        self.source.next()
+    }
+
     fn peek_byte(&mut self) -> Option<u8> {
         if self.left_over.is_none() {
             self.left_over = self.source.next();
@@ -70,7 +74,7 @@ impl<'a> Tokenizer<'a> {
         return self.left_over;
     }
 
-    fn next_byte(&mut self) -> Option<u8> {
+    fn checked_next_byte(&mut self) -> Option<u8> {
         if self.left_over.is_some() {
             let byte = self.left_over;
             self.left_over = None;
@@ -80,9 +84,12 @@ impl<'a> Tokenizer<'a> {
         self.source.next()
     }
 
-    #[inline(always)]
     fn expect_byte(&mut self) -> JsonResult<u8> {
         self.next_byte().ok_or(JsonError::UnexpectedEndOfJson)
+    }
+
+    fn checked_expect_byte(&mut self) -> JsonResult<u8> {
+        self.checked_next_byte().ok_or(JsonError::UnexpectedEndOfJson)
     }
 
     fn read_char_as_hexnumber(&mut self) -> JsonResult<u32> {
@@ -162,8 +169,6 @@ impl<'a> Tokenizer<'a> {
         let mut num = num as f64;
 
         if let Some(b'.') = self.peek_byte() {
-            self.next_byte();
-
             let mut precision = -1;
 
             read_num!(self, digit, {
@@ -196,7 +201,7 @@ impl<'a> Tokenizer<'a> {
 
     fn next(&mut self) -> JsonResult<Token> {
         loop {
-            let ch = try!(self.expect_byte());
+            let ch = try!(self.checked_expect_byte());
             return Ok(match ch {
                 b',' => Token::Comma,
                 b':' => Token::Colon,
@@ -207,15 +212,15 @@ impl<'a> Tokenizer<'a> {
                 b'"' => Token::String(try!(self.read_string())),
                 b'0' ... b'9' | b'-' => Token::Number(try!(self.read_number(ch))),
                 b't' => {
-                    expect_char!(self, b'r', b'u', b'e');
+                    sequence!(self, b'r', b'u', b'e');
                     Token::Boolean(true)
                 },
                 b'f' => {
-                    expect_char!(self, b'a', b'l', b's', b'e');
+                    sequence!(self, b'a', b'l', b's', b'e');
                     Token::Boolean(false)
                 },
                 b'n' => {
-                    expect_char!(self, b'u', b'l', b'l');
+                    sequence!(self, b'u', b'l', b'l');
                     Token::Null
                 },
                 // whitespace
