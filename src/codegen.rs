@@ -1,6 +1,8 @@
 use JsonValue;
 
 pub trait Generator {
+    fn current_index(&self) -> usize;
+
     fn new_line(&mut self) {}
 
     fn write(&mut self, slice: &[u8]);
@@ -34,16 +36,13 @@ pub trait Generator {
         self.write_char(b'"');
     }
 
-    fn write_digits_from_u64(&mut self, mut num: u64) -> u8 {
+    fn write_digits_from_u64(&mut self, mut num: u64) {
         let digit = (num % 10) as u8;
         if num > 9 {
             num /= 10;
-            let length = self.write_digits_from_u64(num) + 1;
-            self.write_char(digit + b'0');
-            return length;
+            self.write_digits_from_u64(num);
         }
         self.write_char(digit + b'0');
-        1
     }
 
     fn write_number(&mut self, mut num: f64) {
@@ -52,12 +51,17 @@ pub trait Generator {
             self.write_char(b'-');
         }
 
-        let mut length = self.write_digits_from_u64(num as u64);
+        let start = self.current_index();
+
+        self.write_digits_from_u64(num as u64);
+
         let mut fract = num.fract();
 
         if fract < 1e-16 {
             return;
         }
+
+        let mut length = self.current_index() - start;
 
         fract *= 10.0;
 
@@ -138,6 +142,10 @@ impl DumpGenerator {
 }
 
 impl Generator for DumpGenerator {
+    fn current_index(&self) -> usize {
+        self.code.len()
+    }
+
     fn write(&mut self, slice: &[u8]) {
         self.code.extend_from_slice(slice);
     }
@@ -172,6 +180,10 @@ impl PrettyGenerator {
 }
 
 impl Generator for PrettyGenerator {
+    fn current_index(&self) -> usize {
+        self.code.len()
+    }
+
     fn new_line(&mut self) {
         self.code.push(b'\n');
         for _ in 0..(self.dent * self.spaces_per_indent) {
