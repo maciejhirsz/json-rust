@@ -174,6 +174,7 @@ impl<'a> Tokenizer<'a> {
         let mut num = num as f64;
 
         if let Some(b'.') = self.peek_byte() {
+            self.left_over = None;
             let mut precision = -1;
 
             read_num!(self, digit, {
@@ -182,7 +183,7 @@ impl<'a> Tokenizer<'a> {
             });
         }
 
-        match self.next_byte() {
+        match self.checked_next_byte() {
             Some(b'e') | Some(b'E') => {
                 let mut e = 0;
                 let sign = match self.next_byte() {
@@ -194,7 +195,15 @@ impl<'a> Tokenizer<'a> {
                     },
                 };
 
-                read_num!(self, digit, e = e * 10 + digit as i32);
+                while let Some(ch) = self.checked_next_byte() {
+                    match ch {
+                        b'0' ... b'9' => e = e * 10 + (ch - b'0') as i32,
+                        ch => {
+                            self.left_over = Some(ch);
+                            break;
+                        }
+                    }
+                }
 
                 num *= 10f64.powi(e * sign);
             },
