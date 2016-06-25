@@ -12,17 +12,12 @@ extern crate serde_json;
 extern crate rustc_serialize;
 extern crate num_traits;
 
-use std::io::{self, Read, Write};
 use num_traits::FromPrimitive;
-use test::{Bencher, black_box};
+use test::Bencher;
 
-use serde::Deserialize;
 use serde::de::{self, Deserializer};
 use serde::ser::{self, Serialize, Serializer};
-use serde_json::ser::escape_str;
 use std::str::FromStr;
-
-use rustc_serialize::Encodable;
 
 #[derive(Debug, PartialEq, RustcEncodable, RustcDecodable, Serialize, Deserialize)]
 struct Http {
@@ -954,157 +949,7 @@ struct Log {
     ray_id: String,
 }
 
-impl Log {
-    fn new() -> Log {
-        Log {
-            timestamp: 2837513946597,
-            zone_id: 123456,
-            zone_plan: ZonePlan::FREE,
-            http: Http {
-                protocol: HttpProtocol::HTTP11,
-                status: 200,
-                host_status: 503,
-                up_status: 520,
-                method: HttpMethod::GET,
-                content_type: "text/html".to_string(),
-                user_agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.146 Safari/537.36".to_string(),
-                referer: "https://www.cloudflare.com/".to_string(),
-                request_uri: "/cdn-cgi/trace".to_string(),
-            },
-            origin: Origin {
-                ip: "1.2.3.4".to_string(),
-                port: 8000,
-                hostname: "www.example.com".to_string(),
-                protocol: OriginProtocol::HTTPS,
-            },
-            country: Country::US,
-            cache_status: CacheStatus::Hit,
-            server_ip: "192.168.1.1".to_string(),
-            server_name: "metal.cloudflare.com".to_string(),
-            remote_ip: "10.1.2.3".to_string(),
-            bytes_dlv: 123456,
-            ray_id: "10c73629cce30078-LAX".to_string(),
-        }
-    }
-}
-
-macro_rules! likely(
-    ($val:expr) => {
-        {
-            extern {
-                #[link_name = "llvm.expect.i8"]
-                fn expect(val: u8, expected_val: u8) -> u8;
-            }
-            let x: bool = $val;
-            unsafe { expect(x as u8, 1) != 0 }
-        }
-    }
-);
-
-macro_rules! unlikely(
-    ($val:expr) => {
-        {
-            extern {
-                #[link_name = "llvm.expect.i8"]
-                fn expect(val: u8, expected_val: u8) -> u8;
-            }
-            let x: bool = $val;
-            unsafe { expect(x as u8, 0) != 0 }
-        }
-    }
-);
-
-
-
-struct MyMemWriter1 {
-    buf: Vec<u8>,
-}
-
-impl MyMemWriter1 {
-    pub fn with_capacity(cap: usize) -> MyMemWriter1 {
-        MyMemWriter1 {
-            buf: Vec::with_capacity(cap)
-        }
-    }
-}
-
-// LLVM isn't yet able to lower `Vec::push_all` into a memcpy, so this helps
-// MemWriter eke out that last bit of performance.
-#[inline]
-fn push_all_bytes(dst: &mut Vec<u8>, src: &[u8]) {
-    let dst_len = dst.len();
-    let src_len = src.len();
-
-    dst.reserve(src_len);
-
-    unsafe {
-        // we would have failed if `reserve` overflowed.
-        dst.set_len(dst_len + src_len);
-
-        ::std::ptr::copy_nonoverlapping(
-            src.as_ptr(),
-            dst.as_mut_ptr().offset(dst_len as isize),
-            src_len);
-    }
-}
-
-impl Write for MyMemWriter1 {
-    #[inline]
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        push_all_bytes(&mut self.buf, buf);
-        Ok(buf.len())
-    }
-
-    #[inline]
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
 const JSON_STR: &'static str = r#"{"timestamp":2837513946597,"zone_id":123456,"zone_plan":1,"http":{"protocol":2,"status":200,"host_status":503,"up_status":520,"method":1,"content_type":"text/html","user_agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.146 Safari/537.36","referer":"https://www.cloudflare.com/","request_uri":"/cdn-cgi/trace"},"origin":{"ip":"1.2.3.4","port":8000,"hostname":"www.example.com","protocol":2},"country":238,"cache_status":3,"server_ip":"192.168.1.1","server_name":"metal.cloudflare.com","remote_ip":"10.1.2.3","bytes_dlv":123456,"ray_id":"10c73629cce30078-LAX"}"#;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -1138,6 +983,7 @@ fn rustc_serialize_struct_parse(b: &mut Bencher) {
         let json = Json::from_str(JSON_STR).unwrap();
         let mut decoder = rustc_serialize::json::Decoder::new(json);
         let log: Log = rustc_serialize::Decodable::decode(&mut decoder).unwrap();
+        log
     });
 }
 
