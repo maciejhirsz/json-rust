@@ -62,10 +62,12 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
+    #[inline(always)]
     fn next_byte(&mut self) -> Option<u8> {
         self.source.next()
     }
 
+    #[inline(always)]
     fn peek_byte(&mut self) -> Option<u8> {
         if self.left_over.is_none() {
             self.left_over = self.source.next();
@@ -74,6 +76,7 @@ impl<'a> Tokenizer<'a> {
         return self.left_over;
     }
 
+    #[inline(always)]
     fn checked_next_byte(&mut self) -> Option<u8> {
         if self.left_over.is_some() {
             let byte = self.left_over;
@@ -84,10 +87,12 @@ impl<'a> Tokenizer<'a> {
         self.source.next()
     }
 
+    #[inline(always)]
     fn expect_byte(&mut self) -> JsonResult<u8> {
         self.next_byte().ok_or(JsonError::UnexpectedEndOfJson)
     }
 
+    #[inline(always)]
     fn checked_expect_byte(&mut self) -> JsonResult<u8> {
         self.checked_next_byte().ok_or(JsonError::UnexpectedEndOfJson)
     }
@@ -233,14 +238,14 @@ impl<'a> Tokenizer<'a> {
 
 macro_rules! expect {
     ($parser:ident, $token:pat => $value:ident) => (
-        match $parser.consume() {
+        match $parser.tokenizer.next() {
             Ok($token) => $value,
             Ok(token)  => return Err(JsonError::unexpected_token(token)),
             Err(error) => return Err(error),
         }
     );
     ($parser:ident, $token:pat) => ({
-        match $parser.consume() {
+        match $parser.tokenizer.next() {
             Ok($token) => {},
             Ok(token)  => return Err(JsonError::unexpected_token(token)),
             Err(error) => return Err(error),
@@ -259,10 +264,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn consume(&mut self) -> JsonResult<Token> {
-        self.tokenizer.next()
-    }
-
     #[must_use]
     fn ensure_end(&mut self) -> JsonResult<()> {
         match self.tokenizer.next() {
@@ -275,13 +276,13 @@ impl<'a> Parser<'a> {
     fn array(&mut self) -> JsonResult<JsonValue> {
         let mut array = Vec::new();
 
-        match try!(self.consume()) {
+        match try!(self.tokenizer.next()) {
             Token::BracketOff => return Ok(JsonValue::Array(array)),
             token             => array.push(try!(self.value_from(token))),
         }
 
         loop {
-            match try!(self.consume()) {
+            match try!(self.tokenizer.next()) {
                 Token::Comma => {
                     array.push(try!(self.value()));
                     continue
@@ -297,7 +298,7 @@ impl<'a> Parser<'a> {
     fn object(&mut self) -> JsonResult<JsonValue> {
         let mut object = BTreeMap::new();
 
-        match try!(self.consume()) {
+        match try!(self.tokenizer.next()) {
             Token::BraceOff    => return Ok(JsonValue::Object(object)),
             Token::String(key) => {
                 expect!(self, Token::Colon);
@@ -307,7 +308,7 @@ impl<'a> Parser<'a> {
         }
 
         loop {
-            match try!(self.consume()) {
+            match try!(self.tokenizer.next()) {
                 Token::Comma => {
                     let key = expect!(self,
                         Token::String(key) => key
@@ -339,7 +340,7 @@ impl<'a> Parser<'a> {
     }
 
     fn value(&mut self) -> JsonResult<JsonValue> {
-        let token = try!(self.consume());
+        let token = try!(self.tokenizer.next());
         self.value_from(token)
     }
 }
