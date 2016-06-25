@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::ops::{ Index, IndexMut };
+use std::ops::{ Index, IndexMut, Deref };
 use iterators::{ Members, MembersMut, Entries, EntriesMut };
 use { JsonResult, JsonError };
 use std::{ usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32 };
@@ -496,6 +496,22 @@ impl<'a> Index<&'a str> for JsonValue {
     }
 }
 
+impl Index<String> for JsonValue {
+    type Output = JsonValue;
+
+    fn index(&self, index: String) -> &JsonValue {
+        self.index(index.deref())
+    }
+}
+
+impl<'a> Index<&'a String> for JsonValue {
+    type Output = JsonValue;
+
+    fn index(&self, index: &String) -> &JsonValue {
+        self.index(index.deref())
+    }
+}
+
 /// Implements mutable indexing by `&str` to easily modify object members:
 ///
 /// ```
@@ -524,5 +540,17 @@ impl<'a> IndexMut<&'a str> for JsonValue {
                 self.index_mut(index)
             }
         }
+    }
+}
+
+impl IndexMut<String> for JsonValue {
+    fn index_mut(&mut self, index: String) -> &mut JsonValue {
+        self.index_mut(index.deref())
+    }
+}
+
+impl<'a> IndexMut<&'a String> for JsonValue {
+    fn index_mut(&mut self, index: &String) -> &mut JsonValue {
+        self.index_mut(index.deref())
     }
 }
