@@ -283,7 +283,7 @@ impl<'a> Parser<'a> {
     }
 
     fn array(&mut self) -> JsonResult<JsonValue> {
-        let mut array = Vec::new();
+        let mut array = Vec::with_capacity(20);
 
         match try!(self.tokenizer.next()) {
             Token::BracketOff => return Ok(JsonValue::Array(array)),
