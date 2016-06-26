@@ -419,7 +419,7 @@ impl JsonValue {
 ///
 /// array.push("foo");
 ///
-/// assert!(array[0].is("foo"));
+/// assert!(array[0] == "foo");
 /// ```
 impl Index<usize> for JsonValue {
     type Output = JsonValue;
@@ -443,7 +443,7 @@ impl Index<usize> for JsonValue {
 ///
 /// array[1] = "bar".into();
 ///
-/// assert!(array[1].is("bar"));
+/// assert!(array[1] == "bar");
 /// # }
 /// ```
 impl IndexMut<usize> for JsonValue {
@@ -479,7 +479,7 @@ impl IndexMut<usize> for JsonValue {
 ///     "foo" => "bar"
 /// };
 ///
-/// assert!(object["foo"].is("bar"));
+/// assert!(object["foo"] == "bar");
 /// # }
 /// ```
 impl<'a> Index<&'a str> for JsonValue {
@@ -523,7 +523,7 @@ impl<'a> Index<&'a String> for JsonValue {
 ///
 /// object["foo"] = 42.into();
 ///
-/// assert!(object["foo"].is(42));
+/// assert!(object["foo"] == 42);
 /// # }
 /// ```
 impl<'a> IndexMut<&'a str> for JsonValue {
