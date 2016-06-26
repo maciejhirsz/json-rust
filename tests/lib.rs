@@ -630,6 +630,72 @@ fn null_len() {
 }
 
 #[test]
+fn index_by_str() {
+    let data = object!{
+        "foo" => "bar"
+    };
+
+    assert_eq!(data["foo"], "bar");
+}
+
+#[test]
+fn index_by_string() {
+    let data = object!{
+        "foo" => "bar"
+    };
+
+    assert_eq!(data["foo".to_string()], "bar");
+}
+
+#[test]
+fn index_by_string_ref() {
+    let data = object!{
+        "foo" => "bar"
+    };
+
+    let key = "foo".to_string();
+    let ref key_ref = key;
+
+    assert_eq!(data[key_ref], "bar");
+}
+
+#[test]
+fn index_mut_by_str() {
+    let mut data = object!{
+        "foo" => Null
+    };
+
+    data["foo"] = "bar".into();
+
+    assert_eq!(data["foo"], "bar");
+}
+
+#[test]
+fn index_mut_by_string() {
+    let mut data = object!{
+        "foo" => Null
+    };
+
+    data["foo".to_string()] = "bar".into();
+
+    assert_eq!(data["foo"], "bar");
+}
+
+#[test]
+fn index_mut_by_string_ref() {
+    let mut data = object!{
+        "foo" => Null
+    };
+
+    let key = "foo".to_string();
+    let ref key_ref = key;
+
+    data[key_ref] = "bar".into();
+
+    assert_eq!(data["foo"], "bar");
+}
+
+#[test]
 fn fmt_string() {
     let data: JsonValue = "foobar".into();
 

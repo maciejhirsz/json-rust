@@ -15,12 +15,12 @@
 //! some keys under some conditions. Mapping that to idiomatic Rust structs
 //! introduces friction.
 //!
-//! This crate intends to avoid that friction by extensively using static dispatch
-//! and hiding type information behind enums, while still giving you all the
-//! guarantees of safe Rust code.
+//! This crate intends to avoid that friction.
 //!
-//! ```
-//! let data = json::parse(r#"
+//! ```rust
+//! # #[macro_use] extern crate json;
+//! # fn main() {
+//! let parsed = json::parse(r#"
 //!
 //! {
 //!     "code": 200,
@@ -36,51 +36,64 @@
 //!
 //! "#).unwrap();
 //!
-//! assert!(data["code"] == 200);
-//! assert!(data["success"] == true);
-//! assert!(data["payload"]["features"].is_array());
-//! assert!(data["payload"]["features"][0] == "awesome");
-//! assert!(data["payload"]["features"].contains("easyAPI"));
+//! let instantiated = object!{
+//!     "code" => 200,
+//!     "success" => true,
+//!     "payload" => object!{
+//!         "features" => array![
+//!             "awesome",
+//!             "easyAPI",
+//!             "lowLearningCurve"
+//!         ]
+//!     }
+//! };
 //!
-//! // Error resilient: non-existent values default to null
+//! assert_eq!(parsed, instantiated);
+//! # }
+//! ```
+//!
+//! ## First class citizen
+//!
+//! Using macros and easy indexing, it's easy to work with the data.
+//!
+//! ```rust
+//! # #[macro_use] extern crate json;
+//! # fn main() {
+//! let mut data = object!{
+//!     "foo" => false,
+//!     "bar" => json::Null,
+//!     "answer" => 42,
+//!     "list" => array![json::Null, "world", true]
+//! };
+//!
+//! // Partial equality is implemented for most raw types:
+//! assert!(data["foo"] == false);
+//!
+//! // And it's type aware, `null` and `false` are different values:
+//! assert!(data["bar"] != false);
+//!
+//! // But you can use any Rust number types:
+//! assert!(data["answer"] == 42);
+//! assert!(data["answer"] == 42.0);
+//! assert!(data["answer"] == 42isize);
+//!
+//! // Access nested structures, arrays and objects:
+//! assert!(data["list"][0].is_null());
+//! assert!(data["list"][1] == "world");
+//! assert!(data["list"][2] == true);
+//!
+//! // Error resilient - accessing properties that don't exist yield null:
 //! assert!(data["this"]["does"]["not"]["exist"].is_null());
-//! ```
 //!
-//! ## Create JSON data without defining structs
+//! // Mutate by assigning:
+//! data["list"][0] = "Hello".into();
 //!
-//! ```
-//! #[macro_use]
-//! extern crate json;
+//! // Use the `dump` method to serialize the data:
+//! assert_eq!(data.dump(), r#"{"answer":42,"bar":null,"foo":false,"list":["Hello","world",true]}"#);
 //!
-//! fn main() {
-//!     let data = object!{
-//!         "a" => "bar",
-//!         "b" => array![1, false, "foo"]
-//!     };
-//!
-//!     assert_eq!(data.dump(), r#"{"a":"bar","b":[1,false,"foo"]}"#);
-//! }
-//! ```
-//!
-//! ## Mutate simply by assigning new values
-//!
-//! ```
-//! let mut data = json::parse(r#"
-//!
-//! {
-//!     "name": "Bob",
-//!     "isAwesome": false
-//! }
-//!
-//! "#).unwrap();
-//!
-//! data["isAwesome"] = true.into();
-//! data["likes"] = "Rust".into();
-//!
-//! assert_eq!(data.dump(), r#"{"isAwesome":true,"likes":"Rust","name":"Bob"}"#);
-//!
-//! // Pretty print the output
+//! // Or pretty print it out:
 //! println!("{:#}", data);
+//! # }
 //! ```
 //!
 //! ## Serialize with `json::stringify(value)`

@@ -1,6 +1,8 @@
 use JsonValue;
 
 pub trait Generator {
+    fn current_index(&self) -> usize;
+
     fn new_line(&mut self) {}
 
     fn write(&mut self, slice: &[u8]);
@@ -34,31 +36,35 @@ pub trait Generator {
         self.write_char(b'"');
     }
 
-    fn write_digits_from_u64(&mut self, mut num: u64, length: &mut u8) {
+    fn write_digits_from_u64(&mut self, mut num: u64) {
         let digit = (num % 10) as u8;
         if num > 9 {
             num /= 10;
-            self.write_digits_from_u64(num, length);
+            self.write_digits_from_u64(num);
         }
-        *length += 1;
         self.write_char(digit + b'0');
     }
 
     fn write_number(&mut self, mut num: f64) {
-        let mut length = 0;
         if num < 0.0 {
             num = -num;
             self.write_char(b'-');
         }
 
-        self.write_digits_from_u64(num as u64, &mut length);
+        let start = self.current_index();
+
+        self.write_digits_from_u64(num as u64);
 
         let mut fract = num.fract();
+
         if fract < 1e-16 {
             return;
         }
 
+        let mut length = self.current_index() - start;
+
         fract *= 10.0;
+
         self.write_char(b'.');
         self.write_char((fract as u8) + b'0');
         fract = fract.fract();
@@ -76,7 +82,8 @@ pub trait Generator {
         match *json {
             JsonValue::String(ref string) => self.write_string(string),
             JsonValue::Number(ref number) => self.write_number(*number),
-            JsonValue::Boolean(ref value) => self.write(if *value { b"true" } else { b"false" }),
+            JsonValue::Boolean(true)      => self.write(b"true"),
+            JsonValue::Boolean(false)     => self.write(b"false"),
             JsonValue::Null               => self.write(b"null"),
             JsonValue::Array(ref array)   => {
                 self.write_char(b'[');
@@ -135,6 +142,10 @@ impl DumpGenerator {
 }
 
 impl Generator for DumpGenerator {
+    fn current_index(&self) -> usize {
+        self.code.len()
+    }
+
     fn write(&mut self, slice: &[u8]) {
         self.code.extend_from_slice(slice);
     }
@@ -169,6 +180,10 @@ impl PrettyGenerator {
 }
 
 impl Generator for PrettyGenerator {
+    fn current_index(&self) -> usize {
+        self.code.len()
+    }
+
     fn new_line(&mut self) {
         self.code.push(b'\n');
         for _ in 0..(self.dent * self.spaces_per_indent) {
