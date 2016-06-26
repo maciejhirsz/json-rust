@@ -3,10 +3,18 @@ use std::error::Error;
 use std::fmt;
 use std::char;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum JsonError {
-    UnexpectedToken(String),
-    UnexpectedCharacter(char),
+    UnexpectedToken {
+        token: String,
+        line: usize,
+        column: usize,
+    },
+    UnexpectedCharacter {
+        ch: char,
+        line: usize,
+        column: usize,
+    },
     UnexpectedEndOfJson,
     FailedUtf8Parsing,
     ArrayIndexOutOfBounds,
@@ -15,14 +23,12 @@ pub enum JsonError {
 }
 
 impl JsonError {
-    pub fn unexpected_token(token: Token) -> Self {
-        JsonError::UnexpectedToken(format!("{:?}", token))
-    }
-
-    pub fn unexpected_character(byte: u8) -> Self {
-        JsonError::UnexpectedCharacter(
-            char::from_u32(byte as u32).unwrap_or('?')
-        )
+    pub fn unexpected_token(token: Token,) -> Self {
+        JsonError::UnexpectedToken {
+            token: token.to_string(),
+            line: 0,
+            column: 0,
+        }
     }
 
     pub fn wrong_type(expected: &str) -> Self {
@@ -39,13 +45,23 @@ impl fmt::Display for JsonError {
         use JsonError::*;
 
         match *self {
-            UnexpectedToken(ref s)  => write!(f, "Unexpected token: {}", s),
-            UnexpectedCharacter(ch) => write!(f, "Unexpected character: {}", ch),
-            UnexpectedEndOfJson     => write!(f, "Unexpected end of JSON"),
-            FailedUtf8Parsing       => write!(f, "Failed to parse UTF-8 bytes"),
-            ArrayIndexOutOfBounds   => write!(f, "Array index out of bounds!"),
-            WrongType(ref s)        => write!(f, "Wrong type, expected: {}", s),
-            UndefinedField(ref s)   => write!(f, "Undefined field: {}", s)
+            UnexpectedToken {
+                ref token,
+                ref line,
+                ref column,
+            } => write!(f, "Unexpected token: {} at ({}:{})", token, line, column),
+
+            UnexpectedCharacter {
+                ref ch,
+                ref line,
+                ref column,
+            } => write!(f, "Unexpected character: {} at ({}:{})", ch, line, column),
+
+            UnexpectedEndOfJson   => write!(f, "Unexpected end of JSON"),
+            FailedUtf8Parsing     => write!(f, "Failed to parse UTF-8 bytes"),
+            ArrayIndexOutOfBounds => write!(f, "Array index out of bounds!"),
+            WrongType(ref s)      => write!(f, "Wrong type, expected: {}", s),
+            UndefinedField(ref s) => write!(f, "Undefined field: {}", s)
         }
     }
 }
@@ -54,13 +70,13 @@ impl Error for JsonError {
     fn description(&self) -> &str {
         use JsonError::*;
         match *self {
-            UnexpectedToken(_)     => "Unexpected token",
-            UnexpectedCharacter(_) => "Unexpected character",
-            UnexpectedEndOfJson    => "Unexpected end of JSON",
-            FailedUtf8Parsing      => "Failed to read bytes as UTF-8 from JSON",
-            ArrayIndexOutOfBounds  => "Array index out of bounds!",
-            WrongType(_)           => "Wrong type",
-            UndefinedField(_)      => "Undefined field",
+            UnexpectedToken { .. }     => "Unexpected token",
+            UnexpectedCharacter { .. } => "Unexpected character",
+            UnexpectedEndOfJson        => "Unexpected end of JSON",
+            FailedUtf8Parsing          => "Failed to read bytes as UTF-8 from JSON",
+            ArrayIndexOutOfBounds      => "Array index out of bounds!",
+            WrongType(_)               => "Wrong type",
+            UndefinedField(_)          => "Undefined field",
         }
     }
 }

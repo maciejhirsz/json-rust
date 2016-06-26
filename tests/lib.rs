@@ -3,7 +3,7 @@ extern crate json;
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
-use json::{ stringify, stringify_pretty, parse, JsonValue, Null };
+use json::{ stringify, stringify_pretty, parse, JsonValue, JsonError, Null };
 
 #[test]
 fn is_as_string() {
@@ -137,7 +137,22 @@ fn stringify_integer() {
 
 #[test]
 fn stringify_small_number() {
-    assert_eq!(stringify(0.000000000000001), "0.000000000000001");
+    assert_eq!(stringify(1e-15), "0.000000000000001");
+}
+
+#[test]
+fn stringify_large_number() {
+    assert_eq!(stringify(1e19), "10000000000000000000");
+}
+
+#[test]
+fn stringify_very_large_number() {
+    assert_eq!(stringify(3.141592653589793e20), "3.141592653589793e20");
+}
+
+#[test]
+fn stringify_very_small_number() {
+    assert_eq!(stringify(3.141592653589793e-16), "3.141592653589793e-16");
 }
 
 #[test]
@@ -462,11 +477,6 @@ fn parse_escaped_unicode() {
 }
 
 #[test]
-fn parse_error() {
-    assert!(parse("10 20").is_err());
-}
-
-#[test]
 fn array_len() {
     let data = array![0, 1, 2, 3];
 
@@ -744,4 +754,30 @@ fn fmt_object() {
 
     assert_eq!(format!("{}", data), r#"{"answer":42,"foo":"bar"}"#);
     assert_eq!(format!("{:#}", data), "{\n    \"answer\": 42,\n    \"foo\": \"bar\"\n}");
+}
+
+#[test]
+fn error_unexpected_character() {
+    let err = parse("\n\nnulX\n").unwrap_err();
+
+    assert_eq!(err, JsonError::UnexpectedCharacter {
+        ch: 'X',
+        line: 3,
+        column: 4,
+    });
+
+    assert_eq!(format!("{}", err), "Unexpected character: X at (3:4)");
+}
+
+#[test]
+fn error_unexpected_token() {
+    let err = parse("\n  [\n    null,\n  ]  \n").unwrap_err();
+
+    assert_eq!(err, JsonError::UnexpectedToken {
+        token: "]".to_string(),
+        line: 4,
+        column: 3,
+    });
+
+    assert_eq!(format!("{}", err), "Unexpected token: ] at (4:3)");
 }
