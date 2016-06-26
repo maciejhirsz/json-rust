@@ -1,7 +1,10 @@
+use std::io::Write;
 use JsonValue;
 
 pub trait Generator {
     fn current_index(&self) -> usize;
+
+    fn get_buffer(&mut self) -> &mut Vec<u8>;
 
     fn new_line(&mut self) {}
 
@@ -52,7 +55,7 @@ pub trait Generator {
         }
 
         if num > 1e19 || num < 1e-15 {
-            self.write(format!("{:e}", num).as_bytes());
+            write!(self.get_buffer(), "{:e}", num).unwrap();
             return;
         }
 
@@ -151,6 +154,10 @@ impl Generator for DumpGenerator {
         self.code.len()
     }
 
+    fn get_buffer(&mut self) -> &mut Vec<u8> {
+        &mut self.code
+    }
+
     fn write(&mut self, slice: &[u8]) {
         self.code.extend_from_slice(slice);
     }
@@ -187,6 +194,10 @@ impl PrettyGenerator {
 impl Generator for PrettyGenerator {
     fn current_index(&self) -> usize {
         self.code.len()
+    }
+
+    fn get_buffer(&mut self) -> &mut Vec<u8> {
+        &mut self.code
     }
 
     fn new_line(&mut self) {
