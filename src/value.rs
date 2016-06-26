@@ -432,7 +432,7 @@ impl Index<usize> for JsonValue {
     }
 }
 
-/// Implements mutable indexing by `usie` to easily modify array members:
+/// Implements mutable indexing by `usize` to easily modify array members:
 ///
 /// ```
 /// # #[macro_use]
