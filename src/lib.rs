@@ -264,11 +264,6 @@ pub fn from<T>(value: T) -> JsonValue where T: Into<JsonValue> {
     value.into()
 }
 
-#[deprecated(since="0.5.0", note="Use `value.dump(0)` instead")]
-pub fn stringify_ref(root: &JsonValue) -> String {
-    root.dump()
-}
-
 /// Pretty prints out the value as JSON string.
 pub fn stringify<T>(root: T) -> String where T: Into<JsonValue> {
     let root: JsonValue = root.into();
