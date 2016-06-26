@@ -1,5 +1,6 @@
 use std::char;
 use std::str;
+use std::iter::Enumerate;
 use std::str::Bytes;
 use std::collections::BTreeMap;
 use { JsonValue, JsonError, JsonResult };
@@ -21,7 +22,7 @@ pub enum Token {
 macro_rules! sequence {
     ($tok:ident, $( $ch:pat ),*) => {
         $(
-            match $tok.source.next() {
+            match $tok.next_byte() {
                 Some($ch) => {},
                 Some(ch)  => return Err(JsonError::unexpected_character(ch)),
                 None      => return Err(JsonError::UnexpectedEndOfJson)
@@ -48,29 +49,34 @@ macro_rules! read_num {
 }
 
 struct Tokenizer<'a> {
-    source: Bytes<'a>,
+    source: Enumerate<Bytes<'a>>,
     buffer: Vec<u8>,
     left_over: Option<u8>,
+    current_index: usize,
 }
 
 impl<'a> Tokenizer<'a> {
     pub fn new(source: &'a str) -> Self {
         Tokenizer {
-            source: source.bytes(),
+            source: source.bytes().enumerate(),
             buffer: Vec::with_capacity(512),
             left_over: None,
+            current_index: 0,
         }
     }
 
     #[inline(always)]
     fn next_byte(&mut self) -> Option<u8> {
-        self.source.next()
+        self.source.next().map(|(index, byte)| {
+            self.current_index = index;
+            byte
+        })
     }
 
     #[inline(always)]
     fn peek_byte(&mut self) -> Option<u8> {
         if self.left_over.is_none() {
-            self.left_over = self.source.next();
+            self.left_over = self.next_byte();
         }
 
         return self.left_over;
@@ -84,7 +90,7 @@ impl<'a> Tokenizer<'a> {
             return byte;
         }
 
-        self.source.next()
+        self.next_byte()
     }
 
     #[inline(always)]
