@@ -77,6 +77,7 @@ struct Tokenizer<'a> {
     buffer: Vec<u8>,
     left_over: Option<u8>,
     current_index: usize,
+    pub current_token_index: usize,
 }
 
 impl<'a> Tokenizer<'a> {
@@ -87,6 +88,7 @@ impl<'a> Tokenizer<'a> {
             buffer: Vec::with_capacity(512),
             left_over: None,
             current_index: 0,
+            current_token_index: 0,
         }
     }
 
@@ -266,12 +268,12 @@ impl<'a> Tokenizer<'a> {
         Ok(if first == b'-' { num * -1.0 } else { num })
     }
 
-    fn next(&mut self) -> JsonResult<(usize, Token)> {
+    fn next(&mut self) -> JsonResult<Token> {
         loop {
             let ch = try!(self.checked_expect_byte());
-            let index = self.current_index;
+            self.current_token_index = self.current_index;
 
-            return Ok((index, match ch {
+            return Ok(match ch {
                 b',' => Token::Comma,
                 b':' => Token::Colon,
                 b'[' => Token::BracketOn,
@@ -295,7 +297,7 @@ impl<'a> Tokenizer<'a> {
                 // whitespace
                 9 ... 13 | 32 | 133 | 160 => continue,
                 _ => return Err(self.unexpected_character_error(ch))
-            }));
+            });
         }
     }
 }
@@ -303,20 +305,16 @@ impl<'a> Tokenizer<'a> {
 macro_rules! expect {
     ($parser:ident, $token:pat => $value:ident) => (
         match $parser.tokenizer.next() {
-            Ok((_, $token))    => $value,
-            Ok((index, token)) => {
-                return Err($parser.unexpected_token_error(index, token));
-            },
+            Ok($token) => $value,
+            Ok(token)  => return Err($parser.unexpected_token_error(token)),
             Err(error)         => return Err(error),
         }
     );
     ($parser:ident, $token:pat) => ({
         match $parser.tokenizer.next() {
-            Ok((_, $token))    => {},
-            Ok((index, token)) => {
-                return Err($parser.unexpected_token_error(index, token));
-            },
-            Err(error)         => return Err(error),
+            Ok($token) => {},
+            Ok(token)  => return Err($parser.unexpected_token_error(token)),
+            Err(error) => return Err(error),
         }
     })
 }
@@ -332,7 +330,8 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn unexpected_token_error(&self, index: usize, token: Token) -> JsonError {
+    fn unexpected_token_error(&self, token: Token) -> JsonError {
+        let index = self.tokenizer.current_token_index;
         let pos = self.tokenizer.source_position_from_index(index);
 
         JsonError::UnexpectedToken {
@@ -345,7 +344,7 @@ impl<'a> Parser<'a> {
     #[must_use]
     fn ensure_end(&mut self) -> JsonResult<()> {
         match self.tokenizer.next() {
-            Ok((index, token)) => Err(self.unexpected_token_error(index, token)),
+            Ok(token) => Err(self.unexpected_token_error(token)),
             Err(JsonError::UnexpectedEndOfJson) => Ok(()),
             Err(error)                          => Err(error)
         }
@@ -355,21 +354,21 @@ impl<'a> Parser<'a> {
         let mut array = Vec::with_capacity(20);
 
         match try!(self.tokenizer.next()) {
-            (_, Token::BracketOff) => return Ok(JsonValue::Array(array)),
-            (index, token)         => {
-                array.push(try!(self.value_from(index, token)));
+            Token::BracketOff => return Ok(JsonValue::Array(array)),
+            token             => {
+                array.push(try!(self.value_from(token)));
             }
         }
 
         loop {
             match try!(self.tokenizer.next()) {
-                (_, Token::Comma)      => {
+                Token::Comma      => {
                     array.push(try!(self.value()));
                     continue
                 },
-                (_, Token::BracketOff) => break,
-                (index, token)         => {
-                    return Err(self.unexpected_token_error(index, token))
+                Token::BracketOff => break,
+                token             => {
+                    return Err(self.unexpected_token_error(token))
                 }
             }
         }
@@ -381,19 +380,17 @@ impl<'a> Parser<'a> {
         let mut object = BTreeMap::new();
 
         match try!(self.tokenizer.next()) {
-            (_, Token::BraceOff)    => return Ok(JsonValue::Object(object)),
-            (_, Token::String(key)) => {
+            Token::BraceOff    => return Ok(JsonValue::Object(object)),
+            Token::String(key) => {
                 expect!(self, Token::Colon);
                 object.insert(key, try!(self.value()));
             },
-            (index, token)          => {
-                return Err(self.unexpected_token_error(index, token))
-            }
+            token              => return Err(self.unexpected_token_error(token))
         }
 
         loop {
             match try!(self.tokenizer.next()) {
-                (_, Token::Comma) => {
+                Token::Comma => {
                     let key = expect!(self,
                         Token::String(key) => key
                     );
@@ -401,17 +398,15 @@ impl<'a> Parser<'a> {
                     object.insert(key, try!(self.value()));
                     continue
                 },
-                (_, Token::BraceOff) => break,
-                (index, token)       => {
-                    return Err(self.unexpected_token_error(index, token))
-                }
+                Token::BraceOff => break,
+                token           => return Err(self.unexpected_token_error(token))
             }
         }
 
         Ok(JsonValue::Object(object))
     }
 
-    fn value_from(&mut self, index: usize, token: Token) -> JsonResult<JsonValue> {
+    fn value_from(&mut self, token: Token) -> JsonResult<JsonValue> {
         Ok(match token {
             Token::String(value)    => JsonValue::String(value),
             Token::Number(value)    => JsonValue::Number(value),
@@ -420,14 +415,14 @@ impl<'a> Parser<'a> {
             Token::BracketOn        => return self.array(),
             Token::BraceOn          => return self.object(),
             _                       => {
-                return Err(self.unexpected_token_error(index, token))
+                return Err(self.unexpected_token_error(token))
             }
         })
     }
 
     fn value(&mut self) -> JsonResult<JsonValue> {
-        let (index, token) = try!(self.tokenizer.next());
-        self.value_from(index, token)
+        let token = try!(self.tokenizer.next());
+        self.value_from(token)
     }
 }
 
