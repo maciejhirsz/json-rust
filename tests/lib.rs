@@ -137,7 +137,22 @@ fn stringify_integer() {
 
 #[test]
 fn stringify_small_number() {
-    assert_eq!(stringify(0.000000000000001), "0.000000000000001");
+    assert_eq!(stringify(1e-15), "0.000000000000001");
+}
+
+#[test]
+fn stringify_large_number() {
+    assert_eq!(stringify(1e19), "10000000000000000000");
+}
+
+#[test]
+fn stringify_very_large_number() {
+    assert_eq!(stringify(3.141592653589793e20), "3.141592653589793e20");
+}
+
+#[test]
+fn stringify_very_small_number() {
+    assert_eq!(stringify(3.141592653589793e-16), "3.141592653589793e-16");
 }
 
 #[test]
@@ -627,6 +642,72 @@ fn null_len() {
     let data = json::Null;
 
     assert_eq!(data.len(), 0);
+}
+
+#[test]
+fn index_by_str() {
+    let data = object!{
+        "foo" => "bar"
+    };
+
+    assert_eq!(data["foo"], "bar");
+}
+
+#[test]
+fn index_by_string() {
+    let data = object!{
+        "foo" => "bar"
+    };
+
+    assert_eq!(data["foo".to_string()], "bar");
+}
+
+#[test]
+fn index_by_string_ref() {
+    let data = object!{
+        "foo" => "bar"
+    };
+
+    let key = "foo".to_string();
+    let ref key_ref = key;
+
+    assert_eq!(data[key_ref], "bar");
+}
+
+#[test]
+fn index_mut_by_str() {
+    let mut data = object!{
+        "foo" => Null
+    };
+
+    data["foo"] = "bar".into();
+
+    assert_eq!(data["foo"], "bar");
+}
+
+#[test]
+fn index_mut_by_string() {
+    let mut data = object!{
+        "foo" => Null
+    };
+
+    data["foo".to_string()] = "bar".into();
+
+    assert_eq!(data["foo"], "bar");
+}
+
+#[test]
+fn index_mut_by_string_ref() {
+    let mut data = object!{
+        "foo" => Null
+    };
+
+    let key = "foo".to_string();
+    let ref key_ref = key;
+
+    data[key_ref] = "bar".into();
+
+    assert_eq!(data["foo"], "bar");
 }
 
 #[test]
