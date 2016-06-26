@@ -51,6 +51,11 @@ pub trait Generator {
             self.write_char(b'-');
         }
 
+        if num > 1e19 || num < 1e-15 {
+            self.write(format!("{:e}", num).as_bytes());
+            return;
+        }
+
         let start = self.current_index();
 
         self.write_digits_from_u64(num as u64);

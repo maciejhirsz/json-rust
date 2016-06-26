@@ -137,7 +137,22 @@ fn stringify_integer() {
 
 #[test]
 fn stringify_small_number() {
-    assert_eq!(stringify(0.000000000000001), "0.000000000000001");
+    assert_eq!(stringify(1e-15), "0.000000000000001");
+}
+
+#[test]
+fn stringify_large_number() {
+    assert_eq!(stringify(1e19), "10000000000000000000");
+}
+
+#[test]
+fn stringify_very_large_number() {
+    assert_eq!(stringify(3.141592653589793e20), "3.141592653589793e20");
+}
+
+#[test]
+fn stringify_very_small_number() {
+    assert_eq!(stringify(3.141592653589793e-16), "3.141592653589793e-16");
 }
 
 #[test]
