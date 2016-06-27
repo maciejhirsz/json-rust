@@ -126,7 +126,7 @@ impl<'a> Tokenizer<'a> {
             self.left_over = self.next_byte();
         }
 
-        return self.left_over;
+        self.left_over
     }
 
     #[inline(always)]
