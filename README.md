@@ -55,7 +55,7 @@ assert_eq!(parsed, instantiated);
 
 ## First class citizen
 
-Using macros and easy indexing, it's easy to work with the data.
+Using macros and indexing, it's easy to work with the data.
 
 ```rust
 let mut data = object!{
