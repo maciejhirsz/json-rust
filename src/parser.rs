@@ -254,10 +254,30 @@ impl<'a> Parser<'a> {
     }
 
     fn read_codepoint(&mut self) -> JsonResult<()> {
-        let codepoint = try!(self.read_char_as_hexnumber()) << 12
+        let mut codepoint = try!(self.read_char_as_hexnumber()) << 12
                       | try!(self.read_char_as_hexnumber()) << 8
                       | try!(self.read_char_as_hexnumber()) << 4
                       | try!(self.read_char_as_hexnumber());
+
+        match codepoint {
+            0xD800 ... 0xDFFF => {
+                codepoint -= 0xD800;
+                codepoint <<= 10;
+
+                expect!(self, b'\\');
+                expect!(self, b'u');
+
+                let lower = try!(self.read_char_as_hexnumber()) << 12
+                          | try!(self.read_char_as_hexnumber()) << 8
+                          | try!(self.read_char_as_hexnumber()) << 4
+                          | try!(self.read_char_as_hexnumber());
+
+                codepoint |= lower - 0xDC00;
+
+                codepoint += 0x010000;
+            },
+            _ => {}
+        }
 
         let ch = try!(
             char::from_u32(codepoint).ok_or(JsonError::FailedUtf8Parsing)
