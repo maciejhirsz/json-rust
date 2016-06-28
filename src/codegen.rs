@@ -76,36 +76,23 @@ pub trait Generator {
             self.write_char(b'-');
         }
 
+        let fract = num.fract();
+
+        if fract > 0.0 {
+            if num < 1e-15 {
+                write!(self.get_buffer(), "{:e}", num).unwrap();
+            } else {
+                write!(self.get_buffer(), "{}", num).unwrap();
+            }
+            return;
+        }
+
         if num > 1e19 || num < 1e-15 {
             write!(self.get_buffer(), "{:e}", num).unwrap();
             return;
         }
 
-        let start = self.current_index();
-
         self.write_digits_from_u64(num as u64);
-
-        let mut fract = num.fract();
-
-        if fract < 1e-16 {
-            return;
-        }
-
-        let mut length = self.current_index() - start;
-
-        fract *= 10.0;
-
-        self.write_char(b'.');
-        self.write_char((fract as u8) + b'0');
-        fract = fract.fract();
-        length += 2;
-
-        while length < 17 && fract > 1e-15 {
-            fract *= 10.0;
-            self.write_char((fract as u8) + b'0');
-            fract = fract.fract();
-            length += 1;
-        }
     }
 
     fn write_json(&mut self, json: &JsonValue) {

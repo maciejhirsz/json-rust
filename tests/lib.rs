@@ -131,15 +131,15 @@ fn stringify_number() {
     assert_eq!(stringify(3.141592653589793), "3.141592653589793");
 }
 
-// #[test]
-// fn stringify_precise_positive_number() {
-//     assert_eq!(JsonValue::Number(1.2345f64).dump(), "1.2345");
-// }
+#[test]
+fn stringify_precise_positive_number() {
+    assert_eq!(JsonValue::Number(1.2345f64).dump(), "1.2345");
+}
 
-// #[test]
-// fn stringify_precise_negative_number() {
-//     assert_eq!(JsonValue::Number(-1.2345f64).dump(), "-1.2345");
-// }
+#[test]
+fn stringify_precise_negative_number() {
+    assert_eq!(JsonValue::Number(-1.2345f64).dump(), "-1.2345");
+}
 
 #[test]
 fn stringify_zero() {
@@ -342,6 +342,16 @@ fn parse_negative_integer() {
 }
 
 #[test]
+fn parse_number_with_leading_zero() {
+    assert!(parse("01").is_err());
+}
+
+#[test]
+fn parse_negative_number_with_leading_zero() {
+    assert!(parse("-01").is_err());
+}
+
+#[test]
 fn parse_number_with_e() {
     assert_eq!(parse("5e2").unwrap(), 500);
     assert_eq!(parse("5E2").unwrap(), 500);
@@ -357,6 +367,11 @@ fn parse_number_with_positive_e() {
 fn parse_number_with_negative_e() {
     assert_eq!(parse("5e-2").unwrap(), 0.05);
     assert_eq!(parse("5E-2").unwrap(), 0.05);
+}
+
+#[test]
+fn parse_number_with_invalid_e() {
+    assert!(parse("0e").is_err());
 }
 
 #[test]
