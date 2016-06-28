@@ -50,7 +50,7 @@ macro_rules! sequence {
 
 macro_rules! read_num {
     ($tok:ident, $num:ident, $then:expr) => {
-        while let Some(ch) = $tok.next_byte() {
+        while let Some(ch) = $tok.checked_next_byte() {
             match ch {
                 b'0' ... b'9' => {
                     let $num = ch - b'0';
@@ -186,16 +186,19 @@ impl<'a> Tokenizer<'a> {
                 b'\\' => {
                     let ch = try!(self.expect_byte());
                     let ch = match ch {
-                        b'b' => 0x8,
-                        b'f' => 0xC,
-                        b't' => b'\t',
-                        b'r' => b'\r',
-                        b'n' => b'\n',
-                        b'u' => {
+                        b'u'  => {
                             try!(self.read_codepoint());
                             continue;
                         },
-                        _   => ch
+                        b'"'  |
+                        b'\\' |
+                        b'/'  => ch,
+                        b'b'  => 0x8,
+                        b'f'  => 0xC,
+                        b't'  => b'\t',
+                        b'r'  => b'\r',
+                        b'n'  => b'\n',
+                        _     => return Err(self.unexpected_character_error(ch))
                     };
                     self.buffer.push(ch);
                 },
@@ -203,27 +206,48 @@ impl<'a> Tokenizer<'a> {
             }
         }
 
-        String::from_utf8(self.buffer.clone())
-        .or(Err(JsonError::FailedUtf8Parsing))
+        // Since the original source is already valid UTF-8, and `\`
+        // cannot occur in front of a codepoint > 127, this is safe.
+        Ok( unsafe { str::from_utf8_unchecked(&self.buffer).into() } )
     }
 
     fn read_number(&mut self, first: u8, is_negative: bool) -> JsonResult<f64> {
         let mut num = (first - b'0') as u64;
+        let mut digits = 0u8;
 
-        read_num!(self, digit, num = num * 10 + digit as u64);
+        // Cap on how many iterations we do while reading to u64
+        // in order to avoid an overflow.
+        while digits < 18 {
+            digits += 1;
 
-        match self.peek_byte() {
-            Some(b'.') | Some(b'e') | Some(b'E') => {},
-            _ => {
-                return if is_negative {
-                    Ok(-(num as f64))
-                } else {
-                    Ok(num as f64)
-                };
+            if let Some(ch) = self.next_byte() {
+                match ch {
+                    b'0' ... b'9' => {
+                        num = num * 10 + (ch - b'0') as u64;
+                    },
+                    b'.' | b'e' | b'E' => {
+                        self.left_over = Some(ch);
+                        break;
+                    }
+                    ch => {
+                        self.left_over = Some(ch);
+                        return Ok(
+                            if is_negative { -(num as f64) } else { num as f64 }
+                        );
+                    }
+                }
+            } else {
+                return Ok(
+                    if is_negative { -(num as f64) } else { num as f64 }
+                );
             }
         }
 
         let mut num = num as f64;
+
+        // Attempt to continue reading digits that would overflow
+        // u64 into freshly converted f64
+        read_num!(self, digit, num = num * 10.0 + digit as f64);
 
         if let Some(b'.') = self.peek_byte() {
             self.left_over = None;
@@ -247,22 +271,14 @@ impl<'a> Tokenizer<'a> {
                     },
                 };
 
-                while let Some(ch) = self.checked_next_byte() {
-                    match ch {
-                        b'0' ... b'9' => e = e * 10 + (ch - b'0') as i32,
-                        ch => {
-                            self.left_over = Some(ch);
-                            break;
-                        }
-                    }
-                }
+                read_num!(self, digit, e = e * 10 + digit as i32);
 
                 num *= 10f64.powi(e * sign);
             },
             byte => self.left_over = byte
         }
 
-        Ok(if is_negative { num * -1.0 } else { num })
+        Ok(if is_negative { -num } else { num })
     }
 
     fn next(&mut self) -> JsonResult<Token> {
