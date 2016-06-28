@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate json;
 
+use std::f64;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use json::{ stringify, stringify_pretty, parse, JsonValue, JsonError, Null };
@@ -128,6 +129,37 @@ fn stringify_string() {
 #[test]
 fn stringify_number() {
     assert_eq!(stringify(3.141592653589793), "3.141592653589793");
+}
+
+// #[test]
+// fn stringify_precise_positive_number() {
+//     assert_eq!(JsonValue::Number(1.2345f64).dump(), "1.2345");
+// }
+
+// #[test]
+// fn stringify_precise_negative_number() {
+//     assert_eq!(JsonValue::Number(-1.2345f64).dump(), "-1.2345");
+// }
+
+#[test]
+fn stringify_zero() {
+    assert_eq!(JsonValue::Number(0.0).dump(), "0");
+}
+
+#[test]
+fn stringify_nan() {
+    assert_eq!(JsonValue::Number(f64::NAN).dump(), "null");
+}
+
+#[test]
+fn stringify_infinity() {
+    assert_eq!(JsonValue::Number(f64::INFINITY).dump(), "null");
+    assert_eq!(JsonValue::Number(f64::NEG_INFINITY).dump(), "null");
+}
+
+#[test]
+fn stringify_negative_zero() {
+    assert_eq!(JsonValue::Number(-0f64).dump(), "-0");
 }
 
 #[test]
@@ -297,6 +329,11 @@ fn parse_number() {
 #[test]
 fn parse_integer() {
     assert_eq!(parse("42").unwrap(), 42);
+}
+
+#[test]
+fn parse_negative_zero() {
+    assert_eq!(parse("-0").unwrap(), JsonValue::Number(-0f64));
 }
 
 #[test]

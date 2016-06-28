@@ -1,4 +1,5 @@
 use std::io::Write;
+use std::num::FpCategory;
 use JsonValue;
 
 pub trait Generator {
@@ -57,8 +58,21 @@ pub trait Generator {
     }
 
     fn write_number(&mut self, mut num: f64) {
-        if num < 0.0 {
-            num = -num;
+        match num.classify() {
+            FpCategory::Nan      |
+            FpCategory::Infinite => {
+                self.write(b"null");
+                return;
+            },
+            FpCategory::Zero => {
+                self.write(if num.is_sign_negative() { b"-0" } else { b"0" });
+                return;
+            },
+            _ => {},
+        }
+
+        if num.is_sign_negative() {
+            num = num.abs();
             self.write_char(b'-');
         }
 
