@@ -131,13 +131,7 @@ impl<'a> Tokenizer<'a> {
 
     #[inline(always)]
     fn checked_next_byte(&mut self) -> Option<u8> {
-        if self.left_over.is_some() {
-            let byte = self.left_over;
-            self.left_over = None;
-            return byte;
-        }
-
-        self.next_byte()
+        self.left_over.take().or_else(|| self.next_byte())
     }
 
     #[inline(always)]
