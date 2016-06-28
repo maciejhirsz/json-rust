@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate json;
 
+use std::f64;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use json::{ stringify, stringify_pretty, parse, JsonValue, JsonError, Null };
@@ -128,6 +129,37 @@ fn stringify_string() {
 #[test]
 fn stringify_number() {
     assert_eq!(stringify(3.141592653589793), "3.141592653589793");
+}
+
+#[test]
+fn stringify_precise_positive_number() {
+    assert_eq!(JsonValue::Number(1.2345f64).dump(), "1.2345");
+}
+
+#[test]
+fn stringify_precise_negative_number() {
+    assert_eq!(JsonValue::Number(-1.2345f64).dump(), "-1.2345");
+}
+
+#[test]
+fn stringify_zero() {
+    assert_eq!(JsonValue::Number(0.0).dump(), "0");
+}
+
+#[test]
+fn stringify_nan() {
+    assert_eq!(JsonValue::Number(f64::NAN).dump(), "null");
+}
+
+#[test]
+fn stringify_infinity() {
+    assert_eq!(JsonValue::Number(f64::INFINITY).dump(), "null");
+    assert_eq!(JsonValue::Number(f64::NEG_INFINITY).dump(), "null");
+}
+
+#[test]
+fn stringify_negative_zero() {
+    assert_eq!(JsonValue::Number(-0f64).dump(), "-0");
 }
 
 #[test]
@@ -300,8 +332,23 @@ fn parse_integer() {
 }
 
 #[test]
+fn parse_negative_zero() {
+    assert_eq!(parse("-0").unwrap(), JsonValue::Number(-0f64));
+}
+
+#[test]
 fn parse_negative_integer() {
     assert_eq!(parse("-42").unwrap(), -42);
+}
+
+#[test]
+fn parse_number_with_leading_zero() {
+    assert!(parse("01").is_err());
+}
+
+#[test]
+fn parse_negative_number_with_leading_zero() {
+    assert!(parse("-01").is_err());
 }
 
 #[test]
@@ -320,6 +367,16 @@ fn parse_number_with_positive_e() {
 fn parse_number_with_negative_e() {
     assert_eq!(parse("5e-2").unwrap(), 0.05);
     assert_eq!(parse("5E-2").unwrap(), 0.05);
+}
+
+#[test]
+fn parse_number_with_invalid_e() {
+    assert!(parse("0e").is_err());
+}
+
+#[test]
+fn parse_large_number() {
+    assert_eq!(parse("18446744073709551616").unwrap(), 18446744073709552000f64);
 }
 
 #[test]
@@ -474,6 +531,17 @@ fn parse_escaped_unicode() {
     "#).unwrap();
 
     assert_eq!(data, "❤️");
+}
+
+#[test]
+fn parse_escaped_unicode_surrogate() {
+    let data = parse(r#"
+
+    "\uD834\uDD1E"
+
+    "#).unwrap();
+
+    assert_eq!(data, "𝄞");
 }
 
 #[test]
@@ -773,11 +841,11 @@ fn error_unexpected_character() {
 fn error_unexpected_token() {
     let err = parse("\n  [\n    null,\n  ]  \n").unwrap_err();
 
-    assert_eq!(err, JsonError::UnexpectedToken {
-        token: "]".to_string(),
+    assert_eq!(err, JsonError::UnexpectedCharacter {
+        ch: ']',
         line: 4,
         column: 3,
     });
 
-    assert_eq!(format!("{}", err), "Unexpected token: ] at (4:3)");
+    assert_eq!(format!("{}", err), "Unexpected character: ] at (4:3)");
 }

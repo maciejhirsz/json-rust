@@ -1,15 +1,27 @@
+use std::io::Write;
+use std::num::FpCategory;
 use JsonValue;
 
 pub trait Generator {
-    fn current_index(&self) -> usize;
+    fn get_buffer(&mut self) -> &mut Vec<u8>;
 
-    fn new_line(&mut self) {}
+    fn current_index(&mut self) -> usize {
+        self.get_buffer().len()
+    }
 
-    fn write(&mut self, slice: &[u8]);
+    #[inline(always)]
+    fn write(&mut self, slice: &[u8]) {
+        self.get_buffer().extend_from_slice(slice)
+    }
+
+    #[inline(always)]
+    fn write_char(&mut self, ch: u8) {
+        self.get_buffer().push(ch)
+    }
 
     fn write_min(&mut self, slice: &[u8], minslice: &[u8]);
 
-    fn write_char(&mut self, ch: u8);
+    fn new_line(&mut self) {}
 
     fn indent(&mut self) {}
 
@@ -46,41 +58,41 @@ pub trait Generator {
     }
 
     fn write_number(&mut self, mut num: f64) {
-        if num < 0.0 {
-            num = -num;
+        match num.classify() {
+            FpCategory::Nan      |
+            FpCategory::Infinite => {
+                self.write(b"null");
+                return;
+            },
+            FpCategory::Zero => {
+                self.write(if num.is_sign_negative() { b"-0" } else { b"0" });
+                return;
+            },
+            _ => {},
+        }
+
+        if num.is_sign_negative() {
+            num = num.abs();
             self.write_char(b'-');
         }
 
-        if num > 1e19 || num < 1e-15 {
-            self.write(format!("{:e}", num).as_bytes());
+        let fract = num.fract();
+
+        if fract > 0.0 {
+            if num < 1e-15 {
+                write!(self.get_buffer(), "{:e}", num).unwrap();
+            } else {
+                write!(self.get_buffer(), "{}", num).unwrap();
+            }
             return;
         }
 
-        let start = self.current_index();
+        if num > 1e19 || num < 1e-15 {
+            write!(self.get_buffer(), "{:e}", num).unwrap();
+            return;
+        }
 
         self.write_digits_from_u64(num as u64);
-
-        let mut fract = num.fract();
-
-        if fract < 1e-16 {
-            return;
-        }
-
-        let mut length = self.current_index() - start;
-
-        fract *= 10.0;
-
-        self.write_char(b'.');
-        self.write_char((fract as u8) + b'0');
-        fract = fract.fract();
-        length += 2;
-
-        while length < 17 && fract > 1e-15 {
-            fract *= 10.0;
-            self.write_char((fract as u8) + b'0');
-            fract = fract.fract();
-            length += 1;
-        }
     }
 
     fn write_json(&mut self, json: &JsonValue) {
@@ -147,20 +159,14 @@ impl DumpGenerator {
 }
 
 impl Generator for DumpGenerator {
-    fn current_index(&self) -> usize {
-        self.code.len()
+    #[inline(always)]
+    fn get_buffer(&mut self) -> &mut Vec<u8> {
+        &mut self.code
     }
 
-    fn write(&mut self, slice: &[u8]) {
-        self.code.extend_from_slice(slice);
-    }
-
+    #[inline(always)]
     fn write_min(&mut self, _: &[u8], minslice: &[u8]) {
         self.code.extend_from_slice(minslice);
-    }
-
-    fn write_char(&mut self, ch: u8) {
-        self.code.push(ch);
     }
 
     fn consume(self) -> String {
@@ -185,8 +191,14 @@ impl PrettyGenerator {
 }
 
 impl Generator for PrettyGenerator {
-    fn current_index(&self) -> usize {
-        self.code.len()
+    #[inline(always)]
+    fn get_buffer(&mut self) -> &mut Vec<u8> {
+        &mut self.code
+    }
+
+    #[inline(always)]
+    fn write_min(&mut self, slice: &[u8], _: &[u8]) {
+        self.code.extend_from_slice(slice);
     }
 
     fn new_line(&mut self) {
@@ -194,18 +206,6 @@ impl Generator for PrettyGenerator {
         for _ in 0..(self.dent * self.spaces_per_indent) {
             self.code.push(b' ');
         }
-    }
-
-    fn write(&mut self, slice: &[u8]) {
-        self.code.extend_from_slice(slice);
-    }
-
-    fn write_min(&mut self, slice: &[u8], _: &[u8]) {
-        self.code.extend_from_slice(slice);
-    }
-
-    fn write_char(&mut self, ch: u8) {
-        self.code.push(ch);
     }
 
     fn indent(&mut self) {

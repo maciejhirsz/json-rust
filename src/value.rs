@@ -49,12 +49,6 @@ impl JsonValue {
         JsonValue::Array(Vec::new())
     }
 
-    /// Checks if the value stored matches `other`.
-    #[deprecated(since="0.7.0", note="Use `value == other` instead")]
-    pub fn is<T>(&self, other: T) -> bool where T: Into<JsonValue> {
-        *self == other.into()
-    }
-
     pub fn is_string(&self) -> bool {
         match *self {
             JsonValue::String(_) => true,
@@ -116,26 +110,10 @@ impl JsonValue {
         }
     }
 
-    #[deprecated(since="0.6.1", note="Use `as_str` instead")]
-    pub fn as_string(&self) -> JsonResult<&String> {
-        match *self {
-            JsonValue::String(ref value) => Ok(value),
-            _ => Err(JsonError::wrong_type("String"))
-        }
-    }
-
     pub fn as_str(&self) -> Option<&str> {
         match *self {
             JsonValue::String(ref value) => Some(value.as_ref()),
             _                            => None
-        }
-    }
-
-    #[deprecated(since="0.6.1", note="Use `as_f64` instead")]
-    pub fn as_number(&self) -> JsonResult<&f64> {
-        match *self {
-            JsonValue::Number(ref value) => Ok(value),
-            _ => Err(JsonError::wrong_type("Number"))
         }
     }
 
@@ -197,75 +175,6 @@ impl JsonValue {
         }
     }
 
-    #[deprecated(since="0.6.1", note="Use `as_bool` instead")]
-    pub fn as_boolean(&self) -> JsonResult<&bool> {
-        match *self {
-            JsonValue::Boolean(ref value) => Ok(value),
-            _ => Err(JsonError::wrong_type("Boolean"))
-        }
-    }
-
-    /// Works on `JsonValue::Object` - create or override key with value.
-    #[must_use]
-    #[deprecated(since="0.6.0", note="Use `object[key] = value.into()` instead")]
-    pub fn put<T>(&mut self, key: &str, value: T) -> JsonResult<()>
-    where T: Into<JsonValue> {
-        match *self {
-            JsonValue::Object(ref mut btree) => {
-                btree.insert(key.into(), value.into());
-                Ok(())
-            },
-            _ => Err(JsonError::wrong_type("Object"))
-        }
-    }
-
-    /// Works on `JsonValue::Object` - get a reference to a value behind key.
-    /// For most purposes consider using `object[key]` instead.
-    #[deprecated(since="0.6.0", note="Use `object[key]` instead")]
-    pub fn get(&self, key: &str) -> JsonResult<&JsonValue> {
-        match *self {
-            JsonValue::Object(ref btree) => match btree.get(key) {
-                Some(value) => Ok(value),
-                _ => Err(JsonError::undefined(key))
-            },
-            _ => Err(JsonError::wrong_type("Object"))
-        }
-    }
-
-    /// Works on `JsonValue::Object` - get a mutable reference to a value behind
-    /// the key.
-    #[deprecated(since="0.6.0", note="Use `object[key]` instead")]
-    pub fn get_mut(&mut self, key: &str) -> JsonResult<&mut JsonValue> {
-        match *self {
-            JsonValue::Object(ref mut btree) => match btree.get_mut(key) {
-                Some(value) => Ok(value),
-                _ => Err(JsonError::undefined(key))
-            },
-            _ => Err(JsonError::wrong_type("Object"))
-        }
-    }
-
-    /// Attempts to get a mutable reference to the value behind a key on an
-    /// object. If the reference doesn't exists, it will be created and
-    /// assigned a null. If `self` is not an object, an empty object with
-    /// null key will be created.
-    #[deprecated(since="0.6.0", note="Use `object[key]` instead")]
-    pub fn with(&mut self, key: &str) -> &mut JsonValue {
-        if !self.is_object() {
-            *self = JsonValue::new_object();
-        }
-
-        match *self {
-            JsonValue::Object(ref mut btree) => {
-                if !btree.contains_key(key) {
-                    btree.insert(key.to_string(), JsonValue::Null);
-                }
-                btree.get_mut(key).unwrap()
-            },
-            _ => unreachable!()
-        }
-    }
-
     /// Works on `JsonValue::Array` - pushes a new value to the array.
     #[must_use]
     pub fn push<T>(&mut self, value: T) -> JsonResult<()>
@@ -287,38 +196,6 @@ impl JsonValue {
                 vec.pop().unwrap_or(JsonValue::Null)
             },
             _ => JsonValue::Null
-        }
-    }
-
-    /// Works on `JsonValue::Array` - gets a reference to a value at index.
-    /// For most purposes consider using `array[index]` instead.
-    #[deprecated(since="0.6.0", note="Use `array[index]` instead")]
-    pub fn at(&self, index: usize) -> JsonResult<&JsonValue> {
-        match *self {
-            JsonValue::Array(ref vec) => {
-                if index < vec.len() {
-                    Ok(&vec[index])
-                } else {
-                    Err(JsonError::ArrayIndexOutOfBounds)
-                }
-            },
-            _ => Err(JsonError::wrong_type("Array"))
-        }
-    }
-
-    /// Works on `JsonValue::Array` - gets a mutable reference to a value
-    /// at index.
-    #[deprecated(since="0.6.0", note="Use `array[index]` instead")]
-    pub fn at_mut(&mut self, index: usize) -> JsonResult<&mut JsonValue> {
-        match *self {
-            JsonValue::Array(ref mut vec) => {
-                if index < vec.len() {
-                    Ok(&mut vec[index])
-                } else {
-                    Err(JsonError::ArrayIndexOutOfBounds)
-                }
-            },
-            _ => Err(JsonError::wrong_type("Array"))
         }
     }
 

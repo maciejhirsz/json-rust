@@ -1,15 +1,9 @@
-use parser::Token;
 use std::error::Error;
 use std::fmt;
 use std::char;
 
 #[derive(Debug, PartialEq)]
 pub enum JsonError {
-    UnexpectedToken {
-        token: String,
-        line: usize,
-        column: usize,
-    },
     UnexpectedCharacter {
         ch: char,
         line: usize,
@@ -23,14 +17,6 @@ pub enum JsonError {
 }
 
 impl JsonError {
-    pub fn unexpected_token(token: Token,) -> Self {
-        JsonError::UnexpectedToken {
-            token: token.to_string(),
-            line: 0,
-            column: 0,
-        }
-    }
-
     pub fn wrong_type(expected: &str) -> Self {
         JsonError::WrongType(expected.into())
     }
@@ -45,12 +31,6 @@ impl fmt::Display for JsonError {
         use JsonError::*;
 
         match *self {
-            UnexpectedToken {
-                ref token,
-                ref line,
-                ref column,
-            } => write!(f, "Unexpected token: {} at ({}:{})", token, line, column),
-
             UnexpectedCharacter {
                 ref ch,
                 ref line,
@@ -70,7 +50,6 @@ impl Error for JsonError {
     fn description(&self) -> &str {
         use JsonError::*;
         match *self {
-            UnexpectedToken { .. }     => "Unexpected token",
             UnexpectedCharacter { .. } => "Unexpected character",
             UnexpectedEndOfJson        => "Unexpected end of JSON",
             FailedUtf8Parsing          => "Failed to read bytes as UTF-8 from JSON",
