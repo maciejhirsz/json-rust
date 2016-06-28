@@ -96,9 +96,9 @@ impl<'a> Tokenizer<'a> {
 
         Position {
             line: bytes.lines().count(),
-            column: bytes.lines().last().map(|line| {
+            column: bytes.lines().last().map_or(1, |line| {
                 line.chars().count() + 1
-            }).unwrap_or(1)
+            })
         }
     }
 
@@ -125,7 +125,7 @@ impl<'a> Tokenizer<'a> {
             self.left_over = self.next_byte();
         }
 
-        return self.left_over;
+        self.left_over
     }
 
     #[inline(always)]
