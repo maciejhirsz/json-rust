@@ -186,16 +186,19 @@ impl<'a> Tokenizer<'a> {
                 b'\\' => {
                     let ch = try!(self.expect_byte());
                     let ch = match ch {
-                        b'b' => 0x8,
-                        b'f' => 0xC,
-                        b't' => b'\t',
-                        b'r' => b'\r',
-                        b'n' => b'\n',
-                        b'u' => {
+                        b'u'  => {
                             try!(self.read_codepoint());
                             continue;
                         },
-                        _   => ch
+                        b'"'  |
+                        b'\\' |
+                        b'/'  => ch,
+                        b'b'  => 0x8,
+                        b'f'  => 0xC,
+                        b't'  => b'\t',
+                        b'r'  => b'\r',
+                        b'n'  => b'\n',
+                        _     => return Err(self.unexpected_character_error(ch))
                     };
                     self.buffer.push(ch);
                 },
@@ -203,8 +206,9 @@ impl<'a> Tokenizer<'a> {
             }
         }
 
-        String::from_utf8(self.buffer.clone())
-        .or(Err(JsonError::FailedUtf8Parsing))
+        // Since the original source is already valid UTF-8, and `\`
+        // cannot occur in front of a codepoint > 127, this is safe.
+        Ok( unsafe { str::from_utf8_unchecked(&self.buffer).into() } )
     }
 
     fn read_number(&mut self, first: u8, is_negative: bool) -> JsonResult<f64> {
