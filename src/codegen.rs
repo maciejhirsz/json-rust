@@ -2,17 +2,25 @@ use std::io::Write;
 use JsonValue;
 
 pub trait Generator {
-    fn current_index(&self) -> usize;
-
     fn get_buffer(&mut self) -> &mut Vec<u8>;
 
-    fn new_line(&mut self) {}
+    fn current_index(&mut self) -> usize {
+        self.get_buffer().len()
+    }
 
-    fn write(&mut self, slice: &[u8]);
+    #[inline(always)]
+    fn write(&mut self, slice: &[u8]) {
+        self.get_buffer().extend_from_slice(slice)
+    }
+
+    #[inline(always)]
+    fn write_char(&mut self, ch: u8) {
+        self.get_buffer().push(ch)
+    }
 
     fn write_min(&mut self, slice: &[u8], minslice: &[u8]);
 
-    fn write_char(&mut self, ch: u8);
+    fn new_line(&mut self) {}
 
     fn indent(&mut self) {}
 
@@ -150,24 +158,14 @@ impl DumpGenerator {
 }
 
 impl Generator for DumpGenerator {
-    fn current_index(&self) -> usize {
-        self.code.len()
-    }
-
+    #[inline(always)]
     fn get_buffer(&mut self) -> &mut Vec<u8> {
         &mut self.code
     }
 
-    fn write(&mut self, slice: &[u8]) {
-        self.code.extend_from_slice(slice);
-    }
-
+    #[inline(always)]
     fn write_min(&mut self, _: &[u8], minslice: &[u8]) {
         self.code.extend_from_slice(minslice);
-    }
-
-    fn write_char(&mut self, ch: u8) {
-        self.code.push(ch);
     }
 
     fn consume(self) -> String {
@@ -192,12 +190,14 @@ impl PrettyGenerator {
 }
 
 impl Generator for PrettyGenerator {
-    fn current_index(&self) -> usize {
-        self.code.len()
-    }
-
+    #[inline(always)]
     fn get_buffer(&mut self) -> &mut Vec<u8> {
         &mut self.code
+    }
+
+    #[inline(always)]
+    fn write_min(&mut self, slice: &[u8], _: &[u8]) {
+        self.code.extend_from_slice(slice);
     }
 
     fn new_line(&mut self) {
@@ -205,18 +205,6 @@ impl Generator for PrettyGenerator {
         for _ in 0..(self.dent * self.spaces_per_indent) {
             self.code.push(b' ');
         }
-    }
-
-    fn write(&mut self, slice: &[u8]) {
-        self.code.extend_from_slice(slice);
-    }
-
-    fn write_min(&mut self, slice: &[u8], _: &[u8]) {
-        self.code.extend_from_slice(slice);
-    }
-
-    fn write_char(&mut self, ch: u8) {
-        self.code.push(ch);
     }
 
     fn indent(&mut self) {

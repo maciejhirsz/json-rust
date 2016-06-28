@@ -1,6 +1,5 @@
 use std::char;
 use std::str;
-use std::iter::Enumerate;
 use std::str::Bytes;
 use std::collections::BTreeMap;
 use { JsonValue, JsonError, JsonResult };
@@ -73,7 +72,7 @@ struct Position {
 
 struct Tokenizer<'a> {
     source: &'a str,
-    byte_iter: Enumerate<Bytes<'a>>,
+    byte_iter: Bytes<'a>,
     buffer: Vec<u8>,
     left_over: Option<u8>,
     current_index: usize,
@@ -84,7 +83,7 @@ impl<'a> Tokenizer<'a> {
     pub fn new(source: &'a str) -> Self {
         Tokenizer {
             source: source,
-            byte_iter: source.bytes().enumerate(),
+            byte_iter: source.bytes(),
             buffer: Vec::with_capacity(512),
             left_over: None,
             current_index: 0,
@@ -93,7 +92,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     pub fn source_position_from_index(&self, index: usize) -> Position {
-        let (bytes, _) = self.source.split_at(index);
+        let (bytes, _) = self.source.split_at(index-1);
 
         Position {
             line: bytes.lines().count(),
@@ -116,10 +115,8 @@ impl<'a> Tokenizer<'a> {
 
     #[inline(always)]
     fn next_byte(&mut self) -> Option<u8> {
-        self.byte_iter.next().map(|(index, byte)| {
-            self.current_index = index;
-            byte
-        })
+        self.current_index += 1;
+        self.byte_iter.next()
     }
 
     #[inline(always)]
@@ -210,15 +207,15 @@ impl<'a> Tokenizer<'a> {
         .or(Err(JsonError::FailedUtf8Parsing))
     }
 
-    fn read_number(&mut self, first: u8) -> JsonResult<f64> {
-        let mut num = if first == b'-' { 0 } else { (first - b'0') as u64 };
+    fn read_number(&mut self, first: u8, is_negative: bool) -> JsonResult<f64> {
+        let mut num = (first - b'0') as u64;
 
         read_num!(self, digit, num = num * 10 + digit as u64);
 
         match self.peek_byte() {
             Some(b'.') | Some(b'e') | Some(b'E') => {},
             _ => {
-                return if first == b'-' {
+                return if is_negative {
                     Ok(-(num as f64))
                 } else {
                     Ok(num as f64)
@@ -265,40 +262,42 @@ impl<'a> Tokenizer<'a> {
             byte => self.left_over = byte
         }
 
-        Ok(if first == b'-' { num * -1.0 } else { num })
+        Ok(if is_negative { num * -1.0 } else { num })
     }
 
     fn next(&mut self) -> JsonResult<Token> {
-        loop {
-            let ch = try!(self.checked_expect_byte());
-            self.current_token_index = self.current_index;
+        let ch = try!(self.checked_expect_byte());
+        self.current_token_index = self.current_index;
 
-            return Ok(match ch {
-                b',' => Token::Comma,
-                b':' => Token::Colon,
-                b'[' => Token::BracketOn,
-                b']' => Token::BracketOff,
-                b'{' => Token::BraceOn,
-                b'}' => Token::BraceOff,
-                b'"' => Token::String(try!(self.read_string())),
-                b'0' ... b'9' | b'-' => Token::Number(try!(self.read_number(ch))),
-                b't' => {
-                    sequence!(self, b'r', b'u', b'e');
-                    Token::Boolean(true)
-                },
-                b'f' => {
-                    sequence!(self, b'a', b'l', b's', b'e');
-                    Token::Boolean(false)
-                },
-                b'n' => {
-                    sequence!(self, b'u', b'l', b'l');
-                    Token::Null
-                },
-                // whitespace
-                9 ... 13 | 32 | 133 | 160 => continue,
-                _ => return Err(self.unexpected_character_error(ch))
-            });
-        }
+        Ok(match ch {
+            b',' => Token::Comma,
+            b':' => Token::Colon,
+            b'[' => Token::BracketOn,
+            b']' => Token::BracketOff,
+            b'{' => Token::BraceOn,
+            b'}' => Token::BraceOff,
+            b'"' => Token::String(try!(self.read_string())),
+            b'0' ... b'9' => Token::Number(try!(self.read_number(ch, false))),
+            b'-' => {
+                let ch = try!(self.expect_byte());
+                Token::Number(try!(self.read_number(ch, true)))
+            }
+            b't' => {
+                sequence!(self, b'r', b'u', b'e');
+                Token::Boolean(true)
+            },
+            b'f' => {
+                sequence!(self, b'a', b'l', b's', b'e');
+                Token::Boolean(false)
+            },
+            b'n' => {
+                sequence!(self, b'u', b'l', b'l');
+                Token::Null
+            },
+            // whitespace
+            9 ... 13 | 32 | 133 | 160 => return self.next(),
+            _ => return Err(self.unexpected_character_error(ch))
+        })
     }
 }
 
