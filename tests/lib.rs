@@ -778,11 +778,11 @@ fn error_unexpected_character() {
 fn error_unexpected_token() {
     let err = parse("\n  [\n    null,\n  ]  \n").unwrap_err();
 
-    assert_eq!(err, JsonError::UnexpectedToken {
-        token: "]".to_string(),
+    assert_eq!(err, JsonError::UnexpectedCharacter {
+        ch: ']',
         line: 4,
         column: 3,
     });
 
-    assert_eq!(format!("{}", err), "Unexpected token: ] at (4:3)");
+    assert_eq!(format!("{}", err), "Unexpected character: ] at (4:3)");
 }
