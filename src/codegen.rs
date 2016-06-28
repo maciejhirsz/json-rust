@@ -1,4 +1,5 @@
 use std::io::Write;
+use std::num::FpCategory;
 use JsonValue;
 
 pub trait Generator {
@@ -57,9 +58,33 @@ pub trait Generator {
     }
 
     fn write_number(&mut self, mut num: f64) {
-        if num < 0.0 {
-            num = -num;
+        match num.classify() {
+            FpCategory::Nan      |
+            FpCategory::Infinite => {
+                self.write(b"null");
+                return;
+            },
+            FpCategory::Zero => {
+                self.write(if num.is_sign_negative() { b"-0" } else { b"0" });
+                return;
+            },
+            _ => {},
+        }
+
+        if num.is_sign_negative() {
+            num = num.abs();
             self.write_char(b'-');
+        }
+
+        let fract = num.fract();
+
+        if fract > 0.0 {
+            if num < 1e-15 {
+                write!(self.get_buffer(), "{:e}", num).unwrap();
+            } else {
+                write!(self.get_buffer(), "{}", num).unwrap();
+            }
+            return;
         }
 
         if num > 1e19 || num < 1e-15 {
@@ -67,31 +92,7 @@ pub trait Generator {
             return;
         }
 
-        let start = self.current_index();
-
         self.write_digits_from_u64(num as u64);
-
-        let mut fract = num.fract();
-
-        if fract < 1e-16 {
-            return;
-        }
-
-        let mut length = self.current_index() - start;
-
-        fract *= 10.0;
-
-        self.write_char(b'.');
-        self.write_char((fract as u8) + b'0');
-        fract = fract.fract();
-        length += 2;
-
-        while length < 17 && fract > 1e-15 {
-            fract *= 10.0;
-            self.write_char((fract as u8) + b'0');
-            fract = fract.fract();
-            length += 1;
-        }
     }
 
     fn write_json(&mut self, json: &JsonValue) {
