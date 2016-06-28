@@ -323,6 +323,11 @@ fn parse_number_with_negative_e() {
 }
 
 #[test]
+fn parse_large_number() {
+    assert_eq!(parse("18446744073709551616").unwrap(), 18446744073709552000f64);
+}
+
+#[test]
 fn parse_array() {
     assert_eq!(parse(r#"[10, "foo", true, null]"#).unwrap(), array![
         10,
