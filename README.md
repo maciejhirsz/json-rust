@@ -55,7 +55,7 @@ assert_eq!(parsed, instantiated);
 
 ## First class citizen
 
-Using macros and easy indexing, it's easy to work with the data.
+Using macros and indexing, it's easy to work with the data.
 
 ```rust
 let mut data = object!{
@@ -114,8 +114,8 @@ extern crate json;
 
 While performance is not the main goal of this crate, it is still relevant, and it's doing pretty well in the company:
 
-![](http://terhix.com/json-perf-2.png)
+![](http://terhix.com/json-perf-3.png)
 
-[The benchmarks](https://github.com/maciejhirsz/json-rust/blob/benches/benches/log.rs) were run on 2012 MacBook Air, your results may vary. Many thanks to @dtolnay for providing the baseline struct and test data the tests could be run on.
+[The benchmarks](https://github.com/maciejhirsz/json-rust/blob/benches/benches/log.rs) were run on 2012 MacBook Air, your results may vary. Many thanks to [@dtolnay](https://github.com/dtolnay) for providing the baseline struct and test data the tests could be run on.
 
 While this is not necessarily a be-all end-all benchmark, the main takeaway from this is that Serde parsing is much faster when parsing to a struct, since the parser knows exactly the kind of data it needs, and doesn't pay the (re)allocation costs of pushing data to a map. Also worth noting, rustc-serialize suffers since it first has to parse JSON to generic enum-based values, and only then map those onto structs.
