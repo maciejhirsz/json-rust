@@ -39,13 +39,9 @@ macro_rules! consume_whitespace {
             // whitespace
             9 ... 13 | 32 => {
                 loop {
-                    let consume = try!($parser.expect_byte());
-                    match consume {
-                        9 ... 13 | 32 => continue,
-                        _             => {
-                            $ch = consume;
-                            break
-                        }
+                    match try!($parser.expect_byte()) {
+                        9 ... 13 | 32 => {},
+                        ch            => { $ch = ch; break }
                     }
                 }
             },
@@ -121,8 +117,8 @@ macro_rules! expect_string {
 }
 
 macro_rules! expect_value {
-    {$parser:ident $( $byte:pat => $then:expr ),*} => ({
-        let mut ch = try!($parser.checked_expect_byte());
+    {$parser:ident $(, $byte:pat => $then:expr )*} => ({
+        let mut ch = try!($parser.expect_byte());
 
         consume_whitespace!($parser, ch);
 
@@ -275,21 +271,27 @@ impl<'a> Parser<'a> {
         self.checked_next_byte().ok_or(JsonError::UnexpectedEndOfJson)
     }
 
-    fn read_char_as_hexnumber(&mut self) -> JsonResult<u32> {
+    fn read_hexdec_digit(&mut self) -> JsonResult<u32> {
         let ch = try!(self.expect_byte());
         Ok(match ch {
-            b'0' ... b'9' => (ch - b'0') as u32,
-            b'a' ... b'f' => (ch + 10 - b'a') as u32,
-            b'A' ... b'F' => (ch + 10 - b'A') as u32,
+            b'0' ... b'9' => (ch - b'0'),
+            b'a' ... b'f' => (ch + 10 - b'a'),
+            b'A' ... b'F' => (ch + 10 - b'A'),
             ch            => return self.unexpected_character(ch),
-        })
+        } as u32)
+    }
+
+    fn read_hexdec_codepoint(&mut self) -> JsonResult<u32> {
+        Ok(
+            try!(self.read_hexdec_digit()) << 12 |
+            try!(self.read_hexdec_digit()) << 8  |
+            try!(self.read_hexdec_digit()) << 4  |
+            try!(self.read_hexdec_digit())
+        )
     }
 
     fn read_codepoint(&mut self) -> JsonResult<()> {
-        let mut codepoint = try!(self.read_char_as_hexnumber()) << 12
-                      | try!(self.read_char_as_hexnumber()) << 8
-                      | try!(self.read_char_as_hexnumber()) << 4
-                      | try!(self.read_char_as_hexnumber());
+        let mut codepoint = try!(self.read_hexdec_codepoint());
 
         match codepoint {
             0x0000 ... 0xD7FF => {},
@@ -299,14 +301,10 @@ impl<'a> Parser<'a> {
 
                 sequence!(self, b'\\', b'u');
 
-                let lower = try!(self.read_char_as_hexnumber()) << 12
-                          | try!(self.read_char_as_hexnumber()) << 8
-                          | try!(self.read_char_as_hexnumber()) << 4
-                          | try!(self.read_char_as_hexnumber());
+                let lower = try!(self.read_hexdec_codepoint());
 
                 if let 0xDC00 ... 0xDFFF = lower {
-                    codepoint |= lower - 0xDC00;
-                    codepoint += 0x010000;
+                    codepoint = (codepoint | lower - 0xDC00) + 0x010000;
                 } else {
                     return Err(JsonError::FailedUtf8Parsing)
                 }
@@ -317,21 +315,21 @@ impl<'a> Parser<'a> {
 
         match codepoint {
             0x0000 ... 0x007F => self.buffer.push(codepoint as u8),
-            0x0080 ... 0x07FF => {
-                self.buffer.push((((codepoint >> 6) as u8) & 0x1F) | 0xC0);
-                self.buffer.push(((codepoint as u8) & 0x3F) | 0x80);
-            },
-            0x0800 ... 0xFFFF => {
-                self.buffer.push((((codepoint >> 12) as u8) & 0x0F) | 0xE0);
-                self.buffer.push((((codepoint >> 6) as u8) & 0x3F) | 0x80);
-                self.buffer.push(((codepoint as u8) & 0x3F) | 0x80);
-            },
-            0x10000 ... 0x10FFFF => {
-                self.buffer.push((((codepoint >> 18) as u8) & 0x07) | 0xF0);
-                self.buffer.push((((codepoint >> 12) as u8) & 0x3F) | 0x80);
-                self.buffer.push((((codepoint >> 6) as u8) & 0x3F) | 0x80);
-                self.buffer.push(((codepoint as u8) & 0x3F) | 0x80);
-            },
+            0x0080 ... 0x07FF => self.buffer.extend_from_slice(&[
+                (((codepoint >> 6) as u8) & 0x1F) | 0xC0,
+                ((codepoint        as u8) & 0x3F) | 0x80
+            ]),
+            0x0800 ... 0xFFFF => self.buffer.extend_from_slice(&[
+                (((codepoint >> 12) as u8) & 0x0F) | 0xE0,
+                (((codepoint >> 6)  as u8) & 0x3F) | 0x80,
+                ((codepoint         as u8) & 0x3F) | 0x80
+            ]),
+            0x10000 ... 0x10FFFF => self.buffer.extend_from_slice(&[
+                (((codepoint >> 18) as u8) & 0x07) | 0xF0,
+                (((codepoint >> 12) as u8) & 0x3F) | 0x80,
+                (((codepoint >> 6)  as u8) & 0x3F) | 0x80,
+                ((codepoint         as u8) & 0x3F) | 0x80
+            ]),
             _ => return Err(JsonError::FailedUtf8Parsing)
         }
 
@@ -444,12 +442,9 @@ impl<'a> Parser<'a> {
     }
 
     fn read_array(&mut self) -> JsonResult<Vec<JsonValue>> {
+        let first = expect_value!{ self, b']' => return Ok(Vec::new()) };
+
         let mut array = Vec::with_capacity(20);
-
-        let first = expect_value!{ self
-            b']' => return Ok(array)
-        };
-
         array.push(first);
 
         loop {
@@ -466,18 +461,13 @@ impl<'a> Parser<'a> {
     }
 
     fn ensure_end(&mut self) -> JsonResult<()> {
-        let ch = self.checked_next_byte();
+        let mut next = self.checked_next_byte();
 
-        if let Some(ch) = ch {
+        while let Some(ch) = next {
             match ch {
                 // whitespace
-                9 ... 13 | 32 => while let Some(ch) = self.next_byte() {
-                    match ch {
-                        9 ... 13 | 32 => {},
-                        _ => return self.unexpected_character(ch)
-                    }
-                },
-                _ => return self.unexpected_character(ch)
+                9 ... 13 | 32 => next = self.next_byte(),
+                _             => return self.unexpected_character(ch)
             }
         }
 
