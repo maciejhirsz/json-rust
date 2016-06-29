@@ -545,6 +545,17 @@ fn parse_escaped_unicode_surrogate() {
 }
 
 #[test]
+fn parse_escaped_unicode_surrogate_fail() {
+    let err = parse(r#"
+
+    "\uD834 \uDD1E"
+
+    "#);
+
+    assert!(err.is_err());
+}
+
+#[test]
 fn array_len() {
     let data = array![0, 1, 2, 3];
 

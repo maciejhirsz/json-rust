@@ -264,29 +264,43 @@ impl<'a> Parser<'a> {
                 codepoint -= 0xD800;
                 codepoint <<= 10;
 
-                expect!(self, b'\\');
-                expect!(self, b'u');
+                sequence!(self, b'\\', b'u');
 
                 let lower = try!(self.read_char_as_hexnumber()) << 12
                           | try!(self.read_char_as_hexnumber()) << 8
                           | try!(self.read_char_as_hexnumber()) << 4
                           | try!(self.read_char_as_hexnumber());
 
-                codepoint |= lower - 0xDC00;
-
-                codepoint += 0x010000;
+                if let 0xDC00 ... 0xDFFF = lower {
+                    codepoint |= lower - 0xDC00;
+                    codepoint += 0x010000;
+                } else {
+                    return Err(JsonError::FailedUtf8Parsing)
+                }
             },
             _ => {}
         }
 
-        let ch = try!(
-            char::from_u32(codepoint).ok_or(JsonError::FailedUtf8Parsing)
-        );
+        match codepoint {
+            0x0000 ... 0x007F => self.buffer.push(codepoint as u8),
+            0x0080 ... 0x07FF => {
+                self.buffer.push((((codepoint >> 6) as u8) & 0x1F) | 0xC0);
+                self.buffer.push(((codepoint as u8) & 0x3F) | 0x80);
+            },
+            0x0800 ... 0xFFFF => {
+                self.buffer.push((((codepoint >> 12) as u8) & 0x0F) | 0xE0);
+                self.buffer.push((((codepoint >> 6) as u8) & 0x3F) | 0x80);
+                self.buffer.push(((codepoint as u8) & 0x3F) | 0x80);
+            },
+            0x10000 ... 0x10FFFF => {
+                self.buffer.push((((codepoint >> 18) as u8) & 0x07) | 0xF0);
+                self.buffer.push((((codepoint >> 12) as u8) & 0x3F) | 0x80);
+                self.buffer.push((((codepoint >> 6) as u8) & 0x3F) | 0x80);
+                self.buffer.push(((codepoint as u8) & 0x3F) | 0x80);
+            },
+            _ => return Err(JsonError::FailedUtf8Parsing)
+        }
 
-        let mut buffer = String::new();
-        buffer.push(ch);
-
-        self.buffer.extend_from_slice(buffer.as_bytes());
         Ok(())
     }
 
