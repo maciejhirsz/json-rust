@@ -260,7 +260,8 @@ impl<'a> Parser<'a> {
                       | try!(self.read_char_as_hexnumber());
 
         match codepoint {
-            0xD800 ... 0xDFFF => {
+            0x0000 ... 0xD7FF => {},
+            0xD800 ... 0xDBFF => {
                 codepoint -= 0xD800;
                 codepoint <<= 10;
 
@@ -278,7 +279,8 @@ impl<'a> Parser<'a> {
                     return Err(JsonError::FailedUtf8Parsing)
                 }
             },
-            _ => {}
+            0xE000 ... 0xFFFF => {},
+            _ => return Err(JsonError::FailedUtf8Parsing)
         }
 
         match codepoint {

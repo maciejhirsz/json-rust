@@ -87,7 +87,7 @@ pub trait Generator {
             return;
         }
 
-        if num > 1e19 || num < 1e-15 {
+        if num > 1e19 {
             write!(self.get_buffer(), "{:e}", num).unwrap();
             return;
         }

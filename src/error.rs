@@ -11,18 +11,12 @@ pub enum JsonError {
     },
     UnexpectedEndOfJson,
     FailedUtf8Parsing,
-    ArrayIndexOutOfBounds,
     WrongType(String),
-    UndefinedField(String),
 }
 
 impl JsonError {
     pub fn wrong_type(expected: &str) -> Self {
         JsonError::WrongType(expected.into())
-    }
-
-    pub fn undefined(field: &str) -> Self {
-        JsonError::UndefinedField(field.into())
     }
 }
 
@@ -39,9 +33,7 @@ impl fmt::Display for JsonError {
 
             UnexpectedEndOfJson   => write!(f, "Unexpected end of JSON"),
             FailedUtf8Parsing     => write!(f, "Failed to parse UTF-8 bytes"),
-            ArrayIndexOutOfBounds => write!(f, "Array index out of bounds!"),
             WrongType(ref s)      => write!(f, "Wrong type, expected: {}", s),
-            UndefinedField(ref s) => write!(f, "Undefined field: {}", s)
         }
     }
 }
@@ -53,9 +45,7 @@ impl Error for JsonError {
             UnexpectedCharacter { .. } => "Unexpected character",
             UnexpectedEndOfJson        => "Unexpected end of JSON",
             FailedUtf8Parsing          => "Failed to read bytes as UTF-8 from JSON",
-            ArrayIndexOutOfBounds      => "Array index out of bounds!",
             WrongType(_)               => "Wrong type",
-            UndefinedField(_)          => "Undefined field",
         }
     }
 }
