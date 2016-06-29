@@ -9,7 +9,7 @@ macro_rules! sequence {
         $(
             match $parser.next_byte() {
                 Some($ch) => {},
-                Some(ch)  => return Err($parser.unexpected_character(ch)),
+                Some(ch)  => return $parser.unexpected_character(ch),
                 None      => return Err(JsonError::UnexpectedEndOfJson)
             }
         )*
@@ -62,7 +62,7 @@ macro_rules! expect {
 
         match ch {
             $byte         => {},
-            _ => return Err($parser.unexpected_character(ch))
+            _ => return $parser.unexpected_character(ch)
         }
     })
 }
@@ -77,7 +77,7 @@ macro_rules! expect_one_of {
             $(
                 $byte => $then,
             )*
-            _ => return Err($parser.unexpected_character(ch))
+            _ => return $parser.unexpected_character(ch)
         }
 
     })
@@ -106,7 +106,7 @@ macro_rules! expect_string {
                         b't'  => b'\t',
                         b'r'  => b'\r',
                         b'n'  => b'\n',
-                        _     => return Err($parser.unexpected_character(ch))
+                        _     => return $parser.unexpected_character(ch)
                     };
                     $parser.buffer.push(ch);
                 },
@@ -134,21 +134,21 @@ macro_rules! expect_value {
             b'{' => JsonValue::Object(try!($parser.read_object())),
             b'"' => JsonValue::String(expect_string!($parser)),
             b'0' => {
-                let num = try!($parser.read_number_with_fraction(0.0, false));
+                let num = try!($parser.read_number_with_fraction(0.0));
                 JsonValue::Number(num)
             },
             b'1' ... b'9' => {
-                let num = try!($parser.read_number(ch, false));
+                let num = try!($parser.read_number(ch));
                 JsonValue::Number(num)
             },
             b'-' => {
                 let ch = try!($parser.expect_byte());
                 let num = match ch {
-                    b'0' => try!($parser.read_number_with_fraction(0.0, true)),
-                    b'1' ... b'9' => try!($parser.read_number(ch, true)),
-                    _    => return Err($parser.unexpected_character(ch))
+                    b'0' => try!($parser.read_number_with_fraction(0.0)),
+                    b'1' ... b'9' => try!($parser.read_number(ch)),
+                    _    => return $parser.unexpected_character(ch)
                 };
-                JsonValue::Number(num)
+                JsonValue::Number(-num)
             }
             b't' => {
                 sequence!($parser, b'r', b'u', b'e');
@@ -162,7 +162,7 @@ macro_rules! expect_value {
                 sequence!($parser, b'u', b'l', b'l');
                 JsonValue::Null
             },
-            _ => return Err($parser.unexpected_character(ch))
+            _ => return $parser.unexpected_character(ch)
         }
     })
 }
@@ -202,15 +202,47 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn unexpected_character(&self, byte: u8) -> JsonError {
+    fn unexpected_character<T: Sized>(&mut self, byte: u8) -> JsonResult<T> {
         let pos = self.source_position_from_index(self.current_index);
-        let ch = char::from_u32(byte as u32).unwrap_or('?');
 
-        JsonError::UnexpectedCharacter {
+        let ch = if byte & 0x80 != 0 {
+            let mut buf = [byte,0,0,0];
+            let mut len = 0usize;
+
+            if byte & 0xE0 == 0xCE {
+                // 2 bytes, 11 bits
+                len = 2;
+                buf[1] = try!(self.expect_byte());
+            } else if byte & 0xF0 == 0xE0 {
+                // 3 bytes, 16 bits
+                len = 3;
+                buf[1] = try!(self.expect_byte());
+                buf[2] = try!(self.expect_byte());
+            } else if byte & 0xF8 == 0xF0 {
+                // 4 bytes, 21 bits
+                len = 4;
+                buf[1] = try!(self.expect_byte());
+                buf[2] = try!(self.expect_byte());
+                buf[3] = try!(self.expect_byte());
+            }
+
+            let slice = try!(
+                str::from_utf8(&buf[0..len])
+                .map_err(|_| JsonError::FailedUtf8Parsing)
+            );
+
+            slice.chars().next().unwrap()
+        } else {
+
+            // codepoints < 128 are safe ASCII compatibles
+            unsafe { char::from_u32_unchecked(byte as u32) }
+        };
+
+        Err(JsonError::UnexpectedCharacter {
             ch: ch,
             line: pos.line,
             column: pos.column,
-        }
+        })
     }
 
     #[inline(always)]
@@ -249,7 +281,7 @@ impl<'a> Parser<'a> {
             b'0' ... b'9' => (ch - b'0') as u32,
             b'a' ... b'f' => (ch + 10 - b'a') as u32,
             b'A' ... b'F' => (ch + 10 - b'A') as u32,
-            ch            => return Err(self.unexpected_character(ch)),
+            ch            => return self.unexpected_character(ch),
         })
     }
 
@@ -306,7 +338,7 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn read_number(&mut self, first: u8, is_negative: bool) -> JsonResult<f64> {
+    fn read_number(&mut self, first: u8) -> JsonResult<f64> {
         let mut num = (first - b'0') as u64;
         let mut digits = 0u8;
 
@@ -318,23 +350,20 @@ impl<'a> Parser<'a> {
             if let Some(ch) = self.next_byte() {
                 match ch {
                     b'0' ... b'9' => {
-                        num = num * 10 + (ch - b'0') as u64;
+                        // Avoid multiplication with bitshifts and addition
+                        num = (num << 1) + (num << 3) + (ch - b'0') as u64;
                     },
                     b'.' | b'e' | b'E' => {
                         self.left_over = Some(ch);
                         break;
-                    }
+                    },
                     ch => {
                         self.left_over = Some(ch);
-                        return Ok(
-                            if is_negative { -(num as f64) } else { num as f64 }
-                        );
+                        return Ok(num as f64);
                     }
                 }
             } else {
-                return Ok(
-                    if is_negative { -(num as f64) } else { num as f64 }
-                );
+                return Ok(num as f64);
             }
         }
 
@@ -344,11 +373,10 @@ impl<'a> Parser<'a> {
         // u64 into freshly converted f64
         read_num!(self, digit, num = num * 10.0 + digit as f64);
 
-        self.read_number_with_fraction(num, is_negative)
+        self.read_number_with_fraction(num)
     }
 
-    fn read_number_with_fraction(&mut self, mut num: f64, is_negative: bool)
-    -> JsonResult<f64> {
+    fn read_number_with_fraction(&mut self, mut num: f64) -> JsonResult<f64> {
         if let Some(b'.') = self.peek_byte() {
             self.left_over = None;
             let mut precision = -1;
@@ -373,17 +401,17 @@ impl<'a> Parser<'a> {
                 let ch = try!(self.checked_expect_byte());
                 let mut e = match ch {
                     b'0' ... b'9' => (ch - b'0') as i32,
-                    _ => return Err(self.unexpected_character(ch)),
+                    _ => return self.unexpected_character(ch),
                 };
 
-                read_num!(self, digit, e = e * 10 + digit as i32);
+                read_num!(self, digit, e = (e << 1) + (e << 3) + digit as i32);
 
                 num *= 10f64.powi(e * sign);
             },
             byte => self.left_over = byte
         }
 
-        Ok(if is_negative { -num } else { num })
+        Ok(num)
     }
 
     fn read_object(&mut self) -> JsonResult<BTreeMap<String, JsonValue>> {
@@ -446,10 +474,10 @@ impl<'a> Parser<'a> {
                 9 ... 13 | 32 => while let Some(ch) = self.next_byte() {
                     match ch {
                         9 ... 13 | 32 => {},
-                        _ => return Err(self.unexpected_character(ch))
+                        _ => return self.unexpected_character(ch)
                     }
                 },
-                _ => return Err(self.unexpected_character(ch))
+                _ => return self.unexpected_character(ch)
             }
         }
 

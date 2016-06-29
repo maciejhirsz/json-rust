@@ -849,6 +849,19 @@ fn error_unexpected_character() {
 }
 
 #[test]
+fn error_unexpected_unicode_character() {
+    let err = parse("\n\nnul🦄\n").unwrap_err();
+
+    assert_eq!(err, JsonError::UnexpectedCharacter {
+        ch: '🦄',
+        line: 3,
+        column: 4,
+    });
+
+    assert_eq!(format!("{}", err), "Unexpected character: 🦄 at (3:4)");
+}
+
+#[test]
 fn error_unexpected_token() {
     let err = parse("\n  [\n    null,\n  ]  \n").unwrap_err();
 
