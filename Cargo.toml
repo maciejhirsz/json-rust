@@ -7,6 +7,9 @@ repository = "https://github.com/maciejhirsz/json-rust"
 documentation = "http://terhix.com/doc/json/"
 license = "MIT"
 
+[dependencies]
+itoa = "0.1"
+
 [dev-dependencies]
 serde = "*"
 serde_json = "*"
