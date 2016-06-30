@@ -219,10 +219,9 @@ impl<'a> Parser<'a> {
     pub fn new(source: &'a str) -> Self {
         Parser {
             source: source,
-            // bytes: source.as_bytes(),
             byte_ptr: source.as_ptr(),
             index: 0,
-            length: source.len() as usize,
+            length: source.len(),
         }
     }
 
