@@ -1,16 +1,30 @@
 use std::char;
 use std::str;
-use std::str::Bytes;
 use std::collections::BTreeMap;
 use { JsonValue, JsonError, JsonResult };
+
+macro_rules! next_byte {
+    ($parser:ident || $alt:expr) => {
+        if $parser.index < $parser.length {
+            let ch = unsafe { *$parser.byte_ptr.offset($parser.index as isize) };
+            $parser.index += 1;
+            ch
+        } else {
+            $alt
+        }
+    };
+
+    ($parser:ident) => {
+        next_byte!($parser || return Err(JsonError::UnexpectedEndOfJson))
+    }
+}
 
 macro_rules! sequence {
     ($parser:ident, $( $ch:pat ),*) => {
         $(
-            match $parser.next_byte() {
-                Some($ch) => {},
-                Some(ch)  => return $parser.unexpected_character(ch),
-                None      => return Err(JsonError::UnexpectedEndOfJson)
+            match next_byte!($parser) {
+                $ch => {},
+                ch  => return $parser.unexpected_character(ch),
             }
         )*
     }
@@ -18,14 +32,15 @@ macro_rules! sequence {
 
 macro_rules! read_num {
     ($parser:ident, $num:ident, $then:expr) => {
-        while let Some(ch) = $parser.checked_next_byte() {
+        loop {
+            let ch = next_byte!($parser);
             match ch {
                 b'0' ... b'9' => {
                     let $num = ch - b'0';
                     $then;
                 },
-                ch => {
-                    $parser.left_over = Some(ch);
+                _  => {
+                    $parser.index -= 1;
                     break;
                 }
             }
@@ -39,7 +54,7 @@ macro_rules! consume_whitespace {
             // whitespace
             9 ... 13 | 32 => {
                 loop {
-                    match try!($parser.expect_byte()) {
+                    match next_byte!($parser) {
                         9 ... 13 | 32 => {},
                         ch            => { $ch = ch; break }
                     }
@@ -52,7 +67,7 @@ macro_rules! consume_whitespace {
 
 macro_rules! expect {
     ($parser:ident, $byte:pat) => ({
-        let mut ch = try!($parser.expect_byte());
+        let mut ch = next_byte!($parser);
 
         consume_whitespace!($parser, ch);
 
@@ -65,7 +80,7 @@ macro_rules! expect {
 
 macro_rules! expect_one_of {
     {$parser:ident $(, $byte:pat => $then:expr )*} => ({
-        let mut ch = try!($parser.checked_expect_byte());
+        let mut ch = next_byte!($parser);
 
         consume_whitespace!($parser, ch);
 
@@ -82,16 +97,16 @@ macro_rules! expect_one_of {
 macro_rules! expect_string {
     ($parser:ident) => ({
         let result: String;// = unsafe { mem::uninitialized() };
-        let start = $parser.current_index;
+        let start = $parser.index;
 
         loop {
-            let mut ch = try!($parser.expect_byte());
+            let ch = next_byte!($parser);
             if ch == b'"' {
-                result = (&$parser.source[start .. $parser.current_index-1]).into();
+                result = (&$parser.source[start .. $parser.index - 1]).into();
                 break;
             };
             if ch == b'\\' {
-                result = expect_complex_string!($parser, start, ch);
+                result = try!($parser.read_complex_string(start));
                 break;
             }
         }
@@ -100,49 +115,9 @@ macro_rules! expect_string {
     })
 }
 
-macro_rules! expect_complex_string {
-    ($parser:ident, $start:ident, $ch:ident) => ({
-        // $parser.buffer.clear();
-        let mut buffer = Vec::new();
-        buffer.extend_from_slice($parser.source[$start .. $parser.current_index-1].as_bytes());
-
-        loop {
-            match $ch {
-                b'"'  => break,
-                b'\\' => {
-                    let ch = try!($parser.expect_byte());
-                    let ch = match ch {
-                        b'u'  => {
-                            try!($parser.read_codepoint(&mut buffer));
-                            $ch = try!($parser.expect_byte());
-                            continue;
-                        },
-                        b'"'  |
-                        b'\\' |
-                        b'/'  => ch,
-                        b'b'  => 0x8,
-                        b'f'  => 0xC,
-                        b't'  => b'\t',
-                        b'r'  => b'\r',
-                        b'n'  => b'\n',
-                        _     => return $parser.unexpected_character(ch)
-                    };
-                    buffer.push(ch);
-                },
-                _ => buffer.push($ch)
-            }
-            $ch = try!($parser.expect_byte());
-        }
-
-        // Since the original source is already valid UTF-8, and `\`
-        // cannot occur in front of a codepoint > 127, this is safe.
-        unsafe { String::from_utf8_unchecked(buffer) }
-    })
-}
-
 macro_rules! expect_value {
     {$parser:ident $(, $byte:pat => $then:expr )*} => ({
-        let mut ch = try!($parser.expect_byte());
+        let mut ch = next_byte!($parser);
 
         consume_whitespace!($parser, ch);
 
@@ -162,7 +137,7 @@ macro_rules! expect_value {
                 JsonValue::Number(num)
             },
             b'-' => {
-                let ch = try!($parser.expect_byte());
+                let ch = next_byte!($parser);
                 let num = match ch {
                     b'0' => try!($parser.read_number_with_fraction(0.0)),
                     b'1' ... b'9' => try!($parser.read_number(ch)),
@@ -194,18 +169,19 @@ struct Position {
 
 struct Parser<'a> {
     source: &'a str,
-    byte_iter: Bytes<'a>,
-    left_over: Option<u8>,
-    current_index: usize,
+    byte_ptr: *const u8,
+    index: usize,
+    length: usize,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(source: &'a str) -> Self {
         Parser {
             source: source,
-            byte_iter: source.bytes(),
-            left_over: None,
-            current_index: 0,
+            // bytes: source.as_bytes(),
+            byte_ptr: source.as_ptr(),
+            index: 0,
+            length: source.len() as usize,
         }
     }
 
@@ -221,7 +197,7 @@ impl<'a> Parser<'a> {
     }
 
     fn unexpected_character<T: Sized>(&mut self, byte: u8) -> JsonResult<T> {
-        let pos = self.source_position_from_index(self.current_index);
+        let pos = self.source_position_from_index(self.index);
 
         let ch = if byte & 0x80 != 0 {
             let mut buf = [byte,0,0,0];
@@ -230,18 +206,18 @@ impl<'a> Parser<'a> {
             if byte & 0xE0 == 0xCE {
                 // 2 bytes, 11 bits
                 len = 2;
-                buf[1] = try!(self.expect_byte());
+                buf[1] = next_byte!(self);
             } else if byte & 0xF0 == 0xE0 {
                 // 3 bytes, 16 bits
                 len = 3;
-                buf[1] = try!(self.expect_byte());
-                buf[2] = try!(self.expect_byte());
+                buf[1] = next_byte!(self);
+                buf[2] = next_byte!(self);
             } else if byte & 0xF8 == 0xF0 {
                 // 4 bytes, 21 bits
                 len = 4;
-                buf[1] = try!(self.expect_byte());
-                buf[2] = try!(self.expect_byte());
-                buf[3] = try!(self.expect_byte());
+                buf[1] = next_byte!(self);
+                buf[2] = next_byte!(self);
+                buf[3] = next_byte!(self);
             }
 
             let slice = try!(
@@ -263,38 +239,8 @@ impl<'a> Parser<'a> {
         })
     }
 
-    #[inline(always)]
-    fn next_byte(&mut self) -> Option<u8> {
-        self.current_index += 1;
-        self.byte_iter.next()
-    }
-
-    #[inline(always)]
-    fn peek_byte(&mut self) -> Option<u8> {
-        if self.left_over.is_none() {
-            self.left_over = self.next_byte();
-        }
-
-        self.left_over
-    }
-
-    #[inline(always)]
-    fn checked_next_byte(&mut self) -> Option<u8> {
-        self.left_over.take().or_else(|| self.next_byte())
-    }
-
-    #[inline(always)]
-    fn expect_byte(&mut self) -> JsonResult<u8> {
-        self.next_byte().ok_or(JsonError::UnexpectedEndOfJson)
-    }
-
-    #[inline(always)]
-    fn checked_expect_byte(&mut self) -> JsonResult<u8> {
-        self.checked_next_byte().ok_or(JsonError::UnexpectedEndOfJson)
-    }
-
     fn read_hexdec_digit(&mut self) -> JsonResult<u32> {
-        let ch = try!(self.expect_byte());
+        let ch = next_byte!(self);
         Ok(match ch {
             b'0' ... b'9' => (ch - b'0'),
             b'a' ... b'f' => (ch + 10 - b'a'),
@@ -367,23 +313,20 @@ impl<'a> Parser<'a> {
         while digits < 18 {
             digits += 1;
 
-            if let Some(ch) = self.next_byte() {
-                match ch {
-                    b'0' ... b'9' => {
-                        // Avoid multiplication with bitshifts and addition
-                        num = (num << 1) + (num << 3) + (ch - b'0') as u64;
-                    },
-                    b'.' | b'e' | b'E' => {
-                        self.left_over = Some(ch);
-                        break;
-                    },
-                    ch => {
-                        self.left_over = Some(ch);
-                        return Ok(num as f64);
-                    }
+            let ch = next_byte!(self || return Ok(num as f64));
+            match ch {
+                b'0' ... b'9' => {
+                    // Avoid multiplication with bitshifts and addition
+                    num = (num << 1) + (num << 3) + (ch - b'0') as u64;
+                },
+                b'.' | b'e' | b'E' => {
+                    self.index -= 1;
+                    break;
+                },
+                _  => {
+                    self.index -= 1;
+                    return Ok(num as f64);
                 }
-            } else {
-                return Ok(num as f64);
             }
         }
 
@@ -396,29 +339,69 @@ impl<'a> Parser<'a> {
         self.read_number_with_fraction(num)
     }
 
+    fn read_complex_string(&mut self, start: usize) -> JsonResult<String> {
+        let mut buffer = Vec::new();
+        let mut ch = b'\\';
+
+        buffer.extend_from_slice(self.source[start .. self.index - 1].as_bytes());
+
+        loop {
+            match ch {
+                b'"'  => break,
+                b'\\' => {
+                    let escaped = next_byte!(self);
+                    let escaped = match escaped {
+                        b'u'  => {
+                            try!(self.read_codepoint(&mut buffer));
+                            ch = next_byte!(self);
+                            continue;
+                        },
+                        b'"'  |
+                        b'\\' |
+                        b'/'  => ch,
+                        b'b'  => 0x8,
+                        b'f'  => 0xC,
+                        b't'  => b'\t',
+                        b'r'  => b'\r',
+                        b'n'  => b'\n',
+                        _     => return self.unexpected_character(ch)
+                    };
+                    buffer.push(escaped);
+                },
+                _ => buffer.push(ch)
+            }
+            ch = next_byte!(self);
+        }
+
+        // Since the original source is already valid UTF-8, and `\`
+        // cannot occur in front of a codepoint > 127, this is safe.
+        Ok(unsafe { String::from_utf8_unchecked(buffer) })
+    }
+
     fn read_number_with_fraction(&mut self, mut num: f64) -> JsonResult<f64> {
-        if let Some(b'.') = self.peek_byte() {
-            self.left_over = None;
+        if next_byte!(self || return Ok(num)) == b'.' {
             let mut precision = -1;
 
             read_num!(self, digit, {
                 num += (digit as f64) * 10_f64.powi(precision);
                 precision -= 1;
             });
+        } else {
+            self.index -= 1;
         }
 
-        match self.checked_next_byte() {
-            Some(b'e') | Some(b'E') => {
-                let sign = match self.next_byte() {
-                    Some(b'-') => -1,
-                    Some(b'+') => 1,
-                    byte => {
-                        self.left_over = byte;
+        match next_byte!(self || return Ok(num)) {
+            b'e' | b'E' => {
+                let sign = match next_byte!(self) {
+                    b'-' => -1,
+                    b'+' => 1,
+                    _    => {
+                        self.index -= 1;
                         1
                     },
                 };
 
-                let ch = try!(self.checked_expect_byte());
+                let ch = next_byte!(self);
                 let mut e = match ch {
                     b'0' ... b'9' => (ch - b'0') as i32,
                     _ => return self.unexpected_character(ch),
@@ -428,7 +411,7 @@ impl<'a> Parser<'a> {
 
                 num *= 10f64.powi(e * sign);
             },
-            byte => self.left_over = byte
+            _ => self.index -= 1
         }
 
         Ok(num)
@@ -483,17 +466,15 @@ impl<'a> Parser<'a> {
     }
 
     fn ensure_end(&mut self) -> JsonResult<()> {
-        let mut next = self.checked_next_byte();
-
-        while let Some(ch) = next {
+        let mut ch = next_byte!(self || return Ok(()));
+        loop {
             match ch {
                 // whitespace
-                9 ... 13 | 32 => next = self.next_byte(),
+                9 ... 13 | 32 => {},
                 _             => return self.unexpected_character(ch)
             }
+            ch = next_byte!(self || return Ok(()));
         }
-
-        Ok(())
     }
 
     fn value(&mut self) -> JsonResult<JsonValue> {
