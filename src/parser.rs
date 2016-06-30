@@ -33,7 +33,7 @@ macro_rules! sequence {
 macro_rules! read_num {
     ($parser:ident, $num:ident, $then:expr) => {
         loop {
-            let ch = next_byte!($parser);
+            let ch = next_byte!($parser || break);
             match ch {
                 b'0' ... b'9' => {
                     let $num = ch - b'0';
@@ -358,13 +358,13 @@ impl<'a> Parser<'a> {
                         },
                         b'"'  |
                         b'\\' |
-                        b'/'  => ch,
+                        b'/'  => escaped,
                         b'b'  => 0x8,
                         b'f'  => 0xC,
                         b't'  => b'\t',
                         b'r'  => b'\r',
                         b'n'  => b'\n',
-                        _     => return self.unexpected_character(ch)
+                        _     => return self.unexpected_character(escaped)
                     };
                     buffer.push(escaped);
                 },
