@@ -81,17 +81,40 @@ macro_rules! expect_one_of {
 
 macro_rules! expect_string {
     ($parser:ident) => ({
-        $parser.buffer.clear();
+        let result: String;// = unsafe { mem::uninitialized() };
+        let start = $parser.current_index;
 
         loop {
-            let ch = try!($parser.expect_byte());
-            match ch {
+            let mut ch = try!($parser.expect_byte());
+            if ch == b'"' {
+                result = (&$parser.source[start .. $parser.current_index-1]).into();
+                break;
+            };
+            if ch == b'\\' {
+                result = expect_complex_string!($parser, start, ch);
+                break;
+            }
+        }
+
+        result
+    })
+}
+
+macro_rules! expect_complex_string {
+    ($parser:ident, $start:ident, $ch:ident) => ({
+        // $parser.buffer.clear();
+        let mut buffer = Vec::new();
+        buffer.extend_from_slice($parser.source[$start .. $parser.current_index-1].as_bytes());
+
+        loop {
+            match $ch {
                 b'"'  => break,
                 b'\\' => {
                     let ch = try!($parser.expect_byte());
                     let ch = match ch {
                         b'u'  => {
-                            try!($parser.read_codepoint());
+                            try!($parser.read_codepoint(&mut buffer));
+                            $ch = try!($parser.expect_byte());
                             continue;
                         },
                         b'"'  |
@@ -104,15 +127,16 @@ macro_rules! expect_string {
                         b'n'  => b'\n',
                         _     => return $parser.unexpected_character(ch)
                     };
-                    $parser.buffer.push(ch);
+                    buffer.push(ch);
                 },
-                _ => $parser.buffer.push(ch)
+                _ => buffer.push($ch)
             }
+            $ch = try!($parser.expect_byte());
         }
 
         // Since the original source is already valid UTF-8, and `\`
         // cannot occur in front of a codepoint > 127, this is safe.
-        unsafe { str::from_utf8_unchecked(&$parser.buffer).into() }
+        unsafe { String::from_utf8_unchecked(buffer) }
     })
 }
 
@@ -171,7 +195,6 @@ struct Position {
 struct Parser<'a> {
     source: &'a str,
     byte_iter: Bytes<'a>,
-    buffer: Vec<u8>,
     left_over: Option<u8>,
     current_index: usize,
 }
@@ -181,7 +204,6 @@ impl<'a> Parser<'a> {
         Parser {
             source: source,
             byte_iter: source.bytes(),
-            buffer: Vec::with_capacity(512),
             left_over: None,
             current_index: 0,
         }
@@ -290,7 +312,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn read_codepoint(&mut self) -> JsonResult<()> {
+    fn read_codepoint(&mut self, buffer: &mut Vec<u8>) -> JsonResult<()> {
         let mut codepoint = try!(self.read_hexdec_codepoint());
 
         match codepoint {
@@ -314,17 +336,17 @@ impl<'a> Parser<'a> {
         }
 
         match codepoint {
-            0x0000 ... 0x007F => self.buffer.push(codepoint as u8),
-            0x0080 ... 0x07FF => self.buffer.extend_from_slice(&[
+            0x0000 ... 0x007F => buffer.push(codepoint as u8),
+            0x0080 ... 0x07FF => buffer.extend_from_slice(&[
                 (((codepoint >> 6) as u8) & 0x1F) | 0xC0,
                 ((codepoint        as u8) & 0x3F) | 0x80
             ]),
-            0x0800 ... 0xFFFF => self.buffer.extend_from_slice(&[
+            0x0800 ... 0xFFFF => buffer.extend_from_slice(&[
                 (((codepoint >> 12) as u8) & 0x0F) | 0xE0,
                 (((codepoint >> 6)  as u8) & 0x3F) | 0x80,
                 ((codepoint         as u8) & 0x3F) | 0x80
             ]),
-            0x10000 ... 0x10FFFF => self.buffer.extend_from_slice(&[
+            0x10000 ... 0x10FFFF => buffer.extend_from_slice(&[
                 (((codepoint >> 18) as u8) & 0x07) | 0xF0,
                 (((codepoint >> 12) as u8) & 0x3F) | 0x80,
                 (((codepoint >> 6)  as u8) & 0x3F) | 0x80,
