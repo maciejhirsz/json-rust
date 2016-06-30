@@ -3,6 +3,18 @@ use std::str;
 use std::collections::BTreeMap;
 use { JsonValue, JsonError, JsonResult };
 
+struct Position {
+    pub line: usize,
+    pub column: usize,
+}
+
+struct Parser<'a> {
+    source: &'a str,
+    byte_ptr: *const u8,
+    index: usize,
+    length: usize,
+}
+
 macro_rules! next_byte {
     ($parser:ident || $alt:expr) => {
         if $parser.index < $parser.length {
@@ -66,19 +78,16 @@ macro_rules! consume_whitespace {
 }
 
 macro_rules! expect {
-    ($parser:ident, $byte:pat) => ({
+    ($parser:ident, $byte:expr) => ({
         let mut ch = next_byte!($parser);
 
         consume_whitespace!($parser, ch);
 
-        match ch {
-            $byte         => {},
-            _ => return $parser.unexpected_character(ch)
+        if ch != $byte {
+            return $parser.unexpected_character(ch)
         }
-    })
-}
+    });
 
-macro_rules! expect_one_of {
     {$parser:ident $(, $byte:pat => $then:expr )*} => ({
         let mut ch = next_byte!($parser);
 
@@ -115,6 +124,50 @@ macro_rules! expect_string {
     })
 }
 
+macro_rules! expect_number {
+    ($parser:ident, $first:ident) => ({
+        let mut num = ($first - b'0') as u64;
+        let mut digits = 0u8;
+
+        let result: f64;
+
+        // Cap on how many iterations we do while reading to u64
+        // in order to avoid an overflow.
+        loop {
+            if digits == 18 {
+                result = try!($parser.read_big_number(num as f64));
+                break;
+            }
+
+            digits += 1;
+
+            let ch = next_byte!($parser || {
+                result = num as f64;
+                break;
+            });
+
+            match ch {
+                b'0' ... b'9' => {
+                    // Avoid multiplication with bitshifts and addition
+                    num = (num << 1) + (num << 3) + (ch - b'0') as u64;
+                },
+                b'.' | b'e' | b'E' => {
+                    $parser.index -= 1;
+                    result = try!($parser.read_number_with_fraction(num as f64));
+                    break;
+                },
+                _  => {
+                    $parser.index -= 1;
+                    result = num as f64;
+                    break;
+                }
+            }
+        }
+
+        result
+    })
+}
+
 macro_rules! expect_value {
     {$parser:ident $(, $byte:pat => $then:expr )*} => ({
         let mut ch = next_byte!($parser);
@@ -133,14 +186,14 @@ macro_rules! expect_value {
                 JsonValue::Number(num)
             },
             b'1' ... b'9' => {
-                let num = try!($parser.read_number(ch));
+                let num = expect_number!($parser, ch);
                 JsonValue::Number(num)
             },
             b'-' => {
                 let ch = next_byte!($parser);
                 let num = match ch {
                     b'0' => try!($parser.read_number_with_fraction(0.0)),
-                    b'1' ... b'9' => try!($parser.read_number(ch)),
+                    b'1' ... b'9' => expect_number!($parser, ch),
                     _    => return $parser.unexpected_character(ch)
                 };
                 JsonValue::Number(-num)
@@ -160,18 +213,6 @@ macro_rules! expect_value {
             _ => return $parser.unexpected_character(ch)
         }
     })
-}
-
-struct Position {
-    pub line: usize,
-    pub column: usize,
-}
-
-struct Parser<'a> {
-    source: &'a str,
-    byte_ptr: *const u8,
-    index: usize,
-    length: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -304,41 +345,6 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn read_number(&mut self, first: u8) -> JsonResult<f64> {
-        let mut num = (first - b'0') as u64;
-        let mut digits = 0u8;
-
-        // Cap on how many iterations we do while reading to u64
-        // in order to avoid an overflow.
-        while digits < 18 {
-            digits += 1;
-
-            let ch = next_byte!(self || return Ok(num as f64));
-            match ch {
-                b'0' ... b'9' => {
-                    // Avoid multiplication with bitshifts and addition
-                    num = (num << 1) + (num << 3) + (ch - b'0') as u64;
-                },
-                b'.' | b'e' | b'E' => {
-                    self.index -= 1;
-                    break;
-                },
-                _  => {
-                    self.index -= 1;
-                    return Ok(num as f64);
-                }
-            }
-        }
-
-        let mut num = num as f64;
-
-        // Attempt to continue reading digits that would overflow
-        // u64 into freshly converted f64
-        read_num!(self, digit, num = num * 10.0 + digit as f64);
-
-        self.read_number_with_fraction(num)
-    }
-
     fn read_complex_string(&mut self, start: usize) -> JsonResult<String> {
         let mut buffer = Vec::new();
         let mut ch = b'\\';
@@ -376,6 +382,14 @@ impl<'a> Parser<'a> {
         // Since the original source is already valid UTF-8, and `\`
         // cannot occur in front of a codepoint > 127, this is safe.
         Ok(unsafe { String::from_utf8_unchecked(buffer) })
+    }
+
+    fn read_big_number(&mut self, mut num: f64) -> JsonResult<f64> {
+        // Attempt to continue reading digits that would overflow
+        // u64 into freshly converted f64
+        read_num!(self, digit, num = num * 10.0 + digit as f64);
+
+        self.read_number_with_fraction(num)
     }
 
     fn read_number_with_fraction(&mut self, mut num: f64) -> JsonResult<f64> {
@@ -420,7 +434,7 @@ impl<'a> Parser<'a> {
     fn read_object(&mut self) -> JsonResult<BTreeMap<String, JsonValue>> {
         let mut object = BTreeMap::new();
 
-        let key = expect_one_of!{ self,
+        let key = expect!{ self,
             b'}'  => return Ok(object),
             b'\"' => expect_string!(self)
         };
@@ -430,7 +444,7 @@ impl<'a> Parser<'a> {
         object.insert(key, expect_value!(self));
 
         loop {
-            let key = expect_one_of!{ self,
+            let key = expect!{ self,
                 b'}' => break,
                 b',' => {
                     expect!(self, b'"');
@@ -453,7 +467,7 @@ impl<'a> Parser<'a> {
         array.push(first);
 
         loop {
-            expect_one_of!{ self,
+            expect!{ self,
                 b']' => break,
                 b',' => {
                     let value = expect_value!(self);
