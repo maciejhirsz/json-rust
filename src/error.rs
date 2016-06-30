@@ -20,10 +20,6 @@ impl JsonError {
     pub fn wrong_type(expected: &str) -> Self {
         JsonError::WrongType(expected.into())
     }
-
-    pub fn undefined(field: &str) -> Self {
-        JsonError::UndefinedField(field.into())
-    }
 }
 
 impl fmt::Display for JsonError {

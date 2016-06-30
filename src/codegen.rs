@@ -2,6 +2,8 @@ use std::io::Write;
 use std::num::FpCategory;
 use JsonValue;
 
+extern crate itoa;
+
 pub trait Generator {
     fn get_buffer(&mut self) -> &mut Vec<u8>;
 
@@ -27,10 +29,10 @@ pub trait Generator {
 
     fn dedent(&mut self) {}
 
-    fn write_string(&mut self, string: &str) {
-        self.write_char(b'"');
+    fn write_string_complex(&mut self, string: &str, from: usize) {
+        self.write(string[0 .. from].as_bytes());
 
-        for ch in string.bytes() {
+        for ch in string.bytes().skip(from) {
             match ch {
                 b'\\' | b'"' => {
                     self.write_char(b'\\');
@@ -41,20 +43,33 @@ pub trait Generator {
                 b'\t' => self.write(b"\\t"),
                 0xC   => self.write(b"\\f"),
                 0x8   => self.write(b"\\b"),
-                _     => self.write_char(ch)
+                _     => self.write_char(ch),
             }
         }
 
         self.write_char(b'"');
     }
 
-    fn write_digits_from_u64(&mut self, mut num: u64) {
-        let digit = (num % 10) as u8;
-        if num > 9 {
-            num /= 10;
-            self.write_digits_from_u64(num);
+    fn write_string(&mut self, string: &str) {
+        self.write_char(b'"');
+
+        for (index, ch) in string.bytes().enumerate() {
+            match ch {
+                b'\\' |
+                b'"'  |
+                b'\n' |
+                b'\r' |
+                b'\t' |
+                0xC   |
+                0x8   => {
+                    return self.write_string_complex(string, index)
+                },
+                _     => {}
+            }
         }
-        self.write_char(digit + b'0');
+
+        self.write(string.as_bytes());
+        self.write_char(b'"');
     }
 
     fn write_number(&mut self, mut num: f64) {
@@ -87,12 +102,12 @@ pub trait Generator {
             return;
         }
 
-        if num > 1e19 || num < 1e-15 {
+        if num > 1e19 {
             write!(self.get_buffer(), "{:e}", num).unwrap();
             return;
         }
 
-        self.write_digits_from_u64(num as u64);
+        itoa::write(self.get_buffer(), num as u64).unwrap();
     }
 
     fn write_json(&mut self, json: &JsonValue) {
