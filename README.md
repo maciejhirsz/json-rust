@@ -114,7 +114,7 @@ extern crate json;
 
 While performance is not the main goal of this crate, it is still relevant, and it's doing pretty well in the company:
 
-![](http://terhix.com/json-perf-7.png)
+![](http://terhix.com/json-perf-8.png)
 
 [The benchmarks](https://github.com/maciejhirsz/json-rust/blob/benches/benches/log.rs) were run on 2012 MacBook Air, your results may vary. Many thanks to [@dtolnay](https://github.com/dtolnay) for providing the baseline struct and test data the tests could be run on.
 
