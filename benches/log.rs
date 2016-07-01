@@ -225,3 +225,17 @@ fn json_rust_stringify(b: &mut Bencher) {
         data.dump();
     })
 }
+
+
+#[bench]
+fn json_rust_stringify_io_write(b: &mut Bencher) {
+    let data = json::parse(JSON_STR).unwrap();
+
+    b.bytes = data.dump().len() as u64;
+
+    let mut target = Vec::new();
+
+    b.iter(|| {
+        data.to_writer(&mut target);
+    })
+}
