@@ -58,6 +58,7 @@ pub trait Generator {
                 start = index + 1;
             }
         }
+        self.write(string[start ..].as_bytes());
 
         self.write_char(b'"');
     }
