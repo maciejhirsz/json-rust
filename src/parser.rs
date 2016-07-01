@@ -393,11 +393,11 @@ impl<'a> Parser<'a> {
 
     fn read_number_with_fraction(&mut self, mut num: f64) -> JsonResult<f64> {
         if next_byte!(self || return Ok(num)) == b'.' {
-            let mut precision = -1;
+            let mut precision = 0.1;
 
             read_num!(self, digit, {
-                num += (digit as f64) * 10_f64.powi(precision);
-                precision -= 1;
+                num += (digit as f64) * precision;
+                precision /= 10.0;
             });
         } else {
             self.index -= 1;

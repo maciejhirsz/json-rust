@@ -41,7 +41,7 @@ pub trait Generator {
         self.get_buffer().push(ch)
     }
 
-    fn write_min(&mut self, slice: &[u8], minslice: &[u8]);
+    fn write_min(&mut self, slice: &[u8], min: u8);
 
     fn new_line(&mut self) {}
 
@@ -76,42 +76,33 @@ pub trait Generator {
         self.write_char(b'"');
     }
 
-    fn write_number(&mut self, mut num: f64) {
+    fn write_number(&mut self, num: f64) {
         match num.classify() {
+            FpCategory::Normal    |
+            FpCategory::Subnormal => {
+                if num.fract() == 0.0 && num < 1e19 {
+                    itoa::write(self.get_buffer(), num as i64).unwrap();
+                } else {
+                    let abs = num.abs();
+                    if abs < 1e-15 || abs > 1e19 {
+                        write!(self.get_buffer(), "{:e}", num).unwrap();
+                    } else {
+                        write!(self.get_buffer(), "{}", num).unwrap();
+                    }
+                }
+            },
+            FpCategory::Zero => {
+                if num.is_sign_negative() {
+                    self.write(b"-0");
+                } else {
+                    self.write_char(b'0');
+                }
+            },
             FpCategory::Nan      |
             FpCategory::Infinite => {
                 self.write(b"null");
-                return;
-            },
-            FpCategory::Zero => {
-                self.write(if num.is_sign_negative() { b"-0" } else { b"0" });
-                return;
-            },
-            _ => {},
-        }
-
-        if num.is_sign_negative() {
-            num = num.abs();
-            self.write_char(b'-');
-        }
-
-        let fract = num.fract();
-
-        if fract > 0.0 {
-            if num < 1e-15 {
-                write!(self.get_buffer(), "{:e}", num).unwrap();
-            } else {
-                write!(self.get_buffer(), "{}", num).unwrap();
             }
-            return;
         }
-
-        if num > 1e19 {
-            write!(self.get_buffer(), "{:e}", num).unwrap();
-            return;
-        }
-
-        itoa::write(self.get_buffer(), num as u64).unwrap();
     }
 
     fn write_json(&mut self, json: &JsonValue) {
@@ -130,7 +121,7 @@ pub trait Generator {
                         first = false;
                         self.new_line();
                     } else {
-                        self.write(b",");
+                        self.write_char(b',');
                         self.new_line();
                     }
                     self.write_json(item);
@@ -148,11 +139,11 @@ pub trait Generator {
                         first = false;
                         self.new_line();
                     } else {
-                        self.write(b",");
+                        self.write_char(b',');
                         self.new_line();
                     }
                     self.write_string(key);
-                    self.write_min(b": ", b":");
+                    self.write_min(b": ", b':');
                     self.write_json(value);
                 }
                 self.dedent();
@@ -184,8 +175,8 @@ impl Generator for DumpGenerator {
     }
 
     #[inline(always)]
-    fn write_min(&mut self, _: &[u8], minslice: &[u8]) {
-        self.code.extend_from_slice(minslice);
+    fn write_min(&mut self, _: &[u8], min: u8) {
+        self.code.push(min);
     }
 
     fn consume(self) -> String {
@@ -216,7 +207,7 @@ impl Generator for PrettyGenerator {
     }
 
     #[inline(always)]
-    fn write_min(&mut self, slice: &[u8], _: &[u8]) {
+    fn write_min(&mut self, slice: &[u8], _: u8) {
         self.code.extend_from_slice(slice);
     }
 
