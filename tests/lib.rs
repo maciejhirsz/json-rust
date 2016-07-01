@@ -330,6 +330,11 @@ mod unit {
     }
 
     #[test]
+    fn parse_very_long_float() {
+        assert_eq!(parse("2.22507385850720113605740979670913197593481954635164564e-308").unwrap(), 2.2250738585072e-308);
+    }
+
+    #[test]
     fn parse_integer() {
         assert_eq!(parse("42").unwrap(), 42);
     }

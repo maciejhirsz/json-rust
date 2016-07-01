@@ -432,11 +432,33 @@ impl<'a> Parser<'a> {
             let mut p = 1u64;
             let mut f = 0u64;
 
-            // FIXME: prevent overflowing!
-            read_num!(self, digit, {
-                f = (f << 1) + (f << 3) + digit as u64;
-                p = (p << 1) + (p << 3);
-            });
+            loop {
+                // Avoid overflow, switch to operating on f64
+                if p != 10000000000000000000 {
+                    num += (f as f64) / (p as f64);
+
+                    let mut p = 0.1;
+
+                    read_num!(self, digit, {
+                        num += (digit as f64) * p;
+                        p /= 10.0;
+                    });
+                    break;
+                }
+
+                // Carry on with u64
+                let ch = next_byte!(self || break);
+                match ch {
+                    b'0' ... b'9' => {
+                        f = (f << 1) + (f << 3) + (ch - b'0') as u64;
+                        p = (p << 1) + (p << 3);
+                    },
+                    _  => {
+                        self.index -= 1;
+                        break;
+                    }
+                }
+            }
 
             num += (f as f64) / (p as f64);
         } else {
