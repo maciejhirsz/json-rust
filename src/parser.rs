@@ -103,6 +103,30 @@ macro_rules! expect {
     })
 }
 
+const QU: u8 = 1; // quote
+const BS: u8 = 2; // backslash
+const CT: u8 = 4; // control character
+
+static CHARCODES: [u8; 256] = [
+// 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
+  CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, // 0
+  CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, // 1
+   0,  0, QU,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 2
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 3
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 4
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, BS,  0,  0,  0, // 5
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 6
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, CT, // 7
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 8
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 9
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // A
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // B
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // C
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // D
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // E
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // F
+];
+
 macro_rules! expect_string {
     ($parser:ident) => ({
         let result: String;// = unsafe { mem::uninitialized() };
@@ -110,14 +134,20 @@ macro_rules! expect_string {
 
         loop {
             let ch = next_byte!($parser);
+            let code = CHARCODES[ch as usize];
+            if code == 0 {
+                continue;
+            }
             if ch == b'"' {
                 result = (&$parser.source[start .. $parser.index - 1]).into();
                 break;
-            };
+            }
             if ch == b'\\' {
                 result = try!($parser.read_complex_string(start));
                 break;
             }
+
+            return $parser.unexpected_character(ch);
         }
 
         result
@@ -351,6 +381,12 @@ impl<'a> Parser<'a> {
         buffer.extend_from_slice(self.source[start .. self.index - 1].as_bytes());
 
         loop {
+            let code = CHARCODES[ch as usize];
+            if code == 0 {
+                buffer.push(ch);
+                ch = next_byte!(self);
+                continue;
+            }
             match ch {
                 b'"'  => break,
                 b'\\' => {
@@ -373,7 +409,7 @@ impl<'a> Parser<'a> {
                     };
                     buffer.push(escaped);
                 },
-                _ => buffer.push(ch)
+                _ => return self.unexpected_character(ch)
             }
             ch = next_byte!(self);
         }

@@ -4,8 +4,8 @@ use JsonValue;
 
 extern crate itoa;
 
-const _Q: u8 = b'"';
-const _S: u8 = b'\\';
+const QU: u8 = b'"';
+const BS: u8 = b'\\';
 const  B: u8 = b'b';
 const  T: u8 = b't';
 const  N: u8 = b'n';
@@ -17,10 +17,10 @@ static ESCAPED: [u8; 256] = [
 // 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
    U,  U,  U,  U,  U,  U,  U,  U,  B,  T,  N,  U,  F,  R,  U,  U, // 0
    U,  U,  U,  U,  U,  U,  U,  U,  U,  U,  U,  U,  U,  U,  U,  U, // 1
-   0,  0, _Q,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 2
+   0,  0, QU,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 2
    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 3
    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 4
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, _S,  0,  0,  0, // 5
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, BS,  0,  0,  0, // 5
    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 6
    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  U, // 7
    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 8
@@ -45,7 +45,7 @@ pub trait Generator {
 
     #[inline(always)]
     fn write_char(&mut self, ch: u8) {
-        self.get_writer().write(&[ch]).unwrap();
+        self.get_writer().write_all(&[ch]).unwrap();
     }
 
     fn write_min(&mut self, slice: &[u8], min: u8);
@@ -284,6 +284,6 @@ impl<'a, W> Generator for WriterGenerator<'a, W> where W: Write {
 
     #[inline(always)]
     fn write_min(&mut self, _: &[u8], min: u8) {
-        self.writer.write(&[min]).unwrap();
+        self.writer.write_all(&[min]).unwrap();
     }
 }
