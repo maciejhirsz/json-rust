@@ -873,3 +873,16 @@ fn error_unexpected_token() {
 
     assert_eq!(format!("{}", err), "Unexpected character: ] at (4:3)");
 }
+
+#[test]
+fn writer_generator() {
+    let data = object!{
+        "foo" => array!["bar", 100, true]
+    };
+
+    let mut buf = Vec::new();
+
+    data.to_writer(&mut buf);
+
+    assert_eq!(String::from_utf8(buf).unwrap(), r#"{"foo":["bar",100,true]}"#);
+}

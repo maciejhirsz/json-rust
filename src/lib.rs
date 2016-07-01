@@ -209,8 +209,9 @@ pub use value::JsonValue::Null;
 pub type JsonResult<T> = Result<T, JsonError>;
 
 pub use parser::parse;
-use codegen::{ Generator, PrettyGenerator, DumpGenerator };
+use codegen::{ Generator, PrettyGenerator, DumpGenerator, WriterGenerator };
 
+use std::io::Write;
 use std::collections::HashMap;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -232,6 +233,11 @@ impl JsonValue {
         let mut gen = PrettyGenerator::new(spaces);
         gen.write_json(self);
         gen.consume()
+    }
+
+    pub fn to_writer<W: Write>(&self, writer: &mut W) {
+        let mut gen = WriterGenerator::new(writer);
+        gen.write_json(self);
     }
 }
 
