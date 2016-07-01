@@ -63,6 +63,7 @@ pub trait Generator {
         self.write_char(b'"');
     }
 
+    #[inline(always)]
     fn write_string(&mut self, string: &str) {
         self.write_char(b'"');
 
@@ -80,7 +81,7 @@ pub trait Generator {
         match num.classify() {
             FpCategory::Normal    |
             FpCategory::Subnormal => {
-                if num.fract() == 0.0 && num < 1e19 {
+                if num.fract() == 0.0 && num.abs() < 1e19 {
                     itoa::write(self.get_buffer(), num as i64).unwrap();
                 } else {
                     let abs = num.abs();
