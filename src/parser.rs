@@ -393,12 +393,16 @@ impl<'a> Parser<'a> {
 
     fn read_number_with_fraction(&mut self, mut num: f64) -> JsonResult<f64> {
         if next_byte!(self || return Ok(num)) == b'.' {
-            let mut precision = 0.1;
+            let mut p = 1u64;
+            let mut f = 0u64;
 
+            // FIXME: prevent overflowing!
             read_num!(self, digit, {
-                num += (digit as f64) * precision;
-                precision /= 10.0;
+                f = (f << 1) + (f << 3) + digit as u64;
+                p = (p << 1) + (p << 3);
             });
+
+            num += (f as f64) / (p as f64);
         } else {
             self.index -= 1;
         }
