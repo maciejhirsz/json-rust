@@ -4,6 +4,26 @@ use JsonValue;
 
 extern crate itoa;
 
+static ESCAPED: [u8; 256] = [
+// 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
+   0,   0,   0,   0,   0,   0,   0,   0,b'b',b't',b'n',  0,b'f',b'r',    0,   0, // 0
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // 1
+   0,   0,b'"',   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // 2
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // 3
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // 4
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,b'\\',  0,   0,   0, // 5
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // 6
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // 7
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // 8
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // 9
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // A
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // B
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // C
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // D
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // E
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // F
+];
+
 pub trait Generator {
     fn get_buffer(&mut self) -> &mut Vec<u8>;
 
@@ -29,21 +49,13 @@ pub trait Generator {
 
     fn dedent(&mut self) {}
 
-    fn write_string_complex(&mut self, string: &str, from: usize) {
-        self.write(string[0 .. from].as_bytes());
-
-        for ch in string.bytes().skip(from) {
-            match ch {
-                b'\\' | b'"' => {
-                    self.write_char(b'\\');
-                    self.write_char(ch);
-                },
-                b'\n' => self.write(b"\\n"),
-                b'\r' => self.write(b"\\r"),
-                b'\t' => self.write(b"\\t"),
-                0xC   => self.write(b"\\f"),
-                0x8   => self.write(b"\\b"),
-                _     => self.write_char(ch),
+    fn write_string_complex(&mut self, string: &str, mut start: usize) {
+        for (index, ch) in string.bytes().enumerate().skip(start) {
+            let escape = ESCAPED[ch as usize];
+            if escape > 0 {
+                self.write(string[start .. index].as_bytes());
+                self.write(&[b'\\', escape]);
+                start = index + 1;
             }
         }
 
@@ -54,17 +66,8 @@ pub trait Generator {
         self.write_char(b'"');
 
         for (index, ch) in string.bytes().enumerate() {
-            match ch {
-                b'\\' |
-                b'"'  |
-                b'\n' |
-                b'\r' |
-                b'\t' |
-                0xC   |
-                0x8   => {
-                    return self.write_string_complex(string, index)
-                },
-                _     => {}
+            if ESCAPED[ch as usize] > 0 {
+                return self.write_string_complex(string, index)
             }
         }
 
