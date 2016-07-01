@@ -280,7 +280,7 @@ fn stringify_array_with_push() {
 
 #[test]
 fn stringify_escaped_characters() {
-    assert_eq!(stringify("\r\n\t\u{8}\u{c}\\\""), r#""\r\n\t\b\f\\\"""#);
+    assert_eq!(stringify("\r____\n___\t\u{8}\u{c}\\\""), r#""\r____\n___\t\b\f\\\"""#);
 }
 
 #[test]
