@@ -134,8 +134,7 @@ macro_rules! expect_string {
 
         loop {
             let ch = next_byte!($parser);
-            let code = CHARCODES[ch as usize];
-            if code == 0 {
+            if CHARCODES[ch as usize] == 0 {
                 continue;
             }
             if ch == b'"' {
@@ -381,8 +380,7 @@ impl<'a> Parser<'a> {
         buffer.extend_from_slice(self.source[start .. self.index - 1].as_bytes());
 
         loop {
-            let code = CHARCODES[ch as usize];
-            if code == 0 {
+            if CHARCODES[ch as usize] == 0 {
                 buffer.push(ch);
                 ch = next_byte!(self);
                 continue;
@@ -434,10 +432,10 @@ impl<'a> Parser<'a> {
 
             loop {
                 // Avoid overflow, switch to operating on f64
-                if p != 10000000000000000000 {
+                if p == 10000000000000000000 {
                     num += (f as f64) / (p as f64);
 
-                    let mut p = 0.1;
+                    let mut p = 1e-19;
 
                     read_num!(self, digit, {
                         num += (digit as f64) * p;
@@ -447,7 +445,10 @@ impl<'a> Parser<'a> {
                 }
 
                 // Carry on with u64
-                let ch = next_byte!(self || break);
+                let ch = next_byte!(self || {
+                    num += (f as f64) / (p as f64);
+                    break;
+                });
                 match ch {
                     b'0' ... b'9' => {
                         f = (f << 1) + (f << 3) + (ch - b'0') as u64;
@@ -455,12 +456,11 @@ impl<'a> Parser<'a> {
                     },
                     _  => {
                         self.index -= 1;
+                        num += (f as f64) / (p as f64);
                         break;
                     }
                 }
             }
-
-            num += (f as f64) / (p as f64);
         } else {
             self.index -= 1;
         }
