@@ -9,6 +9,7 @@ license = "MIT"
 
 [dependencies]
 itoa = "0.1"
+dtoa = "0.1"
 
 [dev-dependencies]
 serde = "*"

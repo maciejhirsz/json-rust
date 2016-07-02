@@ -189,6 +189,26 @@ fn serde_json_stringify(b: &mut Bencher) {
 }
 
 #[bench]
+fn serde_json_floats_parse(b: &mut Bencher) {
+    b.bytes = JSON_FLOAT_STR.len() as u64;
+
+    b.iter(|| {
+        serde_json::from_str::<serde_json::Value>(JSON_FLOAT_STR).unwrap();
+    });
+}
+
+#[bench]
+fn serde_json_floats_stringify(b: &mut Bencher) {
+    let data = serde_json::from_str::<serde_json::Value>(JSON_FLOAT_STR).unwrap();
+
+    b.bytes = serde_json::to_string(&data).unwrap().len() as u64;
+
+    b.iter(|| {
+        serde_json::to_string(&data).unwrap();
+    })
+}
+
+#[bench]
 fn serde_json_struct_parse(b: &mut Bencher) {
     b.bytes = JSON_STR.len() as u64;
 
