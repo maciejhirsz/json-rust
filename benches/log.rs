@@ -117,6 +117,8 @@ struct Log {
 
 const JSON_STR: &'static str = r#"{"timestamp":2837513946597,"zone_id":123456,"zone_plan":1,"http":{"protocol":2,"status":200,"host_status":503,"up_status":520,"method":1,"content_type":"text/html","user_agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.146 Safari/537.36","referer":"https://www.cloudflare.com/","request_uri":"/cdn-cgi/trace"},"origin":{"ip":"1.2.3.4","port":8000,"hostname":"www.example.com","protocol":2},"country":238,"cache_status":3,"server_ip":"192.168.1.1","server_name":"metal.cloudflare.com","remote_ip":"10.1.2.3","bytes_dlv":123456,"ray_id":"10c73629cce30078-LAX"}"#;
 
+const JSON_FLOAT_STR: &'static str = r#"[[-65.613616999999977,43.420273000000009],[-65.619720000000029,43.418052999999986],[-65.625,43.421379000000059],[-65.636123999999882,43.449714999999969],[-65.633056999999951,43.474709000000132],[-65.611389000000031,43.513054000000068],[-65.605835000000013,43.516105999999979],[-65.598343,43.515830999999935],[-65.566101000000003,43.508331000000055],[-65.561935000000005,43.504439999999988],[-65.55999799999995,43.499718000000087],[-65.573333999999988,43.476379000000065],[-65.593612999999948,43.444153000000028],[-65.613616999999977,43.420273000000009],[-59.816947999999911,43.928328999999962],[-59.841667000000029,43.918602000000021],[-59.866393999999957,43.909987999999998],[-59.879722999999956,43.906654000000003],[-59.895835999999974,43.904160000000047]]"#;
+
 #[bench]
 fn rustc_serialize_parse(b: &mut Bencher) {
     b.bytes = JSON_STR.len() as u64;
@@ -216,6 +218,15 @@ fn json_rust_parse(b: &mut Bencher) {
 }
 
 #[bench]
+fn json_rust_parse_floats(b: &mut Bencher) {
+    b.bytes = JSON_FLOAT_STR.len() as u64;
+
+    b.iter(|| {
+        json::parse(JSON_FLOAT_STR).unwrap();
+    });
+}
+
+#[bench]
 fn json_rust_stringify(b: &mut Bencher) {
     let data = json::parse(JSON_STR).unwrap();
 
@@ -226,10 +237,33 @@ fn json_rust_stringify(b: &mut Bencher) {
     })
 }
 
-
 #[bench]
 fn json_rust_stringify_io_write(b: &mut Bencher) {
     let data = json::parse(JSON_STR).unwrap();
+
+    b.bytes = data.dump().len() as u64;
+
+    let mut target = Vec::new();
+
+    b.iter(|| {
+        data.to_writer(&mut target);
+    })
+}
+
+#[bench]
+fn json_rust_stringify_floats(b: &mut Bencher) {
+    let data = json::parse(JSON_FLOAT_STR).unwrap();
+
+    b.bytes = data.dump().len() as u64;
+
+    b.iter(|| {
+        data.dump();
+    })
+}
+
+#[bench]
+fn json_rust_stringify_floats_io_write(b: &mut Bencher) {
+    let data = json::parse(JSON_FLOAT_STR).unwrap();
 
     b.bytes = data.dump().len() as u64;
 
