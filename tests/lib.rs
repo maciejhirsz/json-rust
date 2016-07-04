@@ -172,7 +172,7 @@ mod unit {
 
     #[test]
     fn stringify_small_number() {
-        assert_eq!(stringify(1e-15), "0.000000000000001");
+        assert_eq!(stringify(0.0001), "0.0001");
     }
 
     #[test]
@@ -182,7 +182,7 @@ mod unit {
 
     #[test]
     fn stringify_very_large_number() {
-        assert_eq!(stringify(3.141592653589793e20), "3.141592653589793e20");
+        assert_eq!(stringify(3.141592653589793e50), "3.141592653589793e50");
     }
 
     #[test]

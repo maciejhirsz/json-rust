@@ -1,6 +1,6 @@
 [package]
 name = "json"
-version = "0.8.5"
+version = "0.8.6"
 authors = ["Maciej Hirsz <maciej.hirsz@gmail.com>"]
 description = "JSON implementation in Rust"
 repository = "https://github.com/maciejhirsz/json-rust"
@@ -9,3 +9,4 @@ license = "MIT"
 
 [dependencies]
 itoa = "0.1"
+dtoa = { git = "https://github.com/maciejhirsz/dtoa", branch = "master" }
