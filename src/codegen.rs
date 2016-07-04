@@ -3,6 +3,7 @@ use std::num::FpCategory;
 use JsonValue;
 
 extern crate itoa;
+extern crate dtoa;
 
 const QU: u8 = b'"';
 const BS: u8 = b'\\';
@@ -90,6 +91,7 @@ pub trait Generator {
         self.write_char(b'"');
     }
 
+    #[inline(always)]
     fn write_number(&mut self, num: f64) {
         match num.classify() {
             FpCategory::Normal    |
@@ -97,12 +99,7 @@ pub trait Generator {
                 if num.fract() == 0.0 && num.abs() < 1e19 {
                     itoa::write(self.get_writer(), num as i64).unwrap();
                 } else {
-                    let abs = num.abs();
-                    if abs < 1e-15 || abs > 1e19 {
-                        write!(self.get_writer(), "{:e}", num).unwrap();
-                    } else {
-                        write!(self.get_writer(), "{}", num).unwrap();
-                    }
+                    dtoa::write(self.get_writer(), num).unwrap();
                 }
             },
             FpCategory::Zero => {
@@ -128,38 +125,50 @@ pub trait Generator {
             JsonValue::Null               => self.write(b"null"),
             JsonValue::Array(ref array)   => {
                 self.write_char(b'[');
-                self.indent();
-                let mut first = true;
-                for item in array {
-                    if first {
-                        first = false;
-                        self.new_line();
-                    } else {
-                        self.write_char(b',');
-                        self.new_line();
-                    }
+                let mut iter = array.iter();
+
+                if let Some(item) = iter.next() {
+                    self.indent();
+                    self.new_line();
+                    self.write_json(item);
+                } else {
+                    self.write_char(b']');
+                    return;
+                }
+
+                for item in iter {
+                    self.write_char(b',');
+                    self.new_line();
                     self.write_json(item);
                 }
+
                 self.dedent();
                 self.new_line();
                 self.write_char(b']');
             },
             JsonValue::Object(ref object) => {
                 self.write_char(b'{');
-                self.indent();
-                let mut first = true;
-                for (key, value) in object.iter() {
-                    if first {
-                        first = false;
-                        self.new_line();
-                    } else {
-                        self.write_char(b',');
-                        self.new_line();
-                    }
+                let mut iter = object.iter();
+
+                if let Some((key, value)) = iter.next() {
+                    self.indent();
+                    self.new_line();
+                    self.write_string(key);
+                    self.write_min(b": ", b':');
+                    self.write_json(value);
+                } else {
+                    self.write_char(b'}');
+                    return;
+                }
+
+                for (key, value) in iter {
+                    self.write_char(b',');
+                    self.new_line();
                     self.write_string(key);
                     self.write_min(b": ", b':');
                     self.write_json(value);
                 }
+
                 self.dedent();
                 self.new_line();
                 self.write_char(b'}');
