@@ -3,7 +3,6 @@ use std::num::FpCategory;
 use JsonValue;
 
 extern crate itoa;
-extern crate dtoa;
 
 const QU: u8 = b'"';
 const BS: u8 = b'\\';
@@ -59,12 +58,17 @@ pub trait Generator {
 
     #[inline(never)]
     fn write_string_complex(&mut self, string: &str, mut start: usize) {
+        self.write(string[ .. start].as_bytes());
+
         for (index, ch) in string.bytes().enumerate().skip(start) {
             let escape = ESCAPED[ch as usize];
             if escape > 0 {
                 self.write(string[start .. index].as_bytes());
                 self.write(&[b'\\', escape]);
                 start = index + 1;
+            }
+            if escape == b'u' {
+                write!(self.get_writer(), "{:04x}", ch).unwrap();
             }
         }
         self.write(string[start ..].as_bytes());
@@ -93,13 +97,12 @@ pub trait Generator {
                 if num.fract() == 0.0 && num.abs() < 1e19 {
                     itoa::write(self.get_writer(), num as i64).unwrap();
                 } else {
-                    dtoa::write(self.get_writer(), num).unwrap();
-                    // let abs = num.abs();
-                    // if abs < 1e-15 || abs > 1e19 {
-                    //     write!(self.get_writer(), "{:e}", num).unwrap();
-                    // } else {
-                    //     write!(self.get_writer(), "{}", num).unwrap();
-                    // }
+                    let abs = num.abs();
+                    if abs < 1e-15 || abs > 1e19 {
+                        write!(self.get_writer(), "{:e}", num).unwrap();
+                    } else {
+                        write!(self.get_writer(), "{}", num).unwrap();
+                    }
                 }
             },
             FpCategory::Zero => {
@@ -177,7 +180,9 @@ impl DumpGenerator {
     }
 
     pub fn consume(self) -> String {
-        String::from_utf8(self.code).unwrap()
+        // Original strings were unicode, numbers are all ASCII,
+        // therefore this is safe.
+        unsafe { String::from_utf8_unchecked(self.code) }
     }
 }
 
@@ -221,7 +226,7 @@ impl PrettyGenerator {
     }
 
     pub fn consume(self) -> String {
-        String::from_utf8(self.code).unwrap()
+        unsafe { String::from_utf8_unchecked(self.code) }
     }
 }
 

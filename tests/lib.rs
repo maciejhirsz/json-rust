@@ -292,6 +292,16 @@ mod unit {
     }
 
     #[test]
+    fn stringify_escaped() {
+        assert_eq!(stringify("http://www.google.com/\t"), r#""http://www.google.com/\t""#);
+    }
+
+    #[test]
+    fn stringify_control_escaped() {
+        assert_eq!(stringify("foo\u{7f}bar\u{0}baz"), r#""foo\u007fbar\u0000baz""#);
+    }
+
+    #[test]
     fn stringify_pretty_object() {
         let object = object!{
             "name" => "Urlich",

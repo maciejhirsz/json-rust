@@ -235,6 +235,7 @@ impl JsonValue {
         gen.consume()
     }
 
+    /// Dumps the JSON as byte stream into an instance of `std::io::Write`.
     pub fn to_writer<W: Write>(&self, writer: &mut W) {
         let mut gen = WriterGenerator::new(writer);
         gen.write_json(self);
