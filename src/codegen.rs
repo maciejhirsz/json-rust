@@ -4,44 +4,51 @@ use JsonValue;
 
 extern crate itoa;
 
+const QU: u8 = b'"';
+const BS: u8 = b'\\';
+const  B: u8 = b'b';
+const  T: u8 = b't';
+const  N: u8 = b'n';
+const  F: u8 = b'f';
+const  R: u8 = b'r';
+const  U: u8 = b'u';
+
 static ESCAPED: [u8; 256] = [
 // 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
-   0,   0,   0,   0,   0,   0,   0,   0,b'b',b't',b'n',  0,b'f',b'r',    0,   0, // 0
-   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // 1
-   0,   0,b'"',   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // 2
-   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // 3
-   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // 4
-   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,b'\\',  0,   0,   0, // 5
-   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // 6
-   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // 7
-   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // 8
-   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // 9
-   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // A
-   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // B
-   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // C
-   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // D
-   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // E
-   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // F
+   U,  U,  U,  U,  U,  U,  U,  U,  B,  T,  N,  U,  F,  R,  U,  U, // 0
+   U,  U,  U,  U,  U,  U,  U,  U,  U,  U,  U,  U,  U,  U,  U,  U, // 1
+   0,  0, QU,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 2
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 3
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 4
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, BS,  0,  0,  0, // 5
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 6
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  U, // 7
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 8
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 9
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // A
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // B
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // C
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // D
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // E
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // F
 ];
 
 pub trait Generator {
-    fn get_buffer(&mut self) -> &mut Vec<u8>;
+    type T: Write;
 
-    fn current_index(&mut self) -> usize {
-        self.get_buffer().len()
-    }
+    fn get_writer(&mut self) -> &mut Self::T;
 
     #[inline(always)]
     fn write(&mut self, slice: &[u8]) {
-        self.get_buffer().extend_from_slice(slice)
+        self.get_writer().write_all(slice).unwrap();
     }
 
     #[inline(always)]
     fn write_char(&mut self, ch: u8) {
-        self.get_buffer().push(ch)
+        self.get_writer().write_all(&[ch]).unwrap();
     }
 
-    fn write_min(&mut self, slice: &[u8], minslice: &[u8]);
+    fn write_min(&mut self, slice: &[u8], min: u8);
 
     fn new_line(&mut self) {}
 
@@ -49,7 +56,10 @@ pub trait Generator {
 
     fn dedent(&mut self) {}
 
+    #[inline(never)]
     fn write_string_complex(&mut self, string: &str, mut start: usize) {
+        self.write(string[ .. start].as_bytes());
+
         for (index, ch) in string.bytes().enumerate().skip(start) {
             let escape = ESCAPED[ch as usize];
             if escape > 0 {
@@ -57,12 +67,16 @@ pub trait Generator {
                 self.write(&[b'\\', escape]);
                 start = index + 1;
             }
+            if escape == b'u' {
+                write!(self.get_writer(), "{:04x}", ch).unwrap();
+            }
         }
         self.write(string[start ..].as_bytes());
 
         self.write_char(b'"');
     }
 
+    #[inline(always)]
     fn write_string(&mut self, string: &str) {
         self.write_char(b'"');
 
@@ -76,42 +90,33 @@ pub trait Generator {
         self.write_char(b'"');
     }
 
-    fn write_number(&mut self, mut num: f64) {
+    fn write_number(&mut self, num: f64) {
         match num.classify() {
+            FpCategory::Normal    |
+            FpCategory::Subnormal => {
+                if num.fract() == 0.0 && num.abs() < 1e19 {
+                    itoa::write(self.get_writer(), num as i64).unwrap();
+                } else {
+                    let abs = num.abs();
+                    if abs < 1e-15 || abs > 1e19 {
+                        write!(self.get_writer(), "{:e}", num).unwrap();
+                    } else {
+                        write!(self.get_writer(), "{}", num).unwrap();
+                    }
+                }
+            },
+            FpCategory::Zero => {
+                if num.is_sign_negative() {
+                    self.write(b"-0");
+                } else {
+                    self.write_char(b'0');
+                }
+            },
             FpCategory::Nan      |
             FpCategory::Infinite => {
                 self.write(b"null");
-                return;
-            },
-            FpCategory::Zero => {
-                self.write(if num.is_sign_negative() { b"-0" } else { b"0" });
-                return;
-            },
-            _ => {},
-        }
-
-        if num.is_sign_negative() {
-            num = num.abs();
-            self.write_char(b'-');
-        }
-
-        let fract = num.fract();
-
-        if fract > 0.0 {
-            if num < 1e-15 {
-                write!(self.get_buffer(), "{:e}", num).unwrap();
-            } else {
-                write!(self.get_buffer(), "{}", num).unwrap();
             }
-            return;
         }
-
-        if num > 1e19 {
-            write!(self.get_buffer(), "{:e}", num).unwrap();
-            return;
-        }
-
-        itoa::write(self.get_buffer(), num as u64).unwrap();
     }
 
     fn write_json(&mut self, json: &JsonValue) {
@@ -130,7 +135,7 @@ pub trait Generator {
                         first = false;
                         self.new_line();
                     } else {
-                        self.write(b",");
+                        self.write_char(b',');
                         self.new_line();
                     }
                     self.write_json(item);
@@ -148,11 +153,11 @@ pub trait Generator {
                         first = false;
                         self.new_line();
                     } else {
-                        self.write(b",");
+                        self.write_char(b',');
                         self.new_line();
                     }
                     self.write_string(key);
-                    self.write_min(b": ", b":");
+                    self.write_min(b": ", b':');
                     self.write_json(value);
                 }
                 self.dedent();
@@ -161,8 +166,6 @@ pub trait Generator {
             }
         }
     }
-
-    fn consume(self) -> String;
 }
 
 pub struct DumpGenerator {
@@ -175,21 +178,35 @@ impl DumpGenerator {
             code: Vec::with_capacity(1024),
         }
     }
+
+    pub fn consume(self) -> String {
+        // Original strings were unicode, numbers are all ASCII,
+        // therefore this is safe.
+        unsafe { String::from_utf8_unchecked(self.code) }
+    }
 }
 
 impl Generator for DumpGenerator {
+    type T = Vec<u8>;
+
     #[inline(always)]
-    fn get_buffer(&mut self) -> &mut Vec<u8> {
+    fn write(&mut self, slice: &[u8]) {
+        self.code.extend_from_slice(slice)
+    }
+
+    #[inline(always)]
+    fn write_char(&mut self, ch: u8) {
+        self.code.push(ch)
+    }
+
+    #[inline(always)]
+    fn get_writer(&mut self) -> &mut Vec<u8> {
         &mut self.code
     }
 
     #[inline(always)]
-    fn write_min(&mut self, _: &[u8], minslice: &[u8]) {
-        self.code.extend_from_slice(minslice);
-    }
-
-    fn consume(self) -> String {
-        String::from_utf8(self.code).unwrap()
+    fn write_min(&mut self, _: &[u8], min: u8) {
+        self.code.push(min);
     }
 }
 
@@ -207,16 +224,32 @@ impl PrettyGenerator {
             spaces_per_indent: spaces
         }
     }
+
+    pub fn consume(self) -> String {
+        unsafe { String::from_utf8_unchecked(self.code) }
+    }
 }
 
 impl Generator for PrettyGenerator {
+    type T = Vec<u8>;
+
     #[inline(always)]
-    fn get_buffer(&mut self) -> &mut Vec<u8> {
+    fn write(&mut self, slice: &[u8]) {
+        self.code.extend_from_slice(slice)
+    }
+
+    #[inline(always)]
+    fn write_char(&mut self, ch: u8) {
+        self.code.push(ch)
+    }
+
+    #[inline(always)]
+    fn get_writer(&mut self) -> &mut Vec<u8> {
         &mut self.code
     }
 
     #[inline(always)]
-    fn write_min(&mut self, slice: &[u8], _: &[u8]) {
+    fn write_min(&mut self, slice: &[u8], _: u8) {
         self.code.extend_from_slice(slice);
     }
 
@@ -234,8 +267,30 @@ impl Generator for PrettyGenerator {
     fn dedent(&mut self) {
         self.dent -= 1;
     }
+}
 
-    fn consume(self) -> String {
-        String::from_utf8(self.code).unwrap()
+pub struct WriterGenerator<'a, W: 'a + Write> {
+    writer: &'a mut W
+}
+
+impl<'a, W> WriterGenerator<'a, W> where W: 'a + Write {
+    pub fn new(writer: &'a mut W) -> Self {
+        WriterGenerator {
+            writer: writer
+        }
+    }
+}
+
+impl<'a, W> Generator for WriterGenerator<'a, W> where W: Write {
+    type T = W;
+
+    #[inline(always)]
+    fn get_writer(&mut self) -> &mut W {
+        &mut self.writer
+    }
+
+    #[inline(always)]
+    fn write_min(&mut self, _: &[u8], min: u8) {
+        self.writer.write_all(&[min]).unwrap();
     }
 }

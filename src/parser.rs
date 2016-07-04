@@ -103,6 +103,30 @@ macro_rules! expect {
     })
 }
 
+const QU: u8 = 1; // quote
+const BS: u8 = 2; // backslash
+const CT: u8 = 4; // control character
+
+static CHARCODES: [u8; 256] = [
+// 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
+  CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, // 0
+  CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, // 1
+   0,  0, QU,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 2
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 3
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 4
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, BS,  0,  0,  0, // 5
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 6
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, CT, // 7
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 8
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 9
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // A
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // B
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // C
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // D
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // E
+   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // F
+];
+
 macro_rules! expect_string {
     ($parser:ident) => ({
         let result: String;// = unsafe { mem::uninitialized() };
@@ -110,14 +134,19 @@ macro_rules! expect_string {
 
         loop {
             let ch = next_byte!($parser);
+            if CHARCODES[ch as usize] == 0 {
+                continue;
+            }
             if ch == b'"' {
                 result = (&$parser.source[start .. $parser.index - 1]).into();
                 break;
-            };
+            }
             if ch == b'\\' {
                 result = try!($parser.read_complex_string(start));
                 break;
             }
+
+            return $parser.unexpected_character(ch);
         }
 
         result
@@ -351,6 +380,11 @@ impl<'a> Parser<'a> {
         buffer.extend_from_slice(self.source[start .. self.index - 1].as_bytes());
 
         loop {
+            if CHARCODES[ch as usize] == 0 {
+                buffer.push(ch);
+                ch = next_byte!(self);
+                continue;
+            }
             match ch {
                 b'"'  => break,
                 b'\\' => {
@@ -373,7 +407,7 @@ impl<'a> Parser<'a> {
                     };
                     buffer.push(escaped);
                 },
-                _ => buffer.push(ch)
+                _ => return self.unexpected_character(ch)
             }
             ch = next_byte!(self);
         }
@@ -393,12 +427,40 @@ impl<'a> Parser<'a> {
 
     fn read_number_with_fraction(&mut self, mut num: f64) -> JsonResult<f64> {
         if next_byte!(self || return Ok(num)) == b'.' {
-            let mut precision = -1;
+            let mut p = 1u64;
+            let mut f = 0u64;
 
-            read_num!(self, digit, {
-                num += (digit as f64) * 10_f64.powi(precision);
-                precision -= 1;
-            });
+            loop {
+                // Avoid overflow, switch to operating on f64
+                if p == 10000000000000000000 {
+                    num += (f as f64) / (p as f64);
+
+                    let mut p = 1e-19;
+
+                    read_num!(self, digit, {
+                        num += (digit as f64) * p;
+                        p /= 10.0;
+                    });
+                    break;
+                }
+
+                // Carry on with u64
+                let ch = next_byte!(self || {
+                    num += (f as f64) / (p as f64);
+                    break;
+                });
+                match ch {
+                    b'0' ... b'9' => {
+                        f = (f << 1) + (f << 3) + (ch - b'0') as u64;
+                        p = (p << 1) + (p << 3);
+                    },
+                    _  => {
+                        self.index -= 1;
+                        num += (f as f64) / (p as f64);
+                        break;
+                    }
+                }
+            }
         } else {
             self.index -= 1;
         }
