@@ -512,7 +512,7 @@ impl<'a> Parser<'a> {
                     _ => return self.unexpected_character(ch),
                 };
 
-                read_num!(self, digit, e = e * 10 + digit as i16);
+                read_num!(self, digit, e = (e << 3) + (e << 1) + digit as i16);
 
                 return Ok(num * exponent_to_power(e * sign));
             },
