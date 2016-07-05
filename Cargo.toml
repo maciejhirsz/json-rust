@@ -9,4 +9,3 @@ license = "MIT"
 
 [dependencies]
 itoa = "0.1"
-dtoa = { git = "https://github.com/maciejhirsz/dtoa", branch = "master" }

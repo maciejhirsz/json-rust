@@ -1,7 +1,10 @@
 use std::char;
+use std::f64;
 use std::str;
 use std::collections::BTreeMap;
 use { JsonValue, JsonError, JsonResult };
+
+const MAX_FLOAT_PRECISION: u64 = 576460752303423500;
 
 struct Position {
     pub line: usize,
@@ -153,6 +156,39 @@ macro_rules! expect_string {
     })
 }
 
+
+fn exponent_to_power(e: i16) -> f64 {
+    static POWERS: [f64; 22] = [
+          1e1,    1e2,    1e3,    1e4,    1e5,    1e6,    1e7,    1e8,
+          1e9,   1e10,   1e11,   1e12,   1e13,   1e14,   1e15,   1e16,
+         1e17,   1e18,   1e19,   1e20,   1e21,   1e22
+    ];
+
+    static NEG_POWERS: [f64; 22] = [
+         1e-1,   1e-2,   1e-3,   1e-4,   1e-5,   1e-6,   1e-7,   1e-8,
+         1e-9,  1e-10,  1e-11,  1e-12,  1e-13,  1e-14,  1e-15,  1e-16,
+        1e-17,  1e-18,  1e-19,  1e-20,  1e-21,  1e-22
+    ];
+
+    let index = (e.abs() - 1) as usize;
+
+    // index=0 is e=1
+    if index < 22 {
+        if e < 0 {
+            NEG_POWERS[index]
+        } else {
+            POWERS[index]
+        }
+    } else {
+        // powf is more accurate
+        10f64.powf(e as f64)
+    }
+}
+
+fn make_float(num: u64, e: i16) -> f64 {
+    (num as f64) * exponent_to_power(e)
+}
+
 macro_rules! expect_number {
     ($parser:ident, $first:ident) => ({
         let mut num = ($first - b'0') as u64;
@@ -164,7 +200,7 @@ macro_rules! expect_number {
         // in order to avoid an overflow.
         loop {
             if digits == 18 {
-                result = try!($parser.read_big_number(num as f64));
+                result = try!($parser.read_big_number(num));
                 break;
             }
 
@@ -182,7 +218,7 @@ macro_rules! expect_number {
                 },
                 b'.' | b'e' | b'E' => {
                     $parser.index -= 1;
-                    result = try!($parser.read_number_with_fraction(num as f64));
+                    result = try!($parser.read_number_with_fraction(num, 0));
                     break;
                 },
                 _  => {
@@ -211,7 +247,7 @@ macro_rules! expect_value {
             b'{' => JsonValue::Object(try!($parser.read_object())),
             b'"' => JsonValue::String(expect_string!($parser)),
             b'0' => {
-                let num = try!($parser.read_number_with_fraction(0.0));
+                let num = try!($parser.read_number_with_fraction(0, 0));
                 JsonValue::Number(num)
             },
             b'1' ... b'9' => {
@@ -221,7 +257,7 @@ macro_rules! expect_value {
             b'-' => {
                 let ch = next_byte!($parser);
                 let num = match ch {
-                    b'0' => try!($parser.read_number_with_fraction(0.0)),
+                    b'0' => try!($parser.read_number_with_fraction(0, 0)),
                     b'1' ... b'9' => expect_number!($parser, ch),
                     _    => return $parser.unexpected_character(ch)
                 };
@@ -417,46 +453,38 @@ impl<'a> Parser<'a> {
         Ok(unsafe { String::from_utf8_unchecked(buffer) })
     }
 
-    fn read_big_number(&mut self, mut num: f64) -> JsonResult<f64> {
+    fn read_big_number(&mut self, num: u64) -> JsonResult<f64> {
         // Attempt to continue reading digits that would overflow
         // u64 into freshly converted f64
-        read_num!(self, digit, num = num * 10.0 + digit as f64);
 
-        self.read_number_with_fraction(num)
-    }
-
-    fn read_number_with_fraction(&mut self, mut num: f64) -> JsonResult<f64> {
-        if next_byte!(self || return Ok(num)) == b'.' {
-            let mut p = 1u64;
-            let mut f = 0u64;
-
-            loop {
-                // Avoid overflow, switch to operating on f64
-                if p == 10000000000000000000 {
-                    num += (f as f64) / (p as f64);
-
-                    let mut p = 1e-19;
-
-                    read_num!(self, digit, {
-                        num += (digit as f64) * p;
-                        p /= 10.0;
-                    });
+        let mut e = 0i16;
+        loop {
+            match next_byte!(self || break) {
+                b'0' ... b'9' => e += 1,
+                _  => {
+                    self.index -= 1;
                     break;
                 }
+            }
+        }
 
-                // Carry on with u64
-                let ch = next_byte!(self || {
-                    num += (f as f64) / (p as f64);
-                    break;
-                });
+        self.read_number_with_fraction(num, e)
+    }
+
+    fn read_number_with_fraction(&mut self, mut num: u64, mut e: i16) -> JsonResult<f64> {
+        if next_byte!(self || return Ok(make_float(num, e))) == b'.' {
+            loop {
+                let ch = next_byte!(self || break);
+
                 match ch {
                     b'0' ... b'9' => {
-                        f = (f << 1) + (f << 3) + (ch - b'0') as u64;
-                        p = (p << 1) + (p << 3);
+                        if num < MAX_FLOAT_PRECISION {
+                            num = num * 10 + (ch - b'0') as u64;
+                            e -= 1;
+                        }
                     },
-                    _  => {
+                    _ => {
                         self.index -= 1;
-                        num += (f as f64) / (p as f64);
                         break;
                     }
                 }
@@ -465,7 +493,7 @@ impl<'a> Parser<'a> {
             self.index -= 1;
         }
 
-        match next_byte!(self || return Ok(num)) {
+        match next_byte!(self || return Ok(make_float(num, e))) {
             b'e' | b'E' => {
                 let sign = match next_byte!(self) {
                     b'-' => -1,
@@ -476,20 +504,22 @@ impl<'a> Parser<'a> {
                     },
                 };
 
+                let num  = make_float(num, e);
+
                 let ch = next_byte!(self);
                 let mut e = match ch {
-                    b'0' ... b'9' => (ch - b'0') as i32,
+                    b'0' ... b'9' => (ch - b'0') as i16,
                     _ => return self.unexpected_character(ch),
                 };
 
-                read_num!(self, digit, e = (e << 1) + (e << 3) + digit as i32);
+                read_num!(self, digit, e = e * 10 + digit as i16);
 
-                num *= 10f64.powi(e * sign);
+                return Ok(num * exponent_to_power(e * sign));
             },
             _ => self.index -= 1
         }
 
-        Ok(num)
+        Ok(make_float(num, e))
     }
 
     fn read_object(&mut self) -> JsonResult<BTreeMap<String, JsonValue>> {
