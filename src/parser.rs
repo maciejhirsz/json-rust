@@ -157,7 +157,7 @@ macro_rules! expect_string {
 }
 
 
-fn exponent_to_power(e: i16) -> f64 {
+fn exponent_to_power(e: i32) -> f64 {
     static POWERS: [f64; 22] = [
           1e1,    1e2,    1e3,    1e4,    1e5,    1e6,    1e7,    1e8,
           1e9,   1e10,   1e11,   1e12,   1e13,   1e14,   1e15,   1e16,
@@ -185,7 +185,7 @@ fn exponent_to_power(e: i16) -> f64 {
     }
 }
 
-fn make_float(num: u64, e: i16) -> f64 {
+fn make_float(num: u64, e: i32) -> f64 {
     (num as f64) * exponent_to_power(e)
 }
 
@@ -457,7 +457,7 @@ impl<'a> Parser<'a> {
         // Attempt to continue reading digits that would overflow
         // u64 into freshly converted f64
 
-        let mut e = 0i16;
+        let mut e = 0i32;
         loop {
             match next_byte!(self || break) {
                 b'0' ... b'9' => e += 1,
@@ -471,7 +471,7 @@ impl<'a> Parser<'a> {
         self.read_number_with_fraction(num, e)
     }
 
-    fn read_number_with_fraction(&mut self, mut num: u64, mut e: i16) -> JsonResult<f64> {
+    fn read_number_with_fraction(&mut self, mut num: u64, mut e: i32) -> JsonResult<f64> {
         if next_byte!(self || return Ok(make_float(num, e))) == b'.' {
             loop {
                 let ch = next_byte!(self || break);
@@ -508,11 +508,11 @@ impl<'a> Parser<'a> {
 
                 let ch = next_byte!(self);
                 let mut e = match ch {
-                    b'0' ... b'9' => (ch - b'0') as i16,
+                    b'0' ... b'9' => (ch - b'0') as i32,
                     _ => return self.unexpected_character(ch),
                 };
 
-                read_num!(self, digit, e = (e << 3) + (e << 1) + digit as i16);
+                read_num!(self, digit, e = (e << 3) + (e << 1) + digit as i32);
 
                 return Ok(num * exponent_to_power(e * sign));
             },
