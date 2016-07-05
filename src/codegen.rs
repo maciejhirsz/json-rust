@@ -3,7 +3,7 @@ use std::num::FpCategory;
 use JsonValue;
 
 extern crate itoa;
-extern crate dtoa;
+use dtoa;
 
 const QU: u8 = b'"';
 const BS: u8 = b'\\';
