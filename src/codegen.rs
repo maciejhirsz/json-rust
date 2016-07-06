@@ -6,31 +6,33 @@ extern crate itoa;
 
 const QU: u8 = b'"';
 const BS: u8 = b'\\';
-const  B: u8 = b'b';
-const  T: u8 = b't';
-const  N: u8 = b'n';
-const  F: u8 = b'f';
-const  R: u8 = b'r';
-const  U: u8 = b'u';
+const BB: u8 = b'b';
+const TT: u8 = b't';
+const NN: u8 = b'n';
+const FF: u8 = b'f';
+const RR: u8 = b'r';
+const UU: u8 = b'u';
+const __: u8 = 0;
 
+// Look up table for characters that need escaping in a product string
 static ESCAPED: [u8; 256] = [
 // 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
-   U,  U,  U,  U,  U,  U,  U,  U,  B,  T,  N,  U,  F,  R,  U,  U, // 0
-   U,  U,  U,  U,  U,  U,  U,  U,  U,  U,  U,  U,  U,  U,  U,  U, // 1
-   0,  0, QU,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 2
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 3
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 4
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, BS,  0,  0,  0, // 5
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 6
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  U, // 7
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 8
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 9
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // A
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // B
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // C
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // D
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // E
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // F
+  UU, UU, UU, UU, UU, UU, UU, UU, BB, TT, NN, UU, FF, RR, UU, UU, // 0
+  UU, UU, UU, UU, UU, UU, UU, UU, UU, UU, UU, UU, UU, UU, UU, UU, // 1
+  __, __, QU, __, __, __, __, __, __, __, __, __, __, __, __, __, // 2
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 3
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 4
+  __, __, __, __, __, __, __, __, __, __, __, __, BS, __, __, __, // 5
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 6
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 7
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 8
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 9
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // A
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // B
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // C
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // D
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // E
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // F
 ];
 
 pub trait Generator {
@@ -90,6 +92,7 @@ pub trait Generator {
         self.write_char(b'"');
     }
 
+    #[inline(always)]
     fn write_number(&mut self, num: f64) {
         match num.classify() {
             FpCategory::Normal    |
@@ -128,38 +131,50 @@ pub trait Generator {
             JsonValue::Null               => self.write(b"null"),
             JsonValue::Array(ref array)   => {
                 self.write_char(b'[');
-                self.indent();
-                let mut first = true;
-                for item in array {
-                    if first {
-                        first = false;
-                        self.new_line();
-                    } else {
-                        self.write_char(b',');
-                        self.new_line();
-                    }
+                let mut iter = array.iter();
+
+                if let Some(item) = iter.next() {
+                    self.indent();
+                    self.new_line();
+                    self.write_json(item);
+                } else {
+                    self.write_char(b']');
+                    return;
+                }
+
+                for item in iter {
+                    self.write_char(b',');
+                    self.new_line();
                     self.write_json(item);
                 }
+
                 self.dedent();
                 self.new_line();
                 self.write_char(b']');
             },
             JsonValue::Object(ref object) => {
                 self.write_char(b'{');
-                self.indent();
-                let mut first = true;
-                for (key, value) in object.iter() {
-                    if first {
-                        first = false;
-                        self.new_line();
-                    } else {
-                        self.write_char(b',');
-                        self.new_line();
-                    }
+                let mut iter = object.iter();
+
+                if let Some((key, value)) = iter.next() {
+                    self.indent();
+                    self.new_line();
+                    self.write_string(key);
+                    self.write_min(b": ", b':');
+                    self.write_json(value);
+                } else {
+                    self.write_char(b'}');
+                    return;
+                }
+
+                for (key, value) in iter {
+                    self.write_char(b',');
+                    self.new_line();
                     self.write_string(key);
                     self.write_min(b": ", b':');
                     self.write_json(value);
                 }
+
                 self.dedent();
                 self.new_line();
                 self.write_char(b'}');

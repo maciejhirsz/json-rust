@@ -1,7 +1,8 @@
-use std::char;
-use std::str;
+use std::{ str, char, f64 };
 use std::collections::BTreeMap;
 use { JsonValue, JsonError, JsonResult };
+
+const MAX_PRECISION: u64 = 576460752303423500;
 
 struct Position {
     pub line: usize,
@@ -15,26 +16,22 @@ struct Parser<'a> {
     length: usize,
 }
 
-macro_rules! next_byte {
-    ($parser:ident || $alt:expr) => {
-        if $parser.index < $parser.length {
-            let ch = unsafe { *$parser.byte_ptr.offset($parser.index as isize) };
-            $parser.index += 1;
-            ch
-        } else {
-            $alt
+macro_rules! expect_byte {
+    ($parser:ident) => ({
+        if $parser.is_eof() {
+            return Err(JsonError::UnexpectedEndOfJson);
         }
-    };
 
-    ($parser:ident) => {
-        next_byte!($parser || return Err(JsonError::UnexpectedEndOfJson))
-    }
+        let ch = $parser.read_byte();
+        $parser.bump();
+        ch
+    })
 }
 
 macro_rules! sequence {
     ($parser:ident, $( $ch:pat ),*) => {
         $(
-            match next_byte!($parser) {
+            match expect_byte!($parser) {
                 $ch => {},
                 ch  => return $parser.unexpected_character(ch),
             }
@@ -45,16 +42,15 @@ macro_rules! sequence {
 macro_rules! read_num {
     ($parser:ident, $num:ident, $then:expr) => {
         loop {
-            let ch = next_byte!($parser || break);
+            if $parser.is_eof() { break; }
+            let ch = $parser.read_byte();
             match ch {
                 b'0' ... b'9' => {
+                    $parser.bump();
                     let $num = ch - b'0';
                     $then;
                 },
-                _  => {
-                    $parser.index -= 1;
-                    break;
-                }
+                _  => break
             }
         }
     }
@@ -66,7 +62,7 @@ macro_rules! consume_whitespace {
             // whitespace
             9 ... 13 | 32 => {
                 loop {
-                    match next_byte!($parser) {
+                    match expect_byte!($parser) {
                         9 ... 13 | 32 => {},
                         ch            => { $ch = ch; break }
                     }
@@ -79,7 +75,7 @@ macro_rules! consume_whitespace {
 
 macro_rules! expect {
     ($parser:ident, $byte:expr) => ({
-        let mut ch = next_byte!($parser);
+        let mut ch = expect_byte!($parser);
 
         consume_whitespace!($parser, ch);
 
@@ -89,7 +85,7 @@ macro_rules! expect {
     });
 
     {$parser:ident $(, $byte:pat => $then:expr )*} => ({
-        let mut ch = next_byte!($parser);
+        let mut ch = expect_byte!($parser);
 
         consume_whitespace!($parser, ch);
 
@@ -103,28 +99,31 @@ macro_rules! expect {
     })
 }
 
-const QU: u8 = 1; // quote
-const BS: u8 = 2; // backslash
-const CT: u8 = 4; // control character
+const QU: bool = false;  // double quote       0x22
+const BS: bool = false;  // backslash          0x5C
+const CT: bool = false;  // control character  0x00 ... 0x1F
+const __: bool = true;
 
-static CHARCODES: [u8; 256] = [
+// Look up table that marks which characters are allowed in their raw
+// form in a string.
+static ALLOWED: [bool; 256] = [
 // 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
   CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, // 0
   CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, // 1
-   0,  0, QU,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 2
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 3
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 4
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, BS,  0,  0,  0, // 5
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 6
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, CT, // 7
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 8
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 9
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // A
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // B
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // C
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // D
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // E
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // F
+  __, __, QU, __, __, __, __, __, __, __, __, __, __, __, __, __, // 2
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 3
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 4
+  __, __, __, __, __, __, __, __, __, __, __, __, BS, __, __, __, // 5
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 6
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 7
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 8
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 9
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // A
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // B
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // C
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // D
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // E
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // F
 ];
 
 macro_rules! expect_string {
@@ -133,8 +132,8 @@ macro_rules! expect_string {
         let start = $parser.index;
 
         loop {
-            let ch = next_byte!($parser);
-            if CHARCODES[ch as usize] == 0 {
+            let ch = expect_byte!($parser);
+            if ALLOWED[ch as usize] {
                 continue;
             }
             if ch == b'"' {
@@ -153,40 +152,71 @@ macro_rules! expect_string {
     })
 }
 
+
+fn exponent_to_power(e: i32) -> f64 {
+    static POWERS: [f64; 22] = [
+          1e1,    1e2,    1e3,    1e4,    1e5,    1e6,    1e7,    1e8,
+          1e9,   1e10,   1e11,   1e12,   1e13,   1e14,   1e15,   1e16,
+         1e17,   1e18,   1e19,   1e20,   1e21,   1e22
+    ];
+
+    static NEG_POWERS: [f64; 22] = [
+         1e-1,   1e-2,   1e-3,   1e-4,   1e-5,   1e-6,   1e-7,   1e-8,
+         1e-9,  1e-10,  1e-11,  1e-12,  1e-13,  1e-14,  1e-15,  1e-16,
+        1e-17,  1e-18,  1e-19,  1e-20,  1e-21,  1e-22
+    ];
+
+    let index = (e.abs() - 1) as usize;
+
+    // index=0 is e=1
+    if index < 22 {
+        if e < 0 {
+            NEG_POWERS[index]
+        } else {
+            POWERS[index]
+        }
+    } else {
+        // powf is more accurate
+        10f64.powf(e as f64)
+    }
+}
+
+fn make_float(num: u64, e: i32) -> f64 {
+    (num as f64) * exponent_to_power(e)
+}
+
 macro_rules! expect_number {
     ($parser:ident, $first:ident) => ({
         let mut num = ($first - b'0') as u64;
-        let mut digits = 0u8;
 
         let result: f64;
 
         // Cap on how many iterations we do while reading to u64
         // in order to avoid an overflow.
         loop {
-            if digits == 18 {
-                result = try!($parser.read_big_number(num as f64));
+            if num >= 576460752303423500 {
+                result = try!($parser.read_big_number(num));
                 break;
             }
 
-            digits += 1;
-
-            let ch = next_byte!($parser || {
+            if $parser.is_eof() {
                 result = num as f64;
                 break;
-            });
+            }
+
+            let ch = $parser.read_byte();
 
             match ch {
                 b'0' ... b'9' => {
+                    $parser.bump();
                     // Avoid multiplication with bitshifts and addition
                     num = (num << 1) + (num << 3) + (ch - b'0') as u64;
                 },
                 b'.' | b'e' | b'E' => {
-                    $parser.index -= 1;
-                    result = try!($parser.read_number_with_fraction(num as f64));
+                    result = try!($parser.read_number_with_fraction(num, 0));
                     break;
                 },
                 _  => {
-                    $parser.index -= 1;
                     result = num as f64;
                     break;
                 }
@@ -199,7 +229,7 @@ macro_rules! expect_number {
 
 macro_rules! expect_value {
     {$parser:ident $(, $byte:pat => $then:expr )*} => ({
-        let mut ch = next_byte!($parser);
+        let mut ch = expect_byte!($parser);
 
         consume_whitespace!($parser, ch);
 
@@ -211,7 +241,7 @@ macro_rules! expect_value {
             b'{' => JsonValue::Object(try!($parser.read_object())),
             b'"' => JsonValue::String(expect_string!($parser)),
             b'0' => {
-                let num = try!($parser.read_number_with_fraction(0.0));
+                let num = try!($parser.read_number_with_fraction(0, 0));
                 JsonValue::Number(num)
             },
             b'1' ... b'9' => {
@@ -219,9 +249,9 @@ macro_rules! expect_value {
                 JsonValue::Number(num)
             },
             b'-' => {
-                let ch = next_byte!($parser);
+                let ch = expect_byte!($parser);
                 let num = match ch {
-                    b'0' => try!($parser.read_number_with_fraction(0.0)),
+                    b'0' => try!($parser.read_number_with_fraction(0, 0)),
                     b'1' ... b'9' => expect_number!($parser, ch),
                     _    => return $parser.unexpected_character(ch)
                 };
@@ -254,7 +284,22 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn source_position_from_index(&self, index: usize) -> Position {
+    #[inline(always)]
+    fn is_eof(&mut self) -> bool {
+        self.index == self.length
+    }
+
+    #[inline(always)]
+    fn read_byte(&mut self) -> u8 {
+        unsafe { *self.byte_ptr.offset(self.index as isize) }
+    }
+
+    #[inline(always)]
+    fn bump(&mut self) {
+        self.index += 1;
+    }
+
+    fn source_position_from_index(&self, index: usize) -> Position {
         let (bytes, _) = self.source.split_at(index-1);
 
         Position {
@@ -275,18 +320,18 @@ impl<'a> Parser<'a> {
             if byte & 0xE0 == 0xCE {
                 // 2 bytes, 11 bits
                 len = 2;
-                buf[1] = next_byte!(self);
+                buf[1] = expect_byte!(self);
             } else if byte & 0xF0 == 0xE0 {
                 // 3 bytes, 16 bits
                 len = 3;
-                buf[1] = next_byte!(self);
-                buf[2] = next_byte!(self);
+                buf[1] = expect_byte!(self);
+                buf[2] = expect_byte!(self);
             } else if byte & 0xF8 == 0xF0 {
                 // 4 bytes, 21 bits
                 len = 4;
-                buf[1] = next_byte!(self);
-                buf[2] = next_byte!(self);
-                buf[3] = next_byte!(self);
+                buf[1] = expect_byte!(self);
+                buf[2] = expect_byte!(self);
+                buf[3] = expect_byte!(self);
             }
 
             let slice = try!(
@@ -309,7 +354,7 @@ impl<'a> Parser<'a> {
     }
 
     fn read_hexdec_digit(&mut self) -> JsonResult<u32> {
-        let ch = next_byte!(self);
+        let ch = expect_byte!(self);
         Ok(match ch {
             b'0' ... b'9' => (ch - b'0'),
             b'a' ... b'f' => (ch + 10 - b'a'),
@@ -380,19 +425,19 @@ impl<'a> Parser<'a> {
         buffer.extend_from_slice(self.source[start .. self.index - 1].as_bytes());
 
         loop {
-            if CHARCODES[ch as usize] == 0 {
+            if ALLOWED[ch as usize] {
                 buffer.push(ch);
-                ch = next_byte!(self);
+                ch = expect_byte!(self);
                 continue;
             }
             match ch {
                 b'"'  => break,
                 b'\\' => {
-                    let escaped = next_byte!(self);
+                    let escaped = expect_byte!(self);
                     let escaped = match escaped {
                         b'u'  => {
                             try!(self.read_codepoint(&mut buffer));
-                            ch = next_byte!(self);
+                            ch = expect_byte!(self);
                             continue;
                         },
                         b'"'  |
@@ -409,7 +454,7 @@ impl<'a> Parser<'a> {
                 },
                 _ => return self.unexpected_character(ch)
             }
-            ch = next_byte!(self);
+            ch = expect_byte!(self);
         }
 
         // Since the original source is already valid UTF-8, and `\`
@@ -417,79 +462,84 @@ impl<'a> Parser<'a> {
         Ok(unsafe { String::from_utf8_unchecked(buffer) })
     }
 
-    fn read_big_number(&mut self, mut num: f64) -> JsonResult<f64> {
+    fn read_big_number(&mut self, num: u64) -> JsonResult<f64> {
         // Attempt to continue reading digits that would overflow
         // u64 into freshly converted f64
-        read_num!(self, digit, num = num * 10.0 + digit as f64);
 
-        self.read_number_with_fraction(num)
+        let mut e = 0i32;
+        loop {
+            if self.is_eof() {
+                return Ok(make_float(num, e));
+            }
+            match self.read_byte() {
+                b'0' ... b'9' => {
+                    self.bump();
+                    e += 1;
+                },
+                _  => break
+            }
+        }
+
+        self.read_number_with_fraction(num, e)
     }
 
-    fn read_number_with_fraction(&mut self, mut num: f64) -> JsonResult<f64> {
-        if next_byte!(self || return Ok(num)) == b'.' {
-            let mut p = 1u64;
-            let mut f = 0u64;
+    fn read_number_with_fraction(&mut self, mut num: u64, mut e: i32) -> JsonResult<f64> {
+        if self.is_eof() {
+            return Ok(make_float(num, e));
+        }
+
+        let mut ch = self.read_byte();
+
+        if ch == b'.' {
+            self.bump();
 
             loop {
-                // Avoid overflow, switch to operating on f64
-                if p == 10000000000000000000 {
-                    num += (f as f64) / (p as f64);
-
-                    let mut p = 1e-19;
-
-                    read_num!(self, digit, {
-                        num += (digit as f64) * p;
-                        p /= 10.0;
-                    });
-                    break;
+                if self.is_eof() {
+                    return Ok(make_float(num, e));
                 }
+                ch = self.read_byte();
 
-                // Carry on with u64
-                let ch = next_byte!(self || {
-                    num += (f as f64) / (p as f64);
-                    break;
-                });
                 match ch {
                     b'0' ... b'9' => {
-                        f = (f << 1) + (f << 3) + (ch - b'0') as u64;
-                        p = (p << 1) + (p << 3);
+                        self.bump();
+                        if num < MAX_PRECISION {
+                            num = (num << 3) + (num << 1) + (ch - b'0') as u64;
+                            e -= 1;
+                        }
                     },
-                    _  => {
-                        self.index -= 1;
-                        num += (f as f64) / (p as f64);
-                        break;
-                    }
+                    _ => break
                 }
             }
-        } else {
-            self.index -= 1;
         }
 
-        match next_byte!(self || return Ok(num)) {
-            b'e' | b'E' => {
-                let sign = match next_byte!(self) {
-                    b'-' => -1,
-                    b'+' => 1,
-                    _    => {
-                        self.index -= 1;
-                        1
-                    },
-                };
+        if ch == b'e' || ch == b'E' {
+            self.bump();
+            ch = expect_byte!(self);
+            let sign = match ch {
+                b'-' => {
+                    ch = expect_byte!(self);
+                    -1
+                },
+                b'+' => {
+                    ch = expect_byte!(self);
+                    1
+                },
+                _    => 1
+            };
 
-                let ch = next_byte!(self);
-                let mut e = match ch {
-                    b'0' ... b'9' => (ch - b'0') as i32,
-                    _ => return self.unexpected_character(ch),
-                };
+            let num = make_float(num, e);
 
-                read_num!(self, digit, e = (e << 1) + (e << 3) + digit as i32);
+            let mut e = match ch {
+                b'0' ... b'9' => (ch - b'0') as i32,
+                _ => return self.unexpected_character(ch),
+            };
 
-                num *= 10f64.powi(e * sign);
-            },
-            _ => self.index -= 1
+            read_num!(self, digit, e = (e << 3) + (e << 1) + digit as i32);
+
+            return Ok(num * exponent_to_power(e * sign));
         }
 
-        Ok(num)
+        Ok(make_float(num, e))
     }
 
     fn read_object(&mut self) -> JsonResult<BTreeMap<String, JsonValue>> {
@@ -541,15 +591,17 @@ impl<'a> Parser<'a> {
     }
 
     fn ensure_end(&mut self) -> JsonResult<()> {
-        let mut ch = next_byte!(self || return Ok(()));
-        loop {
-            match ch {
-                // whitespace
-                9 ... 13 | 32 => {},
-                _             => return self.unexpected_character(ch)
+        while !self.is_eof() {
+            match self.read_byte() {
+                9 ... 13 | 32 => self.bump(),
+                ch            => {
+                    self.bump();
+                    return self.unexpected_character(ch);
+                }
             }
-            ch = next_byte!(self || return Ok(()));
         }
+
+        Ok(())
     }
 
     fn value(&mut self) -> JsonResult<JsonValue> {

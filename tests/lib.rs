@@ -172,7 +172,7 @@ mod unit {
 
     #[test]
     fn stringify_small_number() {
-        assert_eq!(stringify(1e-15), "0.000000000000001");
+        assert_eq!(stringify(0.0001), "0.0001");
     }
 
     #[test]
@@ -182,7 +182,7 @@ mod unit {
 
     #[test]
     fn stringify_very_large_number() {
-        assert_eq!(stringify(3.141592653589793e20), "3.141592653589793e20");
+        assert_eq!(stringify(3.141592653589793e50), "3.141592653589793e50");
     }
 
     #[test]
@@ -298,7 +298,7 @@ mod unit {
 
     #[test]
     fn stringify_control_escaped() {
-        assert_eq!(stringify("foo\u{7f}bar\u{0}baz"), r#""foo\u007fbar\u0000baz""#);
+        assert_eq!(stringify("foo\u{1f}bar\u{0}baz"), r#""foo\u001fbar\u0000baz""#);
     }
 
     #[test]
@@ -341,7 +341,7 @@ mod unit {
 
     #[test]
     fn parse_very_long_float() {
-        assert_eq!(parse("2.22507385850720113605740979670913197593481954635164564e-308").unwrap(), 2.2250738585072e-308);
+        assert_eq!(parse("2.22507385850720113605740979670913197593481954635164564e-308").unwrap(), 2.225073858507201e-308);
     }
 
     #[test]
