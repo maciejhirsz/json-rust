@@ -298,7 +298,7 @@ mod unit {
 
     #[test]
     fn stringify_control_escaped() {
-        assert_eq!(stringify("foo\u{7f}bar\u{0}baz"), r#""foo\u007fbar\u0000baz""#);
+        assert_eq!(stringify("foo\u{1f}bar\u{0}baz"), r#""foo\u001fbar\u0000baz""#);
     }
 
     #[test]

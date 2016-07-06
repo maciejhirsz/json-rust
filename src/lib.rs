@@ -197,7 +197,6 @@
 //! # }
 //! ```
 
-mod dtoa;
 mod codegen;
 mod parser;
 mod value;
