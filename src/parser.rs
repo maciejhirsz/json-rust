@@ -1,10 +1,8 @@
-use std::char;
-use std::f64;
-use std::str;
+use std::{ str, char, f64 };
 use std::collections::BTreeMap;
 use { JsonValue, JsonError, JsonResult };
 
-const MAX_FLOAT_PRECISION: u64 = 576460752303423500;
+const MAX_PRECISION: u64 = 576460752303423500;
 
 struct Position {
     pub line: usize,
@@ -101,28 +99,31 @@ macro_rules! expect {
     })
 }
 
-const QU: u8 = 1; // quote
-const BS: u8 = 2; // backslash
-const CT: u8 = 4; // control character
+const QU: bool = false;  // double quote       0x22
+const BS: bool = false;  // backslash          0x5C
+const CT: bool = false;  // control character  0x00 ... 0x1F
+const __: bool = true;
 
-static CHARCODES: [u8; 256] = [
+// Look up table that marks which characters are allowed in their raw
+// form in a string.
+static ALLOWED: [bool; 256] = [
 // 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
   CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, // 0
   CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, // 1
-   0,  0, QU,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 2
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 3
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 4
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, BS,  0,  0,  0, // 5
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 6
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, CT, // 7
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 8
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // 9
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // A
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // B
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // C
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // D
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // E
-   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, // F
+  __, __, QU, __, __, __, __, __, __, __, __, __, __, __, __, __, // 2
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 3
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 4
+  __, __, __, __, __, __, __, __, __, __, __, __, BS, __, __, __, // 5
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 6
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 7
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 8
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 9
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // A
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // B
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // C
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // D
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // E
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // F
 ];
 
 macro_rules! expect_string {
@@ -132,7 +133,7 @@ macro_rules! expect_string {
 
         loop {
             let ch = expect_byte!($parser);
-            if CHARCODES[ch as usize] == 0 {
+            if ALLOWED[ch as usize] {
                 continue;
             }
             if ch == b'"' {
@@ -424,7 +425,7 @@ impl<'a> Parser<'a> {
         buffer.extend_from_slice(self.source[start .. self.index - 1].as_bytes());
 
         loop {
-            if CHARCODES[ch as usize] == 0 {
+            if ALLOWED[ch as usize] {
                 buffer.push(ch);
                 ch = expect_byte!(self);
                 continue;
@@ -501,7 +502,7 @@ impl<'a> Parser<'a> {
                 match ch {
                     b'0' ... b'9' => {
                         self.bump();
-                        if num < MAX_FLOAT_PRECISION {
+                        if num < MAX_PRECISION {
                             num = (num << 3) + (num << 1) + (ch - b'0') as u64;
                             e -= 1;
                         }
