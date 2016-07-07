@@ -195,11 +195,7 @@ impl JsonValue {
     /// # }
     /// ```
     pub fn take(&mut self) -> JsonValue {
-        let mut placeholder = JsonValue::Null;
-
-        mem::swap(self, &mut placeholder);
-
-        placeholder
+        mem::replace(self, JsonValue::Null)
     }
 
     /// Works on `JsonValue::Array` - pushes a new value to the array.
