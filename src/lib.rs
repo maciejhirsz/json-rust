@@ -197,24 +197,29 @@
 //! # }
 //! ```
 
+use std::io::Write;
+use std::collections::{ BTreeMap, HashMap };
+use std::{ fmt, result };
+
 mod codegen;
 mod parser;
 mod value;
 mod error;
 pub mod iterators;
 
-pub use error::JsonError;
+pub use error::Error;
 pub use value::JsonValue;
 pub use value::JsonValue::Null;
-pub type JsonResult<T> = Result<T, JsonError>;
+pub type Result<T> = result::Result<T, Error>;
+
+#[deprecated(since="0.9.0", note="use `json::Error` instead")]
+pub use Error as JsonError;
+
+#[deprecated(since="0.9.0", note="use `json::Result` instead")]
+pub use Result as JsonResult;
 
 pub use parser::parse;
 use codegen::{ Generator, PrettyGenerator, DumpGenerator, WriterGenerator };
-
-use std::io::Write;
-use std::collections::HashMap;
-use std::collections::BTreeMap;
-use std::fmt;
 
 pub type Array = Vec<JsonValue>;
 pub type Object = BTreeMap<String, JsonValue>;

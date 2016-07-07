@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 use std::ops::{ Index, IndexMut, Deref };
 use iterators::{ Members, MembersMut, Entries, EntriesMut };
-use { JsonResult, JsonError };
-use std::{ usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32 };
+use { Result, Error };
+use std::{ mem, usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32 };
 
 macro_rules! f64_to_unsinged {
     ($unsigned:ident, $value:expr) => {
@@ -175,16 +175,74 @@ impl JsonValue {
         }
     }
 
+    /// Take over the ownership of the value, leaving `Null` in it's place.
+    ///
+    /// ```
+    /// # #[macro_use] extern crate json;
+    /// # fn main() {
+    /// let mut data = array!["Foo", 42];
+    ///
+    /// let first = data[0].take();
+    /// let second = data[1].take();
+    ///
+    /// assert!(first == "Foo");
+    /// assert!(second == 42);
+    ///
+    /// assert!(data[0].is_null());
+    /// assert!(data[1].is_null());
+    /// # }
+    /// ```
+    pub fn take(&mut self) -> JsonValue {
+        let mut placeholder = JsonValue::Null;
+
+        mem::swap(self, &mut placeholder);
+
+        placeholder
+    }
+
+    /// Checks that self is a string, and if so takes the ownership of it,
+    /// leaving a `Null` in it's place, and returning an owned Rust `String`.
+    ///
+    /// While this modifies the original structure, it is cheaper than creating
+    /// an owned `String` from the slice returned from `as_str`, since no cloning
+    /// or heap allocation is involved.
+    ///
+    /// ```
+    /// # #[macro_use] extern crate json;
+    /// # fn main() {
+    /// let mut data = array!["Hello", "World"];
+    ///
+    /// let owned = data[0].take_string().expect("Should be a string");
+    ///
+    /// assert_eq!(owned, "Hello");
+    /// assert!(data[0].is_null());
+    /// # }
+    /// ```
+    pub fn take_string(&mut self) -> Option<String> {
+        let mut placeholder = JsonValue::Null;
+
+        mem::swap(self, &mut placeholder);
+
+        match placeholder {
+            JsonValue::String(string) => return Some(string),
+
+            // Not a string? Swap the original value back in place!
+            _ => mem::swap(self, &mut placeholder)
+        }
+
+        None
+    }
+
     /// Works on `JsonValue::Array` - pushes a new value to the array.
     #[must_use]
-    pub fn push<T>(&mut self, value: T) -> JsonResult<()>
+    pub fn push<T>(&mut self, value: T) -> Result<()>
     where T: Into<JsonValue> {
         match *self {
             JsonValue::Array(ref mut vec) => {
                 vec.push(value.into());
                 Ok(())
             },
-            _ => Err(JsonError::wrong_type("Array"))
+            _ => Err(Error::wrong_type("Array"))
         }
     }
 
