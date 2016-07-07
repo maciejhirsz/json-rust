@@ -627,6 +627,21 @@ mod unit {
     }
 
     #[test]
+    fn array_members_rev() {
+        let data = array![1, "foo"];
+
+        for member in data.members() {
+            assert!(!member.is_null());
+        }
+
+        let mut members = data.members().rev();
+
+        assert_eq!(members.next().unwrap(), "foo");
+        assert_eq!(members.next().unwrap(), 1);
+        assert!(members.next().is_none());
+    }
+
+    #[test]
     fn array_members_mut() {
         let mut data = array![Null, Null];
 
@@ -636,6 +651,20 @@ mod unit {
         }
 
         assert_eq!(data, array![100, 100]);
+    }
+
+    #[test]
+    fn array_members_mut_rev() {
+        let mut data = array![Null, Null];
+        let mut item = 100;
+
+        for member in data.members_mut().rev() {
+            assert!(member.is_null());
+            *member = item.into();
+            item += 1;
+        }
+
+        assert_eq!(data, array![item - 1, item - 2]);
     }
 
     #[test]
@@ -684,6 +713,30 @@ mod unit {
     }
 
     #[test]
+    fn object_entries_rev() {
+        let data = object!{
+            "a" => 1,
+            "b" => "foo"
+        };
+
+        for (_, value) in data.entries().rev() {
+            assert!(!value.is_null());
+        }
+
+        let mut entries = data.entries().rev();
+
+        let (key, value) = entries.next().unwrap();
+        assert_eq!(key, "b");
+        assert_eq!(value, "foo");
+
+        let (key, value) = entries.next().unwrap();
+        assert_eq!(key, "a");
+        assert_eq!(value, 1);
+
+        assert!(entries.next().is_none());
+    }
+
+    #[test]
     fn object_entries_mut() {
         let mut data = object!{
             "a" => Null,
@@ -698,6 +751,26 @@ mod unit {
         assert_eq!(data, object!{
             "a" => 100,
             "b" => 100
+        });
+    }
+
+    #[test]
+    fn object_entries_mut_rev() {
+        let mut data = object!{
+            "a" => Null,
+            "b" => Null
+        };
+        let mut item = 100;
+
+        for (_, value) in data.entries_mut().rev() {
+            assert!(value.is_null());
+            *value = item.into();
+            item += 1;
+        }
+
+        assert_eq!(data, object!{
+            "a" => item - 1,
+            "b" => item - 2
         });
     }
 
