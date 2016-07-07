@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::ops::{ Index, IndexMut, Deref };
 use iterators::{ Members, MembersMut, Entries, EntriesMut };
 use { JsonResult, JsonError };
-use std::{ usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32 };
+use std::{ mem, usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32 };
 
 macro_rules! f64_to_unsinged {
     ($unsigned:ident, $value:expr) => {
@@ -175,6 +175,33 @@ impl JsonValue {
         }
     }
 
+    /// Take over the ownership of the value, leaving `Null` in it's place.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// # #[macro_use] extern crate json;
+    /// # fn main() {
+    /// let mut data = array!["Foo", 42];
+    ///
+    /// let first = data[0].take();
+    /// let second = data[1].take();
+    ///
+    /// assert!(first == "Foo");
+    /// assert!(second == 42);
+    ///
+    /// assert!(data[0].is_null());
+    /// assert!(data[1].is_null());
+    /// # }
+    /// ```
+    pub fn take(&mut self) -> JsonValue {
+        let mut placeholder = JsonValue::Null;
+
+        mem::swap(self, &mut placeholder);
+
+        placeholder
+    }
+
     /// Works on `JsonValue::Array` - pushes a new value to the array.
     #[must_use]
     pub fn push<T>(&mut self, value: T) -> JsonResult<()>
@@ -290,6 +317,8 @@ impl JsonValue {
 
 /// Implements indexing by `usize` to easily access array members:
 ///
+/// ## Example
+///
 /// ```
 /// # use json::JsonValue;
 /// let mut array = JsonValue::new_array();
@@ -310,6 +339,8 @@ impl Index<usize> for JsonValue {
 }
 
 /// Implements mutable indexing by `usize` to easily modify array members:
+///
+/// ## Example
 ///
 /// ```
 /// # #[macro_use]
@@ -346,6 +377,8 @@ impl IndexMut<usize> for JsonValue {
 }
 
 /// Implements indexing by `&str` to easily access object members:
+///
+/// ## Example
 ///
 /// ```
 /// # #[macro_use]
@@ -390,6 +423,8 @@ impl<'a> Index<&'a String> for JsonValue {
 }
 
 /// Implements mutable indexing by `&str` to easily modify object members:
+///
+/// ## Example
 ///
 /// ```
 /// # #[macro_use]

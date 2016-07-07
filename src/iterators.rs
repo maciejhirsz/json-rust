@@ -1,6 +1,6 @@
 use std::collections::btree_map;
 use std::slice;
-use std::iter::{Iterator, DoubleEndedIterator};
+use std::iter::{ Iterator, DoubleEndedIterator };
 use JsonValue;
 
 pub enum Members<'a> {
