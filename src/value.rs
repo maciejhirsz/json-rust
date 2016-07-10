@@ -198,6 +198,40 @@ impl JsonValue {
         mem::replace(self, JsonValue::Null)
     }
 
+    /// Checks that self is a string, returns an owned Rust `String, leaving
+    /// `Null` in it's place.
+    ///
+    /// This is the cheapest way to obtain an owned `String` from JSON, as no
+    /// extra heap allocation is performend.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// # #[macro_use] extern crate json;
+    /// # fn main() {
+    /// let mut data = array!["Hello", "World"];
+    ///
+    /// let owned = data[0].take_string().expect("Should be a string");
+    ///
+    /// assert_eq!(owned, "Hello");
+    /// assert!(data[0].is_null());
+    /// # }
+    /// ```
+    pub fn take_string(&mut self) -> Option<String> {
+        let mut placeholder = JsonValue::Null;
+
+        mem::swap(self, &mut placeholder);
+
+        match placeholder {
+            JsonValue::String(string) => return Some(string),
+
+            // Not a string? Swap the original value back in place!
+            _ => mem::swap(self, &mut placeholder)
+        }
+
+        None
+    }
+
     /// Works on `JsonValue::Array` - pushes a new value to the array.
     #[must_use]
     pub fn push<T>(&mut self, value: T) -> JsonResult<()>
