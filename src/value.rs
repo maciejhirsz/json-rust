@@ -489,3 +489,17 @@ impl<'a> IndexMut<&'a String> for JsonValue {
         self.index_mut(index.deref())
     }
 }
+
+impl IntoIterator for JsonValue {
+    type Item = JsonValue;
+    type IntoIter = ::std::vec::IntoIter<JsonValue>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            JsonValue::Array(vec) => {
+                vec.into_iter()
+            },
+            _ => Vec::new().into_iter()
+        }
+    }
+}
