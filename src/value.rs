@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::ops::{ Index, IndexMut, Deref };
-use iterators::{ Members, MembersMut, Entries, EntriesMut };
+use { Members, MembersMut, Entries, EntriesMut };
 use { Result, Error };
 use std::{ mem, usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32 };
 
@@ -282,43 +282,43 @@ impl JsonValue {
     }
 
     /// Works on `JsonValue::Array` - returns an iterator over members.
-    pub fn members(&self) -> Members {
+    pub fn members(&self) -> Option<Members> {
         match *self {
             JsonValue::Array(ref vec) => {
-                Members::Some(vec.iter())
+                Some(vec.iter())
             },
-            _ => Members::None
+            _ => None
         }
     }
 
     /// Works on `JsonValue::Array` - returns a mutable iterator over members.
-    pub fn members_mut(&mut self) -> MembersMut {
+    pub fn members_mut(&mut self) -> Option<MembersMut> {
         match *self {
             JsonValue::Array(ref mut vec) => {
-                MembersMut::Some(vec.iter_mut())
+                Some(vec.iter_mut())
             },
-            _ => MembersMut::None
+            _ => None
         }
     }
 
     /// Works on `JsonValue::Object` - returns an iterator over key value pairs.
-    pub fn entries(&self) -> Entries {
+    pub fn entries(&self) -> Option<Entries> {
         match *self {
             JsonValue::Object(ref btree) => {
-                Entries::Some(btree.iter())
+                Some(btree.iter())
             },
-            _ => Entries::None
+            _ => None
         }
     }
 
     /// Works on `JsonValue::Object` - returns a mutable iterator over
     /// key value pairs.
-    pub fn entries_mut(&mut self) -> EntriesMut {
+    pub fn entries_mut(&mut self) -> Option<EntriesMut> {
         match *self {
             JsonValue::Object(ref mut btree) => {
-                EntriesMut::Some(btree.iter_mut())
+                Some(btree.iter_mut())
             },
-            _ => EntriesMut::None
+            _ => None
         }
     }
 

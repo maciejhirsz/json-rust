@@ -198,19 +198,31 @@
 //! ```
 
 use std::io::Write;
-use std::collections::{ BTreeMap, HashMap };
+use std::collections::{ BTreeMap, HashMap, btree_map };
 use std::{ fmt, result };
+use std::slice;
 
 mod codegen;
 mod parser;
 mod value;
 mod error;
-pub mod iterators;
 
 pub use error::Error;
 pub use value::JsonValue;
 pub use value::JsonValue::Null;
 pub type Result<T> = result::Result<T, Error>;
+
+/// Iterator over members of `JsonValue::Array`.
+pub type Members<'a> = slice::Iter<'a, JsonValue>;
+
+/// Mutable iterator over members of `JsonValue::Array`.
+pub type MembersMut<'a> = slice::IterMut<'a, JsonValue>;
+
+/// Iterator over key value pairs of `JsonValue::Object`.
+pub type Entries<'a> = btree_map::Iter<'a, String, JsonValue>;
+
+/// Mutable iterator over key value pairs of `JsonValue::Object`.
+pub type EntriesMut<'a> = btree_map::IterMut<'a, String, JsonValue>;
 
 #[deprecated(since="0.9.0", note="use `json::Error` instead")]
 pub use Error as JsonError;
