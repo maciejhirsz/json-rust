@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::ops::{ Index, IndexMut, Deref };
-use iterators::{ Members, MembersMut, Entries, EntriesMut };
-use { JsonResult, JsonError };
+use { Members, MembersMut, Entries, EntriesMut };
+use { Result, Error };
 use std::{ mem, usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32 };
 
 macro_rules! f64_to_unsinged {
@@ -234,14 +234,14 @@ impl JsonValue {
 
     /// Works on `JsonValue::Array` - pushes a new value to the array.
     #[must_use]
-    pub fn push<T>(&mut self, value: T) -> JsonResult<()>
+    pub fn push<T>(&mut self, value: T) -> Result<()>
     where T: Into<JsonValue> {
         match *self {
             JsonValue::Array(ref mut vec) => {
                 vec.push(value.into());
                 Ok(())
             },
-            _ => Err(JsonError::wrong_type("Array"))
+            _ => Err(Error::wrong_type("Array"))
         }
     }
 
@@ -281,43 +281,43 @@ impl JsonValue {
     }
 
     /// Works on `JsonValue::Array` - returns an iterator over members.
-    pub fn members(&self) -> Members {
+    pub fn members(&self) -> Option<Members> {
         match *self {
             JsonValue::Array(ref vec) => {
-                Members::Some(vec.iter())
+                Some(vec.iter())
             },
-            _ => Members::None
+            _ => None
         }
     }
 
     /// Works on `JsonValue::Array` - returns a mutable iterator over members.
-    pub fn members_mut(&mut self) -> MembersMut {
+    pub fn members_mut(&mut self) -> Option<MembersMut> {
         match *self {
             JsonValue::Array(ref mut vec) => {
-                MembersMut::Some(vec.iter_mut())
+                Some(vec.iter_mut())
             },
-            _ => MembersMut::None
+            _ => None
         }
     }
 
     /// Works on `JsonValue::Object` - returns an iterator over key value pairs.
-    pub fn entries(&self) -> Entries {
+    pub fn entries(&self) -> Option<Entries> {
         match *self {
             JsonValue::Object(ref btree) => {
-                Entries::Some(btree.iter())
+                Some(btree.iter())
             },
-            _ => Entries::None
+            _ => None
         }
     }
 
     /// Works on `JsonValue::Object` - returns a mutable iterator over
     /// key value pairs.
-    pub fn entries_mut(&mut self) -> EntriesMut {
+    pub fn entries_mut(&mut self) -> Option<EntriesMut> {
         match *self {
             JsonValue::Object(ref mut btree) => {
-                EntriesMut::Some(btree.iter_mut())
+                Some(btree.iter_mut())
             },
-            _ => EntriesMut::None
+            _ => None
         }
     }
 
@@ -494,5 +494,19 @@ impl IndexMut<String> for JsonValue {
 impl<'a> IndexMut<&'a String> for JsonValue {
     fn index_mut(&mut self, index: &String) -> &mut JsonValue {
         self.index_mut(index.deref())
+    }
+}
+
+impl IntoIterator for JsonValue {
+    type Item = JsonValue;
+    type IntoIter = ::std::vec::IntoIter<JsonValue>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            JsonValue::Array(vec) => {
+                vec.into_iter()
+            },
+            _ => Vec::new().into_iter()
+        }
     }
 }

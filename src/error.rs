@@ -1,9 +1,7 @@
-use std::error::Error;
-use std::fmt;
-use std::char;
+use std::{ char, error, fmt };
 
 #[derive(Debug, PartialEq)]
-pub enum JsonError {
+pub enum Error {
     UnexpectedCharacter {
         ch: char,
         line: usize,
@@ -16,15 +14,15 @@ pub enum JsonError {
     UndefinedField(String),
 }
 
-impl JsonError {
+impl Error {
     pub fn wrong_type(expected: &str) -> Self {
-        JsonError::WrongType(expected.into())
+        Error::WrongType(expected.into())
     }
 }
 
-impl fmt::Display for JsonError {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use JsonError::*;
+        use Error::*;
 
         match *self {
             UnexpectedCharacter {
@@ -42,9 +40,9 @@ impl fmt::Display for JsonError {
     }
 }
 
-impl Error for JsonError {
+impl error::Error for Error {
     fn description(&self) -> &str {
-        use JsonError::*;
+        use Error::*;
         match *self {
             UnexpectedCharacter { .. } => "Unexpected character",
             UnexpectedEndOfJson        => "Unexpected end of JSON",
