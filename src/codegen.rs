@@ -124,11 +124,12 @@ pub trait Generator {
 
     fn write_json(&mut self, json: &JsonValue) {
         match *json {
+            JsonValue::Null               => self.write(b"null"),
+            JsonValue::Short(ref short)   => self.write_string(short),
             JsonValue::String(ref string) => self.write_string(string),
             JsonValue::Number(ref number) => self.write_number(*number),
             JsonValue::Boolean(true)      => self.write(b"true"),
             JsonValue::Boolean(false)     => self.write(b"false"),
-            JsonValue::Null               => self.write(b"null"),
             JsonValue::Array(ref array)   => {
                 self.write_char(b'[');
                 let mut iter = array.iter();

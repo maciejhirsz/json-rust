@@ -3,6 +3,7 @@ use std::ops::{ Index, IndexMut, Deref };
 use { Members, MembersMut, Entries, EntriesMut };
 use { Result, Error };
 use std::{ mem, usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32 };
+use short::Short;
 
 macro_rules! f64_to_unsinged {
     ($unsigned:ident, $value:expr) => {
@@ -26,10 +27,11 @@ macro_rules! f64_to_singed {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum JsonValue {
+    Null,
+    Short(Short),
     String(String),
     Number(f64),
     Boolean(bool),
-    Null,
     Object(BTreeMap<String, JsonValue>),
     Array(Vec<JsonValue>),
 }
@@ -51,6 +53,7 @@ impl JsonValue {
 
     pub fn is_string(&self) -> bool {
         match *self {
+            JsonValue::Short(_)  => true,
             JsonValue::String(_) => true,
             _                    => false,
         }
@@ -101,10 +104,11 @@ impl JsonValue {
     /// - empty object (`object!{}`)
     pub fn is_empty(&self) -> bool {
         match *self {
+            JsonValue::Null               => true,
+            JsonValue::Short(ref value)   => value.is_empty(),
             JsonValue::String(ref value)  => value.is_empty(),
             JsonValue::Number(ref value)  => !value.is_normal(),
             JsonValue::Boolean(ref value) => !value,
-            JsonValue::Null               => true,
             JsonValue::Array(ref value)   => value.is_empty(),
             JsonValue::Object(ref value)  => value.is_empty(),
         }
@@ -112,7 +116,8 @@ impl JsonValue {
 
     pub fn as_str(&self) -> Option<&str> {
         match *self {
-            JsonValue::String(ref value) => Some(value.as_ref()),
+            JsonValue::Short(ref value)  => Some(value),
+            JsonValue::String(ref value) => Some(value),
             _                            => None
         }
     }
@@ -223,6 +228,7 @@ impl JsonValue {
         mem::swap(self, &mut placeholder);
 
         match placeholder {
+            JsonValue::Short(short)   => return Some(short.into()),
             JsonValue::String(string) => return Some(string),
 
             // Not a string? Swap the original value back in place!

@@ -1,6 +1,7 @@
 use std::{ str, char, f64 };
 use std::collections::BTreeMap;
 use { JsonValue, Error, Result };
+use short::Short;
 
 const MAX_PRECISION: u64 = 576460752303423500;
 
@@ -10,6 +11,7 @@ struct Position {
 }
 
 struct Parser<'a> {
+    buffer: Vec<u8>,
     source: &'a str,
     byte_ptr: *const u8,
     index: usize,
@@ -128,7 +130,7 @@ static ALLOWED: [bool; 256] = [
 
 macro_rules! expect_string {
     ($parser:ident) => ({
-        let result: String;// = unsafe { mem::uninitialized() };
+        let result: &str;
         let start = $parser.index;
 
         loop {
@@ -137,7 +139,7 @@ macro_rules! expect_string {
                 continue;
             }
             if ch == b'"' {
-                result = (&$parser.source[start .. $parser.index - 1]).into();
+                result = &$parser.source[start .. $parser.index - 1];
                 break;
             }
             if ch == b'\\' {
@@ -239,7 +241,14 @@ macro_rules! expect_value {
             )*
             b'[' => JsonValue::Array(try!($parser.read_array())),
             b'{' => JsonValue::Object(try!($parser.read_object())),
-            b'"' => JsonValue::String(expect_string!($parser)),
+            b'"' => {
+                let slice = expect_string!($parser);
+                if slice.len() <= 30 {
+                    JsonValue::Short(unsafe { Short::from_slice_unchecked(slice) })
+                } else {
+                    JsonValue::String(slice.into())
+                }
+            },
             b'0' => {
                 let num = try!($parser.read_number_with_fraction(0, 0));
                 JsonValue::Number(num)
@@ -277,6 +286,7 @@ macro_rules! expect_value {
 impl<'a> Parser<'a> {
     pub fn new(source: &'a str) -> Self {
         Parser {
+            buffer: Vec::with_capacity(30),
             source: source,
             byte_ptr: source.as_ptr(),
             index: 0,
@@ -372,7 +382,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn read_codepoint(&mut self, buffer: &mut Vec<u8>) -> Result<()> {
+    fn read_codepoint(&mut self) -> Result<()> {
         let mut codepoint = try!(self.read_hexdec_codepoint());
 
         match codepoint {
@@ -396,17 +406,17 @@ impl<'a> Parser<'a> {
         }
 
         match codepoint {
-            0x0000 ... 0x007F => buffer.push(codepoint as u8),
-            0x0080 ... 0x07FF => buffer.extend_from_slice(&[
+            0x0000 ... 0x007F => self.buffer.push(codepoint as u8),
+            0x0080 ... 0x07FF => self.buffer.extend_from_slice(&[
                 (((codepoint >> 6) as u8) & 0x1F) | 0xC0,
                 ((codepoint        as u8) & 0x3F) | 0x80
             ]),
-            0x0800 ... 0xFFFF => buffer.extend_from_slice(&[
+            0x0800 ... 0xFFFF => self.buffer.extend_from_slice(&[
                 (((codepoint >> 12) as u8) & 0x0F) | 0xE0,
                 (((codepoint >> 6)  as u8) & 0x3F) | 0x80,
                 ((codepoint         as u8) & 0x3F) | 0x80
             ]),
-            0x10000 ... 0x10FFFF => buffer.extend_from_slice(&[
+            0x10000 ... 0x10FFFF => self.buffer.extend_from_slice(&[
                 (((codepoint >> 18) as u8) & 0x07) | 0xF0,
                 (((codepoint >> 12) as u8) & 0x3F) | 0x80,
                 (((codepoint >> 6)  as u8) & 0x3F) | 0x80,
@@ -418,15 +428,16 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn read_complex_string(&mut self, start: usize) -> Result<String> {
-        let mut buffer = Vec::new();
+    fn read_complex_string(&mut self, start: usize) -> Result<&str> {
+        // let mut buffer = Vec::new();
+        self.buffer.clear();
         let mut ch = b'\\';
 
-        buffer.extend_from_slice(self.source[start .. self.index - 1].as_bytes());
+        self.buffer.extend_from_slice(self.source[start .. self.index - 1].as_bytes());
 
         loop {
             if ALLOWED[ch as usize] {
-                buffer.push(ch);
+                self.buffer.push(ch);
                 ch = expect_byte!(self);
                 continue;
             }
@@ -436,7 +447,7 @@ impl<'a> Parser<'a> {
                     let escaped = expect_byte!(self);
                     let escaped = match escaped {
                         b'u'  => {
-                            try!(self.read_codepoint(&mut buffer));
+                            try!(self.read_codepoint());
                             ch = expect_byte!(self);
                             continue;
                         },
@@ -450,7 +461,7 @@ impl<'a> Parser<'a> {
                         b'n'  => b'\n',
                         _     => return self.unexpected_character(escaped)
                     };
-                    buffer.push(escaped);
+                    self.buffer.push(escaped);
                 },
                 _ => return self.unexpected_character(ch)
             }
@@ -459,7 +470,7 @@ impl<'a> Parser<'a> {
 
         // Since the original source is already valid UTF-8, and `\`
         // cannot occur in front of a codepoint > 127, this is safe.
-        Ok(unsafe { String::from_utf8_unchecked(buffer) })
+        Ok(unsafe { str::from_utf8_unchecked(&self.buffer) })
     }
 
     fn read_big_number(&mut self, num: u64) -> Result<f64> {
@@ -548,7 +559,7 @@ impl<'a> Parser<'a> {
         let key = expect!{ self,
             b'}'  => return Ok(object),
             b'\"' => expect_string!(self)
-        };
+        }.into();
 
         expect!(self, b':');
 
@@ -561,7 +572,7 @@ impl<'a> Parser<'a> {
                     expect!(self, b'"');
                     expect_string!(self)
                 }
-            };
+            }.into();
 
             expect!(self, b':');
 

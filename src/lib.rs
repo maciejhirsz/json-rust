@@ -206,6 +206,7 @@ mod codegen;
 mod parser;
 mod value;
 mod error;
+mod short;
 
 pub use error::Error;
 pub use value::JsonValue;
