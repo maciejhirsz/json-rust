@@ -1,6 +1,8 @@
 use std::{ ptr, str, slice, fmt };
 use std::ops::Deref;
 
+pub const MAX_LEN: usize = 23;
+
 #[derive(Clone, Copy, PartialEq)]
 pub struct Short {
     value: [u8; 23],
@@ -9,10 +11,10 @@ pub struct Short {
 
 impl Short {
     #[inline]
-    pub unsafe fn from_slice_unchecked(slice: &str) -> Self {
+    pub unsafe fn from_slice(slice: &str) -> Self {
         let mut short = Short {
             // initializing memory with 0s makes things faster in the long run
-            value: [0; 23],
+            value: [0; MAX_LEN],
             len: slice.len() as u8,
         };
 
@@ -55,5 +57,29 @@ impl Deref for Short {
 impl From<Short> for String {
     fn from(short: Short) -> String {
         String::from(short.as_str())
+    }
+}
+
+impl PartialEq<str> for Short {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str().eq(other)
+    }
+}
+
+impl PartialEq<Short> for str {
+    fn eq(&self, other: &Short) -> bool {
+        other.as_str().eq(self)
+    }
+}
+
+impl PartialEq<String> for Short {
+    fn eq(&self, other: &String) -> bool {
+        self.as_str().eq(other)
+    }
+}
+
+impl PartialEq<Short> for String {
+    fn eq(&self, other: &Short) -> bool {
+        other.as_str().eq(self)
     }
 }

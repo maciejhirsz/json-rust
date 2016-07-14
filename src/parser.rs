@@ -1,7 +1,6 @@
 use std::{ str, char, f64 };
 use std::collections::BTreeMap;
 use { JsonValue, Error, Result };
-use short::Short;
 
 const MAX_PRECISION: u64 = 576460752303423500;
 
@@ -241,14 +240,7 @@ macro_rules! expect_value {
             )*
             b'[' => JsonValue::Array(try!($parser.read_array())),
             b'{' => JsonValue::Object(try!($parser.read_object())),
-            b'"' => {
-                let slice = expect_string!($parser);
-                if slice.len() <= 23 {
-                    JsonValue::Short(unsafe { Short::from_slice_unchecked(slice) })
-                } else {
-                    JsonValue::String(slice.into())
-                }
-            },
+            b'"' => expect_string!($parser).into(),
             b'0' => {
                 let num = try!($parser.read_number_with_fraction(0, 0));
                 JsonValue::Number(num)

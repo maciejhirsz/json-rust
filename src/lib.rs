@@ -274,6 +274,7 @@ impl fmt::Display for JsonValue {
             f.write_str(&self.pretty(4))
         } else {
             match *self {
+                JsonValue::Short(ref value)   => value.fmt(f),
                 JsonValue::String(ref value)  => value.fmt(f),
                 JsonValue::Number(ref value)  => value.fmt(f),
                 JsonValue::Boolean(ref value) => value.fmt(f),
@@ -445,7 +446,11 @@ macro_rules! implement {
 
 impl<'a> From<&'a str> for JsonValue {
     fn from(val: &'a str) -> JsonValue {
-        JsonValue::String(val.to_string())
+        if val.len() <= short::MAX_LEN {
+            JsonValue::Short(unsafe { short::Short::from_slice(val) })
+        } else {
+            JsonValue::String(val.into())
+        }
     }
 }
 
@@ -491,6 +496,7 @@ impl From<Option<JsonValue>> for JsonValue {
 impl<'a> PartialEq<&'a str> for JsonValue {
     fn eq(&self, other: &&str) -> bool {
         match *self {
+            JsonValue::Short(ref value)  => value == *other,
             JsonValue::String(ref value) => value == *other,
             _ => false
         }
@@ -500,6 +506,7 @@ impl<'a> PartialEq<&'a str> for JsonValue {
 impl<'a> PartialEq<JsonValue> for &'a str {
     fn eq(&self, other: &JsonValue) -> bool {
         match *other {
+            JsonValue::Short(ref value)  => value == *self,
             JsonValue::String(ref value) => value == *self,
             _ => false
         }
@@ -509,6 +516,7 @@ impl<'a> PartialEq<JsonValue> for &'a str {
 impl PartialEq<str> for JsonValue {
     fn eq(&self, other: &str) -> bool {
         match *self {
+            JsonValue::Short(ref value)  => value == other,
             JsonValue::String(ref value) => value == other,
             _ => false
         }
@@ -518,6 +526,7 @@ impl PartialEq<str> for JsonValue {
 impl<'a> PartialEq<JsonValue> for str {
     fn eq(&self, other: &JsonValue) -> bool {
         match *other {
+            JsonValue::Short(ref value)  => value == self,
             JsonValue::String(ref value) => value == self,
             _ => false
         }
