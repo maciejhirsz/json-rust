@@ -243,7 +243,7 @@ macro_rules! expect_value {
             b'{' => JsonValue::Object(try!($parser.read_object())),
             b'"' => {
                 let slice = expect_string!($parser);
-                if slice.len() <= 30 {
+                if slice.len() <= 23 {
                     JsonValue::Short(unsafe { Short::from_slice_unchecked(slice) })
                 } else {
                     JsonValue::String(slice.into())
