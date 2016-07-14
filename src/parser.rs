@@ -585,7 +585,7 @@ impl<'a> Parser<'a> {
     fn read_array(&mut self) -> Result<Vec<JsonValue>> {
         let first = expect_value!{ self, b']' => return Ok(Vec::new()) };
 
-        let mut array = Vec::with_capacity(20);
+        let mut array = Vec::with_capacity(2);
         array.push(first);
 
         loop {
