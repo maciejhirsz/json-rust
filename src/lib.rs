@@ -89,7 +89,7 @@
 //! data["list"][0] = "Hello".into();
 //!
 //! // Use the `dump` method to serialize the data:
-//! assert_eq!(data.dump(), r#"{"answer":42,"bar":null,"foo":false,"list":["Hello","world",true]}"#);
+//! assert_eq!(data.dump(), r#"{"foo":false,"bar":null,"answer":42,"list":["Hello","world",true]}"#);
 //!
 //! // Or pretty print it out:
 //! println!("{:#}", data);
@@ -190,34 +190,60 @@
 //! };
 //! assert_eq!(
 //!     data.dump(),
-//!     // Because object is internally using a BTreeMap,
-//!     // the key order is alphabetical
-//!     r#"{"age":30,"canJSON":true,"name":"John Doe"}"#
+//!     r#"{"name":"John Doe","age":30,"canJSON":true}"#
 //! );
 //! # }
 //! ```
+
+use std::io::Write;
+use std::collections::{ BTreeMap, HashMap };
+use std::{ fmt, result, mem };
+use std::slice;
 
 mod codegen;
 mod parser;
 mod value;
 mod error;
-pub mod iterators;
 
-pub use error::JsonError;
+pub mod short;
+pub mod object;
+
+use short::Short;
+use object::Object;
+
+pub use error::Error;
 pub use value::JsonValue;
 pub use value::JsonValue::Null;
-pub type JsonResult<T> = Result<T, JsonError>;
+
+/// Result type used by this crate.
+///
+///
+/// *Note:* Since 0.9.0 the old `JsonResult` type is depreacted. Always use
+/// `json::Result` instead.
+pub type Result<T> = result::Result<T, Error>;
+
+/// Iterator over members of `JsonValue::Array`.
+pub type Members<'a> = slice::Iter<'a, JsonValue>;
+
+/// Mutable iterator over members of `JsonValue::Array`.
+pub type MembersMut<'a> = slice::IterMut<'a, JsonValue>;
+
+/// Iterator over key value pairs of `JsonValue::Object`.
+pub type Entries<'a> = object::Iter<'a>;
+
+/// Mutable iterator over key value pairs of `JsonValue::Object`.
+pub type EntriesMut<'a> = object::IterMut<'a>;
+
+#[deprecated(since="0.9.0", note="use `json::Error` instead")]
+pub use Error as JsonError;
+
+#[deprecated(since="0.9.0", note="use `json::Result` instead")]
+pub use Result as JsonResult;
 
 pub use parser::parse;
 use codegen::{ Generator, PrettyGenerator, DumpGenerator, WriterGenerator };
 
-use std::io::Write;
-use std::collections::HashMap;
-use std::collections::BTreeMap;
-use std::fmt;
-
 pub type Array = Vec<JsonValue>;
-pub type Object = BTreeMap<String, JsonValue>;
 
 impl JsonValue {
     /// Prints out the value as JSON string.
@@ -256,6 +282,7 @@ impl fmt::Display for JsonValue {
             f.write_str(&self.pretty(4))
         } else {
             match *self {
+                JsonValue::Short(ref value)   => value.fmt(f),
                 JsonValue::String(ref value)  => value.fmt(f),
                 JsonValue::Number(ref value)  => value.fmt(f),
                 JsonValue::Boolean(ref value) => value.fmt(f),
@@ -305,12 +332,12 @@ macro_rules! object {
     {} => ($crate::JsonValue::new_object());
 
     { $( $key:expr => $value:expr ),* } => ({
-        use std::collections::BTreeMap;
+        use $crate::object::Object;
 
-        let mut object = BTreeMap::new();
+        let mut object = Object::new();
 
         $(
-            object.insert($key.into(), $value.into());
+            object.insert($key, $value.into());
         )*
 
         $crate::JsonValue::Object(object)
@@ -427,7 +454,11 @@ macro_rules! implement {
 
 impl<'a> From<&'a str> for JsonValue {
     fn from(val: &'a str) -> JsonValue {
-        JsonValue::String(val.to_string())
+        if val.len() <= short::MAX_LEN {
+            JsonValue::Short(unsafe { Short::from_slice(val) })
+        } else {
+            JsonValue::String(val.into())
+        }
     }
 }
 
@@ -442,10 +473,10 @@ impl<'a> From<Option<&'a str>> for JsonValue {
 
 impl From<HashMap<String, JsonValue>> for JsonValue {
     fn from(mut val: HashMap<String, JsonValue>) -> JsonValue {
-        let mut object = BTreeMap::new();
+        let mut object = Object::with_capacity(val.len());
 
         for (key, value) in val.drain() {
-            object.insert(key, value);
+            object.insert(&key, value);
         }
 
         JsonValue::Object(object)
@@ -454,6 +485,31 @@ impl From<HashMap<String, JsonValue>> for JsonValue {
 
 impl From<Option<HashMap<String, JsonValue>>> for JsonValue {
     fn from(val: Option<HashMap<String, JsonValue>>) -> JsonValue {
+        match val {
+            Some(value) => value.into(),
+            None        => Null,
+        }
+    }
+}
+
+impl From<BTreeMap<String, JsonValue>> for JsonValue {
+    fn from(mut val: BTreeMap<String, JsonValue>) -> JsonValue {
+        let mut object = Object::with_capacity(val.len());
+
+        for (key, value) in val.iter_mut() {
+            // Since BTreeMap has no `drain` available, we can use
+            // the mutable iterator and replace all values by nulls,
+            // taking ownership and transfering it to the new `Object`.
+            let value = mem::replace(value, Null);
+            object.insert(key, value);
+        }
+
+        JsonValue::Object(object)
+    }
+}
+
+impl From<Option<BTreeMap<String, JsonValue>>> for JsonValue {
+    fn from(val: Option<BTreeMap<String, JsonValue>>) -> JsonValue {
         match val {
             Some(value) => value.into(),
             None        => Null,
@@ -473,6 +529,7 @@ impl From<Option<JsonValue>> for JsonValue {
 impl<'a> PartialEq<&'a str> for JsonValue {
     fn eq(&self, other: &&str) -> bool {
         match *self {
+            JsonValue::Short(ref value)  => value == *other,
             JsonValue::String(ref value) => value == *other,
             _ => false
         }
@@ -482,6 +539,7 @@ impl<'a> PartialEq<&'a str> for JsonValue {
 impl<'a> PartialEq<JsonValue> for &'a str {
     fn eq(&self, other: &JsonValue) -> bool {
         match *other {
+            JsonValue::Short(ref value)  => value == *self,
             JsonValue::String(ref value) => value == *self,
             _ => false
         }
@@ -491,6 +549,7 @@ impl<'a> PartialEq<JsonValue> for &'a str {
 impl PartialEq<str> for JsonValue {
     fn eq(&self, other: &str) -> bool {
         match *self {
+            JsonValue::Short(ref value)  => value == other,
             JsonValue::String(ref value) => value == other,
             _ => false
         }
@@ -500,6 +559,7 @@ impl PartialEq<str> for JsonValue {
 impl<'a> PartialEq<JsonValue> for str {
     fn eq(&self, other: &JsonValue) -> bool {
         match *other {
+            JsonValue::Short(ref value)  => value == self,
             JsonValue::String(ref value) => value == self,
             _ => false
         }

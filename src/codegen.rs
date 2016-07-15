@@ -3,6 +3,7 @@ use std::num::FpCategory;
 use JsonValue;
 
 extern crate itoa;
+extern crate ftoa;
 
 const QU: u8 = b'"';
 const BS: u8 = b'\\';
@@ -100,12 +101,7 @@ pub trait Generator {
                 if num.fract() == 0.0 && num.abs() < 1e19 {
                     itoa::write(self.get_writer(), num as i64).unwrap();
                 } else {
-                    let abs = num.abs();
-                    if abs < 1e-15 || abs > 1e19 {
-                        write!(self.get_writer(), "{:e}", num).unwrap();
-                    } else {
-                        write!(self.get_writer(), "{}", num).unwrap();
-                    }
+                    ftoa::write(self.get_writer(), num).unwrap();
                 }
             },
             FpCategory::Zero => {
@@ -124,11 +120,12 @@ pub trait Generator {
 
     fn write_json(&mut self, json: &JsonValue) {
         match *json {
+            JsonValue::Null               => self.write(b"null"),
+            JsonValue::Short(ref short)   => self.write_string(short.as_str()),
             JsonValue::String(ref string) => self.write_string(string),
             JsonValue::Number(ref number) => self.write_number(*number),
             JsonValue::Boolean(true)      => self.write(b"true"),
             JsonValue::Boolean(false)     => self.write(b"false"),
-            JsonValue::Null               => self.write(b"null"),
             JsonValue::Array(ref array)   => {
                 self.write_char(b'[');
                 let mut iter = array.iter();

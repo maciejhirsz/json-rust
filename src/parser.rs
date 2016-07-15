@@ -1,6 +1,6 @@
-use std::{ str, char, f64 };
-use std::collections::BTreeMap;
-use { JsonValue, JsonError, JsonResult };
+use std::{ str, slice, char, f64 };
+use object::Object;
+use { JsonValue, Error, Result };
 
 const MAX_PRECISION: u64 = 576460752303423500;
 
@@ -10,6 +10,7 @@ struct Position {
 }
 
 struct Parser<'a> {
+    buffer: Vec<u8>,
     source: &'a str,
     byte_ptr: *const u8,
     index: usize,
@@ -19,7 +20,7 @@ struct Parser<'a> {
 macro_rules! expect_byte {
     ($parser:ident) => ({
         if $parser.is_eof() {
-            return Err(JsonError::UnexpectedEndOfJson);
+            return Err(Error::UnexpectedEndOfJson);
         }
 
         let ch = $parser.read_byte();
@@ -128,7 +129,7 @@ static ALLOWED: [bool; 256] = [
 
 macro_rules! expect_string {
     ($parser:ident) => ({
-        let result: String;// = unsafe { mem::uninitialized() };
+        let result: &str;
         let start = $parser.index;
 
         loop {
@@ -137,7 +138,13 @@ macro_rules! expect_string {
                 continue;
             }
             if ch == b'"' {
-                result = (&$parser.source[start .. $parser.index - 1]).into();
+                // result = &$parser.source[start .. $parser.index - 1];
+
+                unsafe {
+                    let ptr = $parser.byte_ptr.offset(start as isize);
+                    let len = $parser.index - 1 - start;
+                    result = str::from_utf8_unchecked(slice::from_raw_parts(ptr, len));
+                }
                 break;
             }
             if ch == b'\\' {
@@ -151,7 +158,6 @@ macro_rules! expect_string {
         result
     })
 }
-
 
 fn exponent_to_power(e: i32) -> f64 {
     static POWERS: [f64; 22] = [
@@ -239,7 +245,7 @@ macro_rules! expect_value {
             )*
             b'[' => JsonValue::Array(try!($parser.read_array())),
             b'{' => JsonValue::Object(try!($parser.read_object())),
-            b'"' => JsonValue::String(expect_string!($parser)),
+            b'"' => expect_string!($parser).into(),
             b'0' => {
                 let num = try!($parser.read_number_with_fraction(0, 0));
                 JsonValue::Number(num)
@@ -277,6 +283,7 @@ macro_rules! expect_value {
 impl<'a> Parser<'a> {
     pub fn new(source: &'a str) -> Self {
         Parser {
+            buffer: Vec::with_capacity(30),
             source: source,
             byte_ptr: source.as_ptr(),
             index: 0,
@@ -310,7 +317,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn unexpected_character<T: Sized>(&mut self, byte: u8) -> JsonResult<T> {
+    fn unexpected_character<T: Sized>(&mut self, byte: u8) -> Result<T> {
         let pos = self.source_position_from_index(self.index);
 
         let ch = if byte & 0x80 != 0 {
@@ -336,7 +343,7 @@ impl<'a> Parser<'a> {
 
             let slice = try!(
                 str::from_utf8(&buf[0..len])
-                .map_err(|_| JsonError::FailedUtf8Parsing)
+                .map_err(|_| Error::FailedUtf8Parsing)
             );
 
             slice.chars().next().unwrap()
@@ -346,14 +353,14 @@ impl<'a> Parser<'a> {
             unsafe { char::from_u32_unchecked(byte as u32) }
         };
 
-        Err(JsonError::UnexpectedCharacter {
+        Err(Error::UnexpectedCharacter {
             ch: ch,
             line: pos.line,
             column: pos.column,
         })
     }
 
-    fn read_hexdec_digit(&mut self) -> JsonResult<u32> {
+    fn read_hexdec_digit(&mut self) -> Result<u32> {
         let ch = expect_byte!(self);
         Ok(match ch {
             b'0' ... b'9' => (ch - b'0'),
@@ -363,7 +370,7 @@ impl<'a> Parser<'a> {
         } as u32)
     }
 
-    fn read_hexdec_codepoint(&mut self) -> JsonResult<u32> {
+    fn read_hexdec_codepoint(&mut self) -> Result<u32> {
         Ok(
             try!(self.read_hexdec_digit()) << 12 |
             try!(self.read_hexdec_digit()) << 8  |
@@ -372,7 +379,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn read_codepoint(&mut self, buffer: &mut Vec<u8>) -> JsonResult<()> {
+    fn read_codepoint(&mut self) -> Result<()> {
         let mut codepoint = try!(self.read_hexdec_codepoint());
 
         match codepoint {
@@ -388,45 +395,46 @@ impl<'a> Parser<'a> {
                 if let 0xDC00 ... 0xDFFF = lower {
                     codepoint = (codepoint | lower - 0xDC00) + 0x010000;
                 } else {
-                    return Err(JsonError::FailedUtf8Parsing)
+                    return Err(Error::FailedUtf8Parsing)
                 }
             },
             0xE000 ... 0xFFFF => {},
-            _ => return Err(JsonError::FailedUtf8Parsing)
+            _ => return Err(Error::FailedUtf8Parsing)
         }
 
         match codepoint {
-            0x0000 ... 0x007F => buffer.push(codepoint as u8),
-            0x0080 ... 0x07FF => buffer.extend_from_slice(&[
+            0x0000 ... 0x007F => self.buffer.push(codepoint as u8),
+            0x0080 ... 0x07FF => self.buffer.extend_from_slice(&[
                 (((codepoint >> 6) as u8) & 0x1F) | 0xC0,
                 ((codepoint        as u8) & 0x3F) | 0x80
             ]),
-            0x0800 ... 0xFFFF => buffer.extend_from_slice(&[
+            0x0800 ... 0xFFFF => self.buffer.extend_from_slice(&[
                 (((codepoint >> 12) as u8) & 0x0F) | 0xE0,
                 (((codepoint >> 6)  as u8) & 0x3F) | 0x80,
                 ((codepoint         as u8) & 0x3F) | 0x80
             ]),
-            0x10000 ... 0x10FFFF => buffer.extend_from_slice(&[
+            0x10000 ... 0x10FFFF => self.buffer.extend_from_slice(&[
                 (((codepoint >> 18) as u8) & 0x07) | 0xF0,
                 (((codepoint >> 12) as u8) & 0x3F) | 0x80,
                 (((codepoint >> 6)  as u8) & 0x3F) | 0x80,
                 ((codepoint         as u8) & 0x3F) | 0x80
             ]),
-            _ => return Err(JsonError::FailedUtf8Parsing)
+            _ => return Err(Error::FailedUtf8Parsing)
         }
 
         Ok(())
     }
 
-    fn read_complex_string(&mut self, start: usize) -> JsonResult<String> {
-        let mut buffer = Vec::new();
+    fn read_complex_string<'b>(&mut self, start: usize) -> Result<&'b str> {
+        // let mut buffer = Vec::new();
+        self.buffer.clear();
         let mut ch = b'\\';
 
-        buffer.extend_from_slice(self.source[start .. self.index - 1].as_bytes());
+        self.buffer.extend_from_slice(self.source[start .. self.index - 1].as_bytes());
 
         loop {
             if ALLOWED[ch as usize] {
-                buffer.push(ch);
+                self.buffer.push(ch);
                 ch = expect_byte!(self);
                 continue;
             }
@@ -436,7 +444,7 @@ impl<'a> Parser<'a> {
                     let escaped = expect_byte!(self);
                     let escaped = match escaped {
                         b'u'  => {
-                            try!(self.read_codepoint(&mut buffer));
+                            try!(self.read_codepoint());
                             ch = expect_byte!(self);
                             continue;
                         },
@@ -450,7 +458,7 @@ impl<'a> Parser<'a> {
                         b'n'  => b'\n',
                         _     => return self.unexpected_character(escaped)
                     };
-                    buffer.push(escaped);
+                    self.buffer.push(escaped);
                 },
                 _ => return self.unexpected_character(ch)
             }
@@ -459,10 +467,15 @@ impl<'a> Parser<'a> {
 
         // Since the original source is already valid UTF-8, and `\`
         // cannot occur in front of a codepoint > 127, this is safe.
-        Ok(unsafe { String::from_utf8_unchecked(buffer) })
+        Ok(unsafe {
+            str::from_utf8_unchecked(
+                // Construct the slice from parts to satisfy the borrow checker
+                slice::from_raw_parts(self.buffer.as_ptr(), self.buffer.len())
+            )
+        })
     }
 
-    fn read_big_number(&mut self, num: u64) -> JsonResult<f64> {
+    fn read_big_number(&mut self, num: u64) -> Result<f64> {
         // Attempt to continue reading digits that would overflow
         // u64 into freshly converted f64
 
@@ -483,7 +496,7 @@ impl<'a> Parser<'a> {
         self.read_number_with_fraction(num, e)
     }
 
-    fn read_number_with_fraction(&mut self, mut num: u64, mut e: i32) -> JsonResult<f64> {
+    fn read_number_with_fraction(&mut self, mut num: u64, mut e: i32) -> Result<f64> {
         if self.is_eof() {
             return Ok(make_float(num, e));
         }
@@ -542,8 +555,8 @@ impl<'a> Parser<'a> {
         Ok(make_float(num, e))
     }
 
-    fn read_object(&mut self) -> JsonResult<BTreeMap<String, JsonValue>> {
-        let mut object = BTreeMap::new();
+    fn read_object(&mut self) -> Result<Object> {
+        let mut object = Object::with_capacity(3);
 
         let key = expect!{ self,
             b'}'  => return Ok(object),
@@ -571,10 +584,10 @@ impl<'a> Parser<'a> {
         Ok(object)
     }
 
-    fn read_array(&mut self) -> JsonResult<Vec<JsonValue>> {
+    fn read_array(&mut self) -> Result<Vec<JsonValue>> {
         let first = expect_value!{ self, b']' => return Ok(Vec::new()) };
 
-        let mut array = Vec::with_capacity(20);
+        let mut array = Vec::with_capacity(2);
         array.push(first);
 
         loop {
@@ -590,7 +603,7 @@ impl<'a> Parser<'a> {
         Ok(array)
     }
 
-    fn ensure_end(&mut self) -> JsonResult<()> {
+    fn ensure_end(&mut self) -> Result<()> {
         while !self.is_eof() {
             match self.read_byte() {
                 9 ... 13 | 32 => self.bump(),
@@ -604,12 +617,12 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn value(&mut self) -> JsonResult<JsonValue> {
+    fn value(&mut self) -> Result<JsonValue> {
         Ok(expect_value!(self))
     }
 }
 
-pub fn parse(source: &str) -> JsonResult<JsonValue> {
+pub fn parse(source: &str) -> Result<JsonValue> {
     let mut parser = Parser::new(source);
 
     let value = try!(parser.value());

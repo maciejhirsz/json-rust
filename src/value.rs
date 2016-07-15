@@ -1,8 +1,9 @@
-use std::collections::BTreeMap;
 use std::ops::{ Index, IndexMut, Deref };
-use iterators::{ Members, MembersMut, Entries, EntriesMut };
-use { JsonResult, JsonError };
-use std::{ usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32 };
+use { Members, MembersMut, Entries, EntriesMut };
+use { Result, Error };
+use std::{ mem, usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32 };
+use short::Short;
+use object::Object;
 
 macro_rules! f64_to_unsinged {
     ($unsigned:ident, $value:expr) => {
@@ -26,11 +27,12 @@ macro_rules! f64_to_singed {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum JsonValue {
+    Null,
+    Short(Short),
     String(String),
     Number(f64),
     Boolean(bool),
-    Null,
-    Object(BTreeMap<String, JsonValue>),
+    Object(Object),
     Array(Vec<JsonValue>),
 }
 
@@ -40,7 +42,7 @@ impl JsonValue {
     /// Create an empty `JsonValue::Object` instance.
     /// When creating an object with data, consider using the `object!` macro.
     pub fn new_object() -> JsonValue {
-        JsonValue::Object(BTreeMap::new())
+        JsonValue::Object(Object::new())
     }
 
     /// Create an empty `JsonValue::Array` instance.
@@ -51,6 +53,7 @@ impl JsonValue {
 
     pub fn is_string(&self) -> bool {
         match *self {
+            JsonValue::Short(_)  => true,
             JsonValue::String(_) => true,
             _                    => false,
         }
@@ -101,10 +104,11 @@ impl JsonValue {
     /// - empty object (`object!{}`)
     pub fn is_empty(&self) -> bool {
         match *self {
+            JsonValue::Null               => true,
+            JsonValue::Short(ref value)   => value.is_empty(),
             JsonValue::String(ref value)  => value.is_empty(),
             JsonValue::Number(ref value)  => !value.is_normal(),
             JsonValue::Boolean(ref value) => !value,
-            JsonValue::Null               => true,
             JsonValue::Array(ref value)   => value.is_empty(),
             JsonValue::Object(ref value)  => value.is_empty(),
         }
@@ -112,7 +116,8 @@ impl JsonValue {
 
     pub fn as_str(&self) -> Option<&str> {
         match *self {
-            JsonValue::String(ref value) => Some(value.as_ref()),
+            JsonValue::Short(ref value)  => Some(value),
+            JsonValue::String(ref value) => Some(value),
             _                            => None
         }
     }
@@ -175,16 +180,74 @@ impl JsonValue {
         }
     }
 
+    /// Take over the ownership of the value, leaving `Null` in it's place.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// # #[macro_use] extern crate json;
+    /// # fn main() {
+    /// let mut data = array!["Foo", 42];
+    ///
+    /// let first = data[0].take();
+    /// let second = data[1].take();
+    ///
+    /// assert!(first == "Foo");
+    /// assert!(second == 42);
+    ///
+    /// assert!(data[0].is_null());
+    /// assert!(data[1].is_null());
+    /// # }
+    /// ```
+    pub fn take(&mut self) -> JsonValue {
+        mem::replace(self, JsonValue::Null)
+    }
+
+    /// Checks that self is a string, returns an owned Rust `String, leaving
+    /// `Null` in it's place.
+    ///
+    /// This is the cheapest way to obtain an owned `String` from JSON, as no
+    /// extra heap allocation is performend.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// # #[macro_use] extern crate json;
+    /// # fn main() {
+    /// let mut data = array!["Hello", "World"];
+    ///
+    /// let owned = data[0].take_string().expect("Should be a string");
+    ///
+    /// assert_eq!(owned, "Hello");
+    /// assert!(data[0].is_null());
+    /// # }
+    /// ```
+    pub fn take_string(&mut self) -> Option<String> {
+        let mut placeholder = JsonValue::Null;
+
+        mem::swap(self, &mut placeholder);
+
+        match placeholder {
+            JsonValue::Short(short)   => return Some(short.into()),
+            JsonValue::String(string) => return Some(string),
+
+            // Not a string? Swap the original value back in place!
+            _ => mem::swap(self, &mut placeholder)
+        }
+
+        None
+    }
+
     /// Works on `JsonValue::Array` - pushes a new value to the array.
     #[must_use]
-    pub fn push<T>(&mut self, value: T) -> JsonResult<()>
+    pub fn push<T>(&mut self, value: T) -> Result<()>
     where T: Into<JsonValue> {
         match *self {
             JsonValue::Array(ref mut vec) => {
                 vec.push(value.into());
                 Ok(())
             },
-            _ => Err(JsonError::wrong_type("Array"))
+            _ => Err(Error::wrong_type("Array"))
         }
     }
 
@@ -216,51 +279,51 @@ impl JsonValue {
             JsonValue::Array(ref vec) => {
                 vec.len()
             },
-            JsonValue::Object(ref btree) => {
-                btree.len()
+            JsonValue::Object(ref object) => {
+                object.len()
             },
             _ => 0
         }
     }
 
     /// Works on `JsonValue::Array` - returns an iterator over members.
-    pub fn members(&self) -> Members {
+    pub fn members(&self) -> Option<Members> {
         match *self {
             JsonValue::Array(ref vec) => {
-                Members::Some(vec.iter())
+                Some(vec.iter())
             },
-            _ => Members::None
+            _ => None
         }
     }
 
     /// Works on `JsonValue::Array` - returns a mutable iterator over members.
-    pub fn members_mut(&mut self) -> MembersMut {
+    pub fn members_mut(&mut self) -> Option<MembersMut> {
         match *self {
             JsonValue::Array(ref mut vec) => {
-                MembersMut::Some(vec.iter_mut())
+                Some(vec.iter_mut())
             },
-            _ => MembersMut::None
+            _ => None
         }
     }
 
     /// Works on `JsonValue::Object` - returns an iterator over key value pairs.
-    pub fn entries(&self) -> Entries {
+    pub fn entries(&self) -> Option<Entries> {
         match *self {
-            JsonValue::Object(ref btree) => {
-                Entries::Some(btree.iter())
+            JsonValue::Object(ref object) => {
+                Some(object.iter())
             },
-            _ => Entries::None
+            _ => None
         }
     }
 
     /// Works on `JsonValue::Object` - returns a mutable iterator over
     /// key value pairs.
-    pub fn entries_mut(&mut self) -> EntriesMut {
+    pub fn entries_mut(&mut self) -> Option<EntriesMut> {
         match *self {
-            JsonValue::Object(ref mut btree) => {
-                EntriesMut::Some(btree.iter_mut())
+            JsonValue::Object(ref mut object) => {
+                Some(object.iter_mut())
             },
-            _ => EntriesMut::None
+            _ => None
         }
     }
 
@@ -269,8 +332,8 @@ impl JsonValue {
     /// object, it will return a null.
     pub fn remove(&mut self, key: &str) -> JsonValue {
         match *self {
-            JsonValue::Object(ref mut btree) => {
-                btree.remove(key).unwrap_or(JsonValue::Null)
+            JsonValue::Object(ref mut object) => {
+                object.remove(key).unwrap_or(JsonValue::Null)
             },
             _ => JsonValue::Null
         }
@@ -281,7 +344,7 @@ impl JsonValue {
     pub fn clear(&mut self) {
         match *self {
             JsonValue::String(ref mut string) => string.clear(),
-            JsonValue::Object(ref mut btree)  => btree.clear(),
+            JsonValue::Object(ref mut object) => object.clear(),
             JsonValue::Array(ref mut vec)     => vec.clear(),
             _                                 => *self = JsonValue::Null,
         }
@@ -289,6 +352,8 @@ impl JsonValue {
 }
 
 /// Implements indexing by `usize` to easily access array members:
+///
+/// ## Example
 ///
 /// ```
 /// # use json::JsonValue;
@@ -310,6 +375,8 @@ impl Index<usize> for JsonValue {
 }
 
 /// Implements mutable indexing by `usize` to easily modify array members:
+///
+/// ## Example
 ///
 /// ```
 /// # #[macro_use]
@@ -347,6 +414,8 @@ impl IndexMut<usize> for JsonValue {
 
 /// Implements indexing by `&str` to easily access object members:
 ///
+/// ## Example
+///
 /// ```
 /// # #[macro_use]
 /// # extern crate json;
@@ -364,7 +433,7 @@ impl<'a> Index<&'a str> for JsonValue {
 
     fn index(&self, index: &str) -> &JsonValue {
         match *self {
-            JsonValue::Object(ref btree) => match btree.get(index) {
+            JsonValue::Object(ref object) => match object.get(index) {
                 Some(value) => value,
                 _ => &NULL
             },
@@ -391,6 +460,8 @@ impl<'a> Index<&'a String> for JsonValue {
 
 /// Implements mutable indexing by `&str` to easily modify object members:
 ///
+/// ## Example
+///
 /// ```
 /// # #[macro_use]
 /// # extern crate json;
@@ -406,11 +477,11 @@ impl<'a> Index<&'a String> for JsonValue {
 impl<'a> IndexMut<&'a str> for JsonValue {
     fn index_mut(&mut self, index: &str) -> &mut JsonValue {
         match *self {
-            JsonValue::Object(ref mut btree) => {
-                if !btree.contains_key(index) {
-                    btree.insert(index.to_string(), JsonValue::Null);
+            JsonValue::Object(ref mut object) => {
+                if object.get(index).is_none() {
+                    object.insert(index, JsonValue::Null);
                 }
-                btree.get_mut(index).unwrap()
+                object.get_mut(index).unwrap()
             },
             _ => {
                 *self = JsonValue::new_object();
@@ -429,5 +500,19 @@ impl IndexMut<String> for JsonValue {
 impl<'a> IndexMut<&'a String> for JsonValue {
     fn index_mut(&mut self, index: &String) -> &mut JsonValue {
         self.index_mut(index.deref())
+    }
+}
+
+impl IntoIterator for JsonValue {
+    type Item = JsonValue;
+    type IntoIter = ::std::vec::IntoIter<JsonValue>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            JsonValue::Array(vec) => {
+                vec.into_iter()
+            },
+            _ => Vec::new().into_iter()
+        }
     }
 }

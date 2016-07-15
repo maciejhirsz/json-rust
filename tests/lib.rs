@@ -236,27 +236,46 @@ mod unit {
             "age" => 30
         };
 
-        assert_eq!(stringify(object), r#"{"age":30,"name":"Maciej"}"#);
+        assert_eq!(stringify(object), r#"{"name":"Maciej","age":30}"#);
+    }
+
+    #[test]
+    fn stringify_raw_object() {
+        let mut object = json::object::Object::new();
+
+        object.insert("name", "Maciej".into());
+        object.insert("age", 30.into());
+
+        assert_eq!(stringify(object), r#"{"name":"Maciej","age":30}"#);
     }
 
     #[test]
     fn stringify_btree_map() {
-        let mut object = BTreeMap::new();
+        let mut map = BTreeMap::new();
 
-        object.insert("name".into(), "Maciej".into());
-        object.insert("age".into(), 30.into());
+        map.insert("name".into(), "Maciej".into());
+        map.insert("age".into(), 30.into());
 
-        assert_eq!(stringify(object), r#"{"age":30,"name":"Maciej"}"#);
+        // BTreeMap will sort keys
+        assert_eq!(stringify(map), r#"{"age":30,"name":"Maciej"}"#);
     }
 
     #[test]
     fn stringify_hash_map() {
-        let mut object = HashMap::new();
+        let mut map = HashMap::new();
 
-        object.insert("name".into(), "Maciej".into());
-        object.insert("age".into(), 30.into());
+        map.insert("name".into(), "Maciej".into());
+        map.insert("age".into(), 30.into());
 
-        assert_eq!(stringify(object), r#"{"age":30,"name":"Maciej"}"#);
+        // HashMap does not sort keys, but depending on hashing used the
+        // order can be different. Safe bet is to parse the result and
+        // compare parsed objects.
+        let parsed = parse(&stringify(map)).unwrap();
+
+        assert_eq!(parsed, object!{
+            "name" => "Maciej",
+            "age" => 30
+        });
     }
 
     #[test]
@@ -314,9 +333,7 @@ mod unit {
         };
 
         assert_eq!(stringify_pretty(object, 2),
-                   "{\n  \"age\": 50,\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \
-                    \"Porsche\"\n  ],\n  \"name\": \"Urlich\",\n  \"parents\": {\n    \"father\": \
-                    \"Brutus\",\n    \"mother\": \"Helga\"\n  }\n}");
+                   "{\n  \"name\": \"Urlich\",\n  \"age\": 50,\n  \"parents\": {\n    \"mother\": \"Helga\",\n    \"father\": \"Brutus\"\n  },\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \"Porsche\"\n  ]\n}");
     }
 
     #[test]
@@ -615,11 +632,11 @@ mod unit {
     fn array_members() {
         let data = array![1, "foo"];
 
-        for member in data.members() {
+        for member in data.members().unwrap() {
             assert!(!member.is_null());
         }
 
-        let mut members = data.members();
+        let mut members = data.members().unwrap();
 
         assert_eq!(members.next().unwrap(), 1);
         assert_eq!(members.next().unwrap(), "foo");
@@ -627,15 +644,44 @@ mod unit {
     }
 
     #[test]
+    fn array_members_rev() {
+        let data = array![1, "foo"];
+
+        for member in data.members().unwrap() {
+            assert!(!member.is_null());
+        }
+
+        let mut members = data.members().unwrap().rev();
+
+        assert_eq!(members.next().unwrap(), "foo");
+        assert_eq!(members.next().unwrap(), 1);
+        assert!(members.next().is_none());
+    }
+
+    #[test]
     fn array_members_mut() {
         let mut data = array![Null, Null];
 
-        for member in data.members_mut() {
+        for member in data.members_mut().unwrap() {
             assert!(member.is_null());
             *member = 100.into();
         }
 
         assert_eq!(data, array![100, 100]);
+    }
+
+    #[test]
+    fn array_members_mut_rev() {
+        let mut data = array![Null, Null];
+        let mut item = 100;
+
+        for member in data.members_mut().unwrap().rev() {
+            assert!(member.is_null());
+            *member = item.into();
+            item += 1;
+        }
+
+        assert_eq!(data, array![item - 1, item - 2]);
     }
 
     #[test]
@@ -666,11 +712,11 @@ mod unit {
             "b" => "foo"
         };
 
-        for (_, value) in data.entries() {
+        for (_, value) in data.entries().unwrap() {
             assert!(!value.is_null());
         }
 
-        let mut entries = data.entries();
+        let mut entries = data.entries().unwrap();
 
         let (key, value) = entries.next().unwrap();
         assert_eq!(key, "a");
@@ -684,13 +730,37 @@ mod unit {
     }
 
     #[test]
+    fn object_entries_rev() {
+        let data = object!{
+            "a" => 1,
+            "b" => "foo"
+        };
+
+        for (_, value) in data.entries().unwrap().rev() {
+            assert!(!value.is_null());
+        }
+
+        let mut entries = data.entries().unwrap().rev();
+
+        let (key, value) = entries.next().unwrap();
+        assert_eq!(key, "b");
+        assert_eq!(value, "foo");
+
+        let (key, value) = entries.next().unwrap();
+        assert_eq!(key, "a");
+        assert_eq!(value, 1);
+
+        assert!(entries.next().is_none());
+    }
+
+    #[test]
     fn object_entries_mut() {
         let mut data = object!{
             "a" => Null,
             "b" => Null
         };
 
-        for (_, value) in data.entries_mut() {
+        for (_, value) in data.entries_mut().unwrap() {
             assert!(value.is_null());
             *value = 100.into();
         }
@@ -702,13 +772,33 @@ mod unit {
     }
 
     #[test]
+    fn object_entries_mut_rev() {
+        let mut data = object!{
+            "a" => Null,
+            "b" => Null
+        };
+        let mut item = 100;
+
+        for (_, value) in data.entries_mut().unwrap().rev() {
+            assert!(value.is_null());
+            *value = item.into();
+            item += 1;
+        }
+
+        assert_eq!(data, object!{
+            "a" => item - 1,
+            "b" => item - 2
+        });
+    }
+
+    #[test]
     fn object_dump_minified() {
         let object = object!{
             "name" => "Maciej",
             "age" => 30
         };
 
-        assert_eq!(object.dump(), "{\"age\":30,\"name\":\"Maciej\"}");
+        assert_eq!(object.dump(), "{\"name\":\"Maciej\",\"age\":30}");
     }
 
     #[test]
@@ -724,9 +814,7 @@ mod unit {
         };
 
         assert_eq!(object.pretty(2),
-                   "{\n  \"age\": 50,\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \
-                    \"Porsche\"\n  ],\n  \"name\": \"Urlich\",\n  \"parents\": {\n    \"father\": \
-                    \"Brutus\",\n    \"mother\": \"Helga\"\n  }\n}");
+                   "{\n  \"name\": \"Urlich\",\n  \"age\": 50,\n  \"parents\": {\n    \"mother\": \"Helga\",\n    \"father\": \"Brutus\"\n  },\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \"Porsche\"\n  ]\n}");
     }
 
     #[test]
@@ -849,8 +937,8 @@ mod unit {
             "answer" => 42
         };
 
-        assert_eq!(format!("{}", data), r#"{"answer":42,"foo":"bar"}"#);
-        assert_eq!(format!("{:#}", data), "{\n    \"answer\": 42,\n    \"foo\": \"bar\"\n}");
+        assert_eq!(format!("{}", data), r#"{"foo":"bar","answer":42}"#);
+        assert_eq!(format!("{:#}", data), "{\n    \"foo\": \"bar\",\n    \"answer\": 42\n}");
     }
 
     #[test]
@@ -903,6 +991,20 @@ mod unit {
         data.to_writer(&mut buf);
 
         assert_eq!(String::from_utf8(buf).unwrap(), r#"{"foo":["bar",100,true]}"#);
+    }
+
+    #[test]
+    fn into_iter() {
+        let mut iter = array!["foo", true, 42].into_iter();
+        assert_eq!(iter.next(), Some("foo".into()));
+        assert_eq!(iter.next(), Some(true.into()));
+        assert_eq!(iter.next(), Some(42.into()));
+
+        let mut empty_iter = object!{"foo" => "bar"}.into_iter();
+        assert_eq!(empty_iter.next(), None);
+
+        let mut empty_iter = JsonValue::Null.into_iter();
+        assert_eq!(empty_iter.next(), None);
     }
 }
 
