@@ -38,29 +38,36 @@ impl Node {
     }
 
     #[inline(always)]
-    fn new(key: &[u8], value: JsonValue) -> Node {
+    fn new(value: JsonValue) -> Node {
         unsafe {
-            let len = key.len();
-
-            let mut node = Node {
+            Node {
                 vacant: false,
                 key_buf: mem::uninitialized(),
-                key_len: key.len(),
+                key_len: 0,
                 key_ptr: mem::uninitialized(),
                 value: value,
                 left: 0,
                 right: 0,
-            };
-
-            if len <= 16 {
-                ptr::copy_nonoverlapping(key.as_ptr(), node.key_buf.as_mut_ptr(), len);
-            } else {
-                let mut heap: Vec<u8> = key.to_vec();
-                node.key_ptr = heap.as_mut_ptr();
-                mem::forget(heap);
             }
+        }
+    }
 
-            node
+    #[inline(always)]
+    fn attach_key(&mut self, key: &[u8]) {
+        self.key_len = key.len();
+        if key.len() <= 16 {
+            unsafe {
+                ptr::copy_nonoverlapping(
+                    key.as_ptr(),
+                    self.key_buf.as_mut_ptr(),
+                    key.len()
+                );
+            }
+            self.key_ptr = self.key_buf.as_mut_ptr();
+        } else {
+            let mut heap: Vec<u8> = key.to_vec();
+            self.key_ptr = heap.as_mut_ptr();
+            mem::forget(heap);
         }
     }
 
@@ -115,10 +122,13 @@ impl Object {
         let index = self.store.len();
 
         if index < self.store.capacity() {
-            self.store.push(Node::new(key, value));
-            self.store[index].fix_key_ptr();
+            self.store.push(Node::new(value));
+            self.store[index].attach_key(key);
         } else {
-            self.store.push(Node::new(key, value));
+            self.store.push(Node::new(value));
+            self.store[index].attach_key(key);
+
+            // FIXME: don't fix the last element again
             for node in self.store.iter_mut() {
                 node.fix_key_ptr();
             }
@@ -137,7 +147,8 @@ impl Object {
         let key = key.as_bytes();
 
         if self.store.len() == 0 {
-            self.add_node(key, value);
+            self.store.push(Node::new(value));
+            self.store[0].attach_key(key);
             return;
         }
 
@@ -154,7 +165,7 @@ impl Object {
                     node = self.node_at_index_mut(node.left);
                     continue;
                 }
-                self.node_at_index_mut(parent).left = self.add_node(key, value);
+                self.store[parent].left = self.add_node(key, value);
                 return;
             } else {
                 if node.right != 0 {
@@ -162,7 +173,7 @@ impl Object {
                     node = self.node_at_index_mut(node.right);
                     continue;
                 }
-                self.node_at_index_mut(parent).right = self.add_node(key, value);
+                self.store[parent].right = self.add_node(key, value);
                 return;
             }
         }
