@@ -1,9 +1,9 @@
-use std::collections::BTreeMap;
 use std::ops::{ Index, IndexMut, Deref };
 use { Members, MembersMut, Entries, EntriesMut };
 use { Result, Error };
 use std::{ mem, usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32 };
 use short::Short;
+use object::Object;
 
 macro_rules! f64_to_unsinged {
     ($unsigned:ident, $value:expr) => {
@@ -32,7 +32,7 @@ pub enum JsonValue {
     String(String),
     Number(f64),
     Boolean(bool),
-    Object(BTreeMap<String, JsonValue>),
+    Object(Object),
     Array(Vec<JsonValue>),
 }
 
@@ -42,7 +42,7 @@ impl JsonValue {
     /// Create an empty `JsonValue::Object` instance.
     /// When creating an object with data, consider using the `object!` macro.
     pub fn new_object() -> JsonValue {
-        JsonValue::Object(BTreeMap::new())
+        JsonValue::Object(Object::new())
     }
 
     /// Create an empty `JsonValue::Array` instance.
@@ -279,8 +279,9 @@ impl JsonValue {
             JsonValue::Array(ref vec) => {
                 vec.len()
             },
-            JsonValue::Object(ref btree) => {
-                btree.len()
+            JsonValue::Object(ref object) => {
+                // FIXME: actual length
+                0
             },
             _ => 0
         }
@@ -309,8 +310,8 @@ impl JsonValue {
     /// Works on `JsonValue::Object` - returns an iterator over key value pairs.
     pub fn entries(&self) -> Option<Entries> {
         match *self {
-            JsonValue::Object(ref btree) => {
-                Some(btree.iter())
+            JsonValue::Object(ref object) => {
+                Some(object.iter())
             },
             _ => None
         }
@@ -320,8 +321,8 @@ impl JsonValue {
     /// key value pairs.
     pub fn entries_mut(&mut self) -> Option<EntriesMut> {
         match *self {
-            JsonValue::Object(ref mut btree) => {
-                Some(btree.iter_mut())
+            JsonValue::Object(ref mut object) => {
+                Some(object.iter_mut())
             },
             _ => None
         }
@@ -332,8 +333,10 @@ impl JsonValue {
     /// object, it will return a null.
     pub fn remove(&mut self, key: &str) -> JsonValue {
         match *self {
-            JsonValue::Object(ref mut btree) => {
-                btree.remove(key).unwrap_or(JsonValue::Null)
+            JsonValue::Object(ref mut object) => {
+                // FIXME: remove
+                JsonValue::Null
+                // object.remove(key).unwrap_or(JsonValue::Null)
             },
             _ => JsonValue::Null
         }
@@ -344,7 +347,8 @@ impl JsonValue {
     pub fn clear(&mut self) {
         match *self {
             JsonValue::String(ref mut string) => string.clear(),
-            JsonValue::Object(ref mut btree)  => btree.clear(),
+            // FIXME
+            // JsonValue::Object(ref mut object) => object.clear(),
             JsonValue::Array(ref mut vec)     => vec.clear(),
             _                                 => *self = JsonValue::Null,
         }
@@ -433,7 +437,8 @@ impl<'a> Index<&'a str> for JsonValue {
 
     fn index(&self, index: &str) -> &JsonValue {
         match *self {
-            JsonValue::Object(ref btree) => match btree.get(index) {
+            // FIXME
+            JsonValue::Object(ref object) => match object.get(index) {
                 Some(value) => value,
                 _ => &NULL
             },
@@ -477,11 +482,12 @@ impl<'a> Index<&'a String> for JsonValue {
 impl<'a> IndexMut<&'a str> for JsonValue {
     fn index_mut(&mut self, index: &str) -> &mut JsonValue {
         match *self {
-            JsonValue::Object(ref mut btree) => {
-                if !btree.contains_key(index) {
-                    btree.insert(index.to_string(), JsonValue::Null);
+            JsonValue::Object(ref mut object) => {
+                // FIXME
+                if object.get(index).is_none() {
+                    object.insert(index, JsonValue::Null);
                 }
-                btree.get_mut(index).unwrap()
+                object.get_mut(index).unwrap()
             },
             _ => {
                 *self = JsonValue::new_object();

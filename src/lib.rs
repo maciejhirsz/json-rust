@@ -198,7 +198,7 @@
 //! ```
 
 use std::io::Write;
-use std::collections::{ BTreeMap, HashMap, btree_map };
+// use std::collections::{ BTreeMap, HashMap, btree_map };
 use std::{ fmt, result };
 use std::slice;
 
@@ -206,7 +206,8 @@ mod codegen;
 mod parser;
 mod value;
 mod error;
-mod short;
+pub mod short;
+pub mod object;
 
 pub use error::Error;
 pub use value::JsonValue;
@@ -220,10 +221,12 @@ pub type Members<'a> = slice::Iter<'a, JsonValue>;
 pub type MembersMut<'a> = slice::IterMut<'a, JsonValue>;
 
 /// Iterator over key value pairs of `JsonValue::Object`.
-pub type Entries<'a> = btree_map::Iter<'a, String, JsonValue>;
+// pub type Entries<'a> = btree_map::Iter<'a, String, JsonValue>;
+pub type Entries<'a> = object::Iter<'a>;
 
 /// Mutable iterator over key value pairs of `JsonValue::Object`.
-pub type EntriesMut<'a> = btree_map::IterMut<'a, String, JsonValue>;
+// pub type EntriesMut<'a> = btree_map::IterMut<'a, String, JsonValue>;
+pub type EntriesMut<'a> = object::IterMut<'a>;
 
 #[deprecated(since="0.9.0", note="use `json::Error` instead")]
 pub use Error as JsonError;
@@ -235,7 +238,7 @@ pub use parser::parse;
 use codegen::{ Generator, PrettyGenerator, DumpGenerator, WriterGenerator };
 
 pub type Array = Vec<JsonValue>;
-pub type Object = BTreeMap<String, JsonValue>;
+// pub type Object = BTreeMap<String, JsonValue>;
 
 impl JsonValue {
     /// Prints out the value as JSON string.
@@ -324,12 +327,12 @@ macro_rules! object {
     {} => ($crate::JsonValue::new_object());
 
     { $( $key:expr => $value:expr ),* } => ({
-        use std::collections::BTreeMap;
+        use $crate::object::Object;
 
-        let mut object = BTreeMap::new();
+        let mut object = Object::new();
 
         $(
-            object.insert($key.into(), $value.into());
+            object.insert($key, $value.into());
         )*
 
         $crate::JsonValue::Object(object)
@@ -463,26 +466,27 @@ impl<'a> From<Option<&'a str>> for JsonValue {
     }
 }
 
-impl From<HashMap<String, JsonValue>> for JsonValue {
-    fn from(mut val: HashMap<String, JsonValue>) -> JsonValue {
-        let mut object = BTreeMap::new();
+// FIXME
+// impl From<HashMap<String, JsonValue>> for JsonValue {
+//     fn from(mut val: HashMap<String, JsonValue>) -> JsonValue {
+//         let mut object = BTreeMap::new();
 
-        for (key, value) in val.drain() {
-            object.insert(key, value);
-        }
+//         for (key, value) in val.drain() {
+//             object.insert(key, value);
+//         }
 
-        JsonValue::Object(object)
-    }
-}
+//         JsonValue::Object(object)
+//     }
+// }
 
-impl From<Option<HashMap<String, JsonValue>>> for JsonValue {
-    fn from(val: Option<HashMap<String, JsonValue>>) -> JsonValue {
-        match val {
-            Some(value) => value.into(),
-            None        => Null,
-        }
-    }
-}
+// impl From<Option<HashMap<String, JsonValue>>> for JsonValue {
+//     fn from(val: Option<HashMap<String, JsonValue>>) -> JsonValue {
+//         match val {
+//             Some(value) => value.into(),
+//             None        => Null,
+//         }
+//     }
+// }
 
 impl From<Option<JsonValue>> for JsonValue {
     fn from(val: Option<JsonValue>) -> JsonValue {
@@ -546,6 +550,6 @@ implement!(Number, u32 as f64);
 implement!(Number, u64 as f64);
 implement!(Number, f32 as f64);
 implement!(Number, f64);
-implement!(Object, Object);
+// implement!(Object, Object);
 implement!(Array, Array);
 implement!(Boolean, bool);

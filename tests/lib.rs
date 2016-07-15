@@ -239,25 +239,25 @@ mod unit {
         assert_eq!(stringify(object), r#"{"age":30,"name":"Maciej"}"#);
     }
 
-    #[test]
-    fn stringify_btree_map() {
-        let mut object = BTreeMap::new();
+    // #[test]
+    // fn stringify_btree_map() {
+    //     let mut object = BTreeMap::new();
 
-        object.insert("name".into(), "Maciej".into());
-        object.insert("age".into(), 30.into());
+    //     object.insert("name".into(), "Maciej".into());
+    //     object.insert("age".into(), 30.into());
 
-        assert_eq!(stringify(object), r#"{"age":30,"name":"Maciej"}"#);
-    }
+    //     assert_eq!(stringify(object), r#"{"age":30,"name":"Maciej"}"#);
+    // }
 
-    #[test]
-    fn stringify_hash_map() {
-        let mut object = HashMap::new();
+    // #[test]
+    // fn stringify_hash_map() {
+    //     let mut object = HashMap::new();
 
-        object.insert("name".into(), "Maciej".into());
-        object.insert("age".into(), 30.into());
+    //     object.insert("name".into(), "Maciej".into());
+    //     object.insert("age".into(), 30.into());
 
-        assert_eq!(stringify(object), r#"{"age":30,"name":"Maciej"}"#);
-    }
+    //     assert_eq!(stringify(object), r#"{"age":30,"name":"Maciej"}"#);
+    // }
 
     #[test]
     fn stringify_object_with_put() {

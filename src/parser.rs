@@ -1,5 +1,5 @@
-use std::{ str, char, f64 };
-use std::collections::BTreeMap;
+use std::{ str, slice, char, f64 };
+use object::Object;
 use { JsonValue, Error, Result };
 
 const MAX_PRECISION: u64 = 576460752303423500;
@@ -129,7 +129,7 @@ static ALLOWED: [bool; 256] = [
 
 macro_rules! expect_string {
     ($parser:ident) => ({
-        let result: &str;
+        let result: (*const u8, usize);
         let start = $parser.index;
 
         loop {
@@ -138,7 +138,13 @@ macro_rules! expect_string {
                 continue;
             }
             if ch == b'"' {
-                result = &$parser.source[start .. $parser.index - 1];
+                // result = &$parser.source[start .. $parser.index - 1];
+
+                unsafe {
+                    let ptr = $parser.byte_ptr.offset(start as isize);
+                    let len = $parser.index - 1 - start;
+                    result = (ptr, len);
+                }
                 break;
             }
             if ch == b'\\' {
@@ -153,6 +159,10 @@ macro_rules! expect_string {
     })
 }
 
+#[inline]
+unsafe fn build_slice<'a>(ptr: *const u8, len: usize) -> &'a str {
+    str::from_utf8_unchecked(slice::from_raw_parts(ptr, len))
+}
 
 fn exponent_to_power(e: i32) -> f64 {
     static POWERS: [f64; 22] = [
@@ -240,7 +250,10 @@ macro_rules! expect_value {
             )*
             b'[' => JsonValue::Array(try!($parser.read_array())),
             b'{' => JsonValue::Object(try!($parser.read_object())),
-            b'"' => expect_string!($parser).into(),
+            b'"' => {
+                let (ptr, len) = expect_string!($parser);
+                unsafe { build_slice(ptr, len) }.into()
+            },
             b'0' => {
                 let num = try!($parser.read_number_with_fraction(0, 0));
                 JsonValue::Number(num)
@@ -420,7 +433,7 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn read_complex_string(&mut self, start: usize) -> Result<&str> {
+    fn read_complex_string(&mut self, start: usize) -> Result<(*const u8, usize)> {
         // let mut buffer = Vec::new();
         self.buffer.clear();
         let mut ch = b'\\';
@@ -460,9 +473,11 @@ impl<'a> Parser<'a> {
             ch = expect_byte!(self);
         }
 
+        Ok( (self.buffer.as_ptr(), self.buffer.len()) )
+
         // Since the original source is already valid UTF-8, and `\`
         // cannot occur in front of a codepoint > 127, this is safe.
-        Ok(unsafe { str::from_utf8_unchecked(&self.buffer) })
+        // Ok(unsafe { str::from_utf8_unchecked(&self.buffer) })
     }
 
     fn read_big_number(&mut self, num: u64) -> Result<f64> {
@@ -545,26 +560,30 @@ impl<'a> Parser<'a> {
         Ok(make_float(num, e))
     }
 
-    fn read_object(&mut self) -> Result<BTreeMap<String, JsonValue>> {
-        let mut object = BTreeMap::new();
+    fn read_object(&mut self) -> Result<Object> {
+        let mut object = Object::new();
 
-        let key = expect!{ self,
+        let (ptr, len) = expect!{ self,
             b'}'  => return Ok(object),
             b'\"' => expect_string!(self)
-        }.into();
+        };
+
+        let key = unsafe { build_slice(ptr, len) };
 
         expect!(self, b':');
 
         object.insert(key, expect_value!(self));
 
         loop {
-            let key = expect!{ self,
+            let (ptr, len) = expect!{ self,
                 b'}' => break,
                 b',' => {
                     expect!(self, b'"');
                     expect_string!(self)
                 }
-            }.into();
+            };
+
+            let key = unsafe { build_slice(ptr, len) };
 
             expect!(self, b':');
 
