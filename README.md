@@ -88,7 +88,7 @@ assert!(data["this"]["does"]["not"]["exist"].is_null());
 data["list"][0] = "Hello".into();
 
 // Use the `dump` method to serialize the data:
-assert_eq!(data.dump(), r#"{"answer":42,"bar":null,"foo":false,"list":["Hello","world",true]}"#);
+assert_eq!(data.dump(), r#"{"foo":false,"bar":null,"answer":42,"list":["Hello","world",true]}"#);
 
 // Or pretty print it out:
 println!("{:#}", data);

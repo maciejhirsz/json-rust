@@ -1,6 +1,11 @@
 use std::{ char, error, fmt };
 
 #[derive(Debug, PartialEq)]
+/// Error type of this crate.
+///
+///
+/// *Note:* Since `0.9.0` using `JsonError` is deprecated. Always use
+/// `json::Error` instead!
 pub enum Error {
     UnexpectedCharacter {
         ch: char,

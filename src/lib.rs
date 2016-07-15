@@ -213,6 +213,12 @@ use object::Object;
 pub use error::Error;
 pub use value::JsonValue;
 pub use value::JsonValue::Null;
+
+/// Result type used by this crate.
+///
+///
+/// *Note:* Since 0.9.0 the old `JsonResult` type is depreacted. Always use
+/// `json::Result` instead.
 pub type Result<T> = result::Result<T, Error>;
 
 /// Iterator over members of `JsonValue::Array`.
@@ -222,11 +228,9 @@ pub type Members<'a> = slice::Iter<'a, JsonValue>;
 pub type MembersMut<'a> = slice::IterMut<'a, JsonValue>;
 
 /// Iterator over key value pairs of `JsonValue::Object`.
-// pub type Entries<'a> = btree_map::Iter<'a, String, JsonValue>;
 pub type Entries<'a> = object::Iter<'a>;
 
 /// Mutable iterator over key value pairs of `JsonValue::Object`.
-// pub type EntriesMut<'a> = btree_map::IterMut<'a, String, JsonValue>;
 pub type EntriesMut<'a> = object::IterMut<'a>;
 
 #[deprecated(since="0.9.0", note="use `json::Error` instead")]

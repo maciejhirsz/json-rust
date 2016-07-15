@@ -3,7 +3,7 @@ use std::ops::Deref;
 
 pub const MAX_LEN: usize = 30;
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy)]
 pub struct Short {
     value: [u8; MAX_LEN],
     len: u8,
@@ -13,10 +13,13 @@ pub struct Short {
 /// the expensive heap allocation performed for the regular `String` type.
 impl Short {
     /// Creates a `Short` from a `&str` slice. This method can cause buffer
-    /// overflow if the length of the slice is larger than `MAX_LEN`. Typically
-    /// you should never want to create your own `Short`s, instead creating a
-    /// `JsonValue` (using `.into()` or `JsonValue::from(slice)`) out of a slice
-    /// will automatically decide on `String` or `Short` for you.
+    /// overflow if the length of the slice is larger than `MAX_LEN`, which is why
+    /// it is marked as `unsafe`.
+    ///
+    ///
+    /// Typically you should avoid creating your own `Short`s, instead create a
+    /// `JsonValue` (either using `"foo".into()` or `JsonValue::from("foo")`) out
+    /// of a slice. This will automatically decide on `String` or `Short` for you.
     #[inline]
     pub unsafe fn from_slice(slice: &str) -> Self {
         let mut short = Short {
@@ -38,6 +41,12 @@ impl Short {
                 slice::from_raw_parts(self.value.as_ptr(), self.len as usize)
             )
         }
+    }
+}
+
+impl PartialEq for Short {
+    fn eq(&self, other: &Short) -> bool {
+        self.as_str() == other.as_str()
     }
 }
 

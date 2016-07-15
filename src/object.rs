@@ -221,7 +221,7 @@ impl Clone for Node {
     }
 }
 
-/// A binary tree implementation of string -> `JsonValue` map. You normally don't
+/// A binary tree implementation of a string -> `JsonValue` map. You normally don't
 /// have to interact with instances of `Object`, much more likely you will be
 /// using the `JsonValue::Object` variant, which wraps around this struct.
 #[derive(Debug)]
@@ -231,14 +231,14 @@ pub struct Object {
 
 impl Object {
     /// Create a new, empty instance of `Object`. Empty `Object` performs no
-    /// allocation until a value is pushed onto it.
+    /// allocation until a value is inserted into it.
     pub fn new() -> Self {
         Object {
             store: Vec::new()
         }
     }
 
-    /// Create a new object with memory preallocated with `capacity` for a number
+    /// Create a new `Object` with memory preallocated for `capacity` number
     /// of entries.
     pub fn with_capacity(capacity: usize) -> Self {
         Object {
