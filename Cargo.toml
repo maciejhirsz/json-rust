@@ -9,3 +9,4 @@ license = "MIT"
 
 [dependencies]
 itoa = "0.1"
+ftoa = "0.1"
