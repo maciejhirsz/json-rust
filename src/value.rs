@@ -333,9 +333,7 @@ impl JsonValue {
     pub fn remove(&mut self, key: &str) -> JsonValue {
         match *self {
             JsonValue::Object(ref mut object) => {
-                // FIXME: remove
-                JsonValue::Null
-                // object.remove(key).unwrap_or(JsonValue::Null)
+                object.remove(key).unwrap_or(JsonValue::Null)
             },
             _ => JsonValue::Null
         }
@@ -435,7 +433,6 @@ impl<'a> Index<&'a str> for JsonValue {
 
     fn index(&self, index: &str) -> &JsonValue {
         match *self {
-            // FIXME
             JsonValue::Object(ref object) => match object.get(index) {
                 Some(value) => value,
                 _ => &NULL
@@ -481,7 +478,6 @@ impl<'a> IndexMut<&'a str> for JsonValue {
     fn index_mut(&mut self, index: &str) -> &mut JsonValue {
         match *self {
             JsonValue::Object(ref mut object) => {
-                // FIXME
                 if object.get(index).is_none() {
                     object.insert(index, JsonValue::Null);
                 }

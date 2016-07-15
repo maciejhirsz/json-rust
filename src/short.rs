@@ -1,11 +1,11 @@
 use std::{ ptr, str, slice, fmt };
 use std::ops::Deref;
 
-pub const MAX_LEN: usize = 23;
+pub const MAX_LEN: usize = 30;
 
 #[derive(Clone, Copy, PartialEq)]
 pub struct Short {
-    value: [u8; 23],
+    value: [u8; MAX_LEN],
     len: u8,
 }
 

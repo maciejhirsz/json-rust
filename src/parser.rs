@@ -129,7 +129,7 @@ static ALLOWED: [bool; 256] = [
 
 macro_rules! expect_string {
     ($parser:ident) => ({
-        let result: (*const u8, usize);
+        let result: &str;
         let start = $parser.index;
 
         loop {
@@ -143,7 +143,7 @@ macro_rules! expect_string {
                 unsafe {
                     let ptr = $parser.byte_ptr.offset(start as isize);
                     let len = $parser.index - 1 - start;
-                    result = (ptr, len);
+                    result = str::from_utf8_unchecked(slice::from_raw_parts(ptr, len));
                 }
                 break;
             }
@@ -157,11 +157,6 @@ macro_rules! expect_string {
 
         result
     })
-}
-
-#[inline]
-unsafe fn build_slice<'a>(ptr: *const u8, len: usize) -> &'a str {
-    str::from_utf8_unchecked(slice::from_raw_parts(ptr, len))
 }
 
 fn exponent_to_power(e: i32) -> f64 {
@@ -250,10 +245,7 @@ macro_rules! expect_value {
             )*
             b'[' => JsonValue::Array(try!($parser.read_array())),
             b'{' => JsonValue::Object(try!($parser.read_object())),
-            b'"' => {
-                let (ptr, len) = expect_string!($parser);
-                unsafe { build_slice(ptr, len) }.into()
-            },
+            b'"' => expect_string!($parser).into(),
             b'0' => {
                 let num = try!($parser.read_number_with_fraction(0, 0));
                 JsonValue::Number(num)
@@ -433,7 +425,7 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn read_complex_string(&mut self, start: usize) -> Result<(*const u8, usize)> {
+    fn read_complex_string<'b>(&mut self, start: usize) -> Result<&'b str> {
         // let mut buffer = Vec::new();
         self.buffer.clear();
         let mut ch = b'\\';
@@ -473,11 +465,14 @@ impl<'a> Parser<'a> {
             ch = expect_byte!(self);
         }
 
-        Ok( (self.buffer.as_ptr(), self.buffer.len()) )
-
         // Since the original source is already valid UTF-8, and `\`
         // cannot occur in front of a codepoint > 127, this is safe.
-        // Ok(unsafe { str::from_utf8_unchecked(&self.buffer) })
+        Ok(unsafe {
+            str::from_utf8_unchecked(
+                // Construct the slice from parts to satisfy the borrow checker
+                slice::from_raw_parts(self.buffer.as_ptr(), self.buffer.len())
+            )
+        })
     }
 
     fn read_big_number(&mut self, num: u64) -> Result<f64> {
@@ -563,27 +558,23 @@ impl<'a> Parser<'a> {
     fn read_object(&mut self) -> Result<Object> {
         let mut object = Object::with_capacity(3);
 
-        let (ptr, len) = expect!{ self,
+        let key = expect!{ self,
             b'}'  => return Ok(object),
             b'\"' => expect_string!(self)
         };
-
-        let key = unsafe { build_slice(ptr, len) };
 
         expect!(self, b':');
 
         object.insert(key, expect_value!(self));
 
         loop {
-            let (ptr, len) = expect!{ self,
+            let key = expect!{ self,
                 b'}' => break,
                 b',' => {
                     expect!(self, b'"');
                     expect_string!(self)
                 }
             };
-
-            let key = unsafe { build_slice(ptr, len) };
 
             expect!(self, b':');
 

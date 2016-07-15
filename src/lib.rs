@@ -89,7 +89,7 @@
 //! data["list"][0] = "Hello".into();
 //!
 //! // Use the `dump` method to serialize the data:
-//! assert_eq!(data.dump(), r#"{"answer":42,"bar":null,"foo":false,"list":["Hello","world",true]}"#);
+//! assert_eq!(data.dump(), r#"{"foo":false,"bar":null,"answer":42,"list":["Hello","world",true]}"#);
 //!
 //! // Or pretty print it out:
 //! println!("{:#}", data);
@@ -190,9 +190,7 @@
 //! };
 //! assert_eq!(
 //!     data.dump(),
-//!     // Because object is internally using a BTreeMap,
-//!     // the key order is alphabetical
-//!     r#"{"age":30,"canJSON":true,"name":"John Doe"}"#
+//!     r#"{"name":"John Doe","age":30,"canJSON":true}"#
 //! );
 //! # }
 //! ```

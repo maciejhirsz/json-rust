@@ -2,11 +2,10 @@ use std::{ ptr, mem, str, slice, fmt };
 
 use value::JsonValue;
 
-// FIXME: Manual Clone!
-#[derive(PartialEq, Clone)]
+const KEY_BUF_LEN: usize = 30;
+
 struct Node {
-    pub vacant: bool,
-    pub key_buf: [u8; 16],
+    pub key_buf: [u8; KEY_BUF_LEN],
     pub key_len: usize,
     pub key_ptr: *mut u8,
     pub value: JsonValue,
@@ -17,6 +16,12 @@ struct Node {
 impl fmt::Debug for Node {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(&(self.key_str(), self.left, self.right), f)
+    }
+}
+
+impl PartialEq for Node {
+    fn eq(&self, other: &Node) -> bool {
+        self.key() == other.key() && self.value == other.value
     }
 }
 
@@ -41,7 +46,6 @@ impl Node {
     fn new(value: JsonValue) -> Node {
         unsafe {
             Node {
-                vacant: false,
                 key_buf: mem::uninitialized(),
                 key_len: 0,
                 key_ptr: mem::uninitialized(),
@@ -55,7 +59,7 @@ impl Node {
     #[inline(always)]
     fn attach_key(&mut self, key: &[u8]) {
         self.key_len = key.len();
-        if key.len() <= 16 {
+        if key.len() <= KEY_BUF_LEN {
             unsafe {
                 ptr::copy_nonoverlapping(
                     key.as_ptr(),
@@ -73,7 +77,7 @@ impl Node {
 
     #[inline(always)]
     fn fix_key_ptr(&mut self) {
-        if self.key_len <= 16 {
+        if self.key_len <= KEY_BUF_LEN {
             self.key_ptr = self.key_buf.as_mut_ptr();
         }
     }
@@ -82,7 +86,7 @@ impl Node {
 impl Drop for Node {
     fn drop(&mut self) {
         unsafe {
-            if self.key_len > 16 {
+            if self.key_len > KEY_BUF_LEN {
                 let heap = Vec::from_raw_parts(self.key_ptr, self.key_len, self.key_len);
                 drop(heap);
             }
@@ -90,7 +94,37 @@ impl Drop for Node {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+impl Clone for Node {
+    fn clone(&self) -> Self {
+        unsafe {
+            if self.key_len > KEY_BUF_LEN {
+                let heap = Vec::from_raw_parts(self.key_ptr, self.key_len, self.key_len);
+                let mut cloned = heap.clone();
+                mem::forget(heap);
+
+                Node {
+                    key_buf: mem::uninitialized(),
+                    key_len: self.key_len,
+                    key_ptr: cloned.as_mut_ptr(),
+                    value: self.value.clone(),
+                    left: self.left,
+                    right: self.right,
+                }
+            } else {
+                Node {
+                    key_buf: self.key_buf,
+                    key_len: self.key_len,
+                    key_ptr: mem::uninitialized(),
+                    value: self.value.clone(),
+                    left: self.left,
+                    right: self.right,
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Object {
     store: Vec<Node>
 }
@@ -190,17 +224,13 @@ impl Object {
 
         loop {
             if key == node.key() {
-                return if node.vacant {
-                    None
-                } else {
-                    Some(&node.value)
-                };
-            } else if key < &node.key() {
+                return Some(&node.value);
+            } else if key < node.key() {
                 if node.left == 0 {
                     return None;
                 }
                 node = self.node_at_index(node.left);
-            } else if key > &node.key() {
+            } else if key > node.key() {
                 if node.right == 0 {
                     return None;
                 }
@@ -222,17 +252,13 @@ impl Object {
 
         loop {
             if key == node.key() {
-                return if node.vacant {
-                    None
-                } else {
-                    Some(&mut node.value)
-                };
-            } else if key < &node.key() {
+                return Some(&mut node.value);
+            } else if key < node.key() {
                 if node.left == 0 {
                     return None;
                 }
                 node = self.node_at_index_mut(node.left);
-            } else if key > &node.key() {
+            } else if key > node.key() {
                 if node.right == 0 {
                     return None;
                 }
@@ -241,6 +267,56 @@ impl Object {
                 return None;
             }
         }
+    }
+
+    pub fn remove(&mut self, key: &str) -> Option<JsonValue> {
+        if self.store.len() == 0 {
+            return None;
+        }
+
+        let key = key.as_bytes();
+
+        let mut node = self.node_at_index_mut(0);
+        let mut index = 0;
+
+        // Try to find the node
+        loop {
+            if key == node.key() {
+                break;
+            } else if key < node.key() {
+                if node.left == 0 {
+                    return None;
+                }
+                index = node.left;
+                node = self.node_at_index_mut(node.left);
+            } else if key > node.key() {
+                if node.right == 0 {
+                    return None;
+                }
+                index = node.right;
+                node = self.node_at_index_mut(node.right);
+            } else {
+                return None;
+            }
+        }
+
+        let mut new_object = Object::with_capacity(self.store.len() - 1);
+        let mut removed: JsonValue = unsafe { mem::uninitialized() };
+
+        for (i, node) in self.store.iter_mut().enumerate() {
+            if i == index {
+                removed = mem::replace(&mut node.value, JsonValue::Null);
+            } else {
+                new_object.insert(
+                    node.key_str(),
+                    mem::replace(&mut node.value, JsonValue::Null)
+                );
+            }
+        }
+
+        mem::swap(self, &mut new_object);
+
+        Some(removed)
     }
 
     pub fn len(&self) -> usize {
@@ -266,6 +342,20 @@ impl Object {
     pub fn iter_mut(&mut self) -> IterMut {
         IterMut {
             inner: self.store.iter_mut()
+        }
+    }
+}
+
+impl Clone for Object {
+    fn clone(&self) -> Self {
+        let mut store = self.store.clone();
+
+        for node in store.iter_mut() {
+            node.fix_key_ptr();
+        }
+
+        Object {
+            store: store
         }
     }
 }

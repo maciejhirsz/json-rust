@@ -236,7 +236,7 @@ mod unit {
             "age" => 30
         };
 
-        assert_eq!(stringify(object), r#"{"age":30,"name":"Maciej"}"#);
+        assert_eq!(stringify(object), r#"{"name":"Maciej","age":30}"#);
     }
 
     // #[test]
@@ -314,9 +314,7 @@ mod unit {
         };
 
         assert_eq!(stringify_pretty(object, 2),
-                   "{\n  \"age\": 50,\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \
-                    \"Porsche\"\n  ],\n  \"name\": \"Urlich\",\n  \"parents\": {\n    \"father\": \
-                    \"Brutus\",\n    \"mother\": \"Helga\"\n  }\n}");
+                   "{\n  \"name\": \"Urlich\",\n  \"age\": 50,\n  \"parents\": {\n    \"mother\": \"Helga\",\n    \"father\": \"Brutus\"\n  },\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \"Porsche\"\n  ]\n}");
     }
 
     #[test]
@@ -781,7 +779,7 @@ mod unit {
             "age" => 30
         };
 
-        assert_eq!(object.dump(), "{\"age\":30,\"name\":\"Maciej\"}");
+        assert_eq!(object.dump(), "{\"name\":\"Maciej\",\"age\":30}");
     }
 
     #[test]
@@ -797,9 +795,7 @@ mod unit {
         };
 
         assert_eq!(object.pretty(2),
-                   "{\n  \"age\": 50,\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \
-                    \"Porsche\"\n  ],\n  \"name\": \"Urlich\",\n  \"parents\": {\n    \"father\": \
-                    \"Brutus\",\n    \"mother\": \"Helga\"\n  }\n}");
+                   "{\n  \"name\": \"Urlich\",\n  \"age\": 50,\n  \"parents\": {\n    \"mother\": \"Helga\",\n    \"father\": \"Brutus\"\n  },\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \"Porsche\"\n  ]\n}");
     }
 
     #[test]
@@ -922,8 +918,8 @@ mod unit {
             "answer" => 42
         };
 
-        assert_eq!(format!("{}", data), r#"{"answer":42,"foo":"bar"}"#);
-        assert_eq!(format!("{:#}", data), "{\n    \"answer\": 42,\n    \"foo\": \"bar\"\n}");
+        assert_eq!(format!("{}", data), r#"{"foo":"bar","answer":42}"#);
+        assert_eq!(format!("{:#}", data), "{\n    \"foo\": \"bar\",\n    \"answer\": 42\n}");
     }
 
     #[test]
