@@ -280,8 +280,7 @@ impl JsonValue {
                 vec.len()
             },
             JsonValue::Object(ref object) => {
-                // FIXME: actual length
-                0
+                object.len()
             },
             _ => 0
         }
@@ -347,8 +346,7 @@ impl JsonValue {
     pub fn clear(&mut self) {
         match *self {
             JsonValue::String(ref mut string) => string.clear(),
-            // FIXME
-            // JsonValue::Object(ref mut object) => object.clear(),
+            JsonValue::Object(ref mut object) => object.clear(),
             JsonValue::Array(ref mut vec)     => vec.clear(),
             _                                 => *self = JsonValue::Null,
         }

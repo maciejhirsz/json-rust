@@ -561,7 +561,7 @@ impl<'a> Parser<'a> {
     }
 
     fn read_object(&mut self) -> Result<Object> {
-        let mut object = Object::new();
+        let mut object = Object::with_capacity(3);
 
         let (ptr, len) = expect!{ self,
             b'}'  => return Ok(object),
