@@ -239,25 +239,44 @@ mod unit {
         assert_eq!(stringify(object), r#"{"name":"Maciej","age":30}"#);
     }
 
-    // #[test]
-    // fn stringify_btree_map() {
-    //     let mut object = BTreeMap::new();
+    #[test]
+    fn stringify_raw_object() {
+        let mut object = json::object::Object::new();
 
-    //     object.insert("name".into(), "Maciej".into());
-    //     object.insert("age".into(), 30.into());
+        object.insert("name", "Maciej".into());
+        object.insert("age", 30.into());
 
-    //     assert_eq!(stringify(object), r#"{"age":30,"name":"Maciej"}"#);
-    // }
+        assert_eq!(stringify(object), r#"{"name":"Maciej","age":30}"#);
+    }
 
-    // #[test]
-    // fn stringify_hash_map() {
-    //     let mut object = HashMap::new();
+    #[test]
+    fn stringify_btree_map() {
+        let mut map = BTreeMap::new();
 
-    //     object.insert("name".into(), "Maciej".into());
-    //     object.insert("age".into(), 30.into());
+        map.insert("name".into(), "Maciej".into());
+        map.insert("age".into(), 30.into());
 
-    //     assert_eq!(stringify(object), r#"{"age":30,"name":"Maciej"}"#);
-    // }
+        // BTreeMap will sort keys
+        assert_eq!(stringify(map), r#"{"age":30,"name":"Maciej"}"#);
+    }
+
+    #[test]
+    fn stringify_hash_map() {
+        let mut map = HashMap::new();
+
+        map.insert("name".into(), "Maciej".into());
+        map.insert("age".into(), 30.into());
+
+        // HashMap does not sort keys, but depending on hashing used the
+        // order can be different. Safe bet is to parse the result and
+        // compare parsed objects.
+        let parsed = parse(&stringify(map)).unwrap();
+
+        assert_eq!(parsed, object!{
+            "name" => "Maciej",
+            "age" => 30
+        });
+    }
 
     #[test]
     fn stringify_object_with_put() {

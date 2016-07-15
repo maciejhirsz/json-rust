@@ -196,8 +196,8 @@
 //! ```
 
 use std::io::Write;
-// use std::collections::{ BTreeMap, HashMap, btree_map };
-use std::{ fmt, result };
+use std::collections::{ BTreeMap, HashMap };
+use std::{ fmt, result, mem };
 use std::slice;
 
 mod codegen;
@@ -206,6 +206,9 @@ mod value;
 mod error;
 pub mod short;
 pub mod object;
+
+use short::Short;
+use object::Object;
 
 pub use error::Error;
 pub use value::JsonValue;
@@ -236,7 +239,6 @@ pub use parser::parse;
 use codegen::{ Generator, PrettyGenerator, DumpGenerator, WriterGenerator };
 
 pub type Array = Vec<JsonValue>;
-// pub type Object = BTreeMap<String, JsonValue>;
 
 impl JsonValue {
     /// Prints out the value as JSON string.
@@ -448,7 +450,7 @@ macro_rules! implement {
 impl<'a> From<&'a str> for JsonValue {
     fn from(val: &'a str) -> JsonValue {
         if val.len() <= short::MAX_LEN {
-            JsonValue::Short(unsafe { short::Short::from_slice(val) })
+            JsonValue::Short(unsafe { Short::from_slice(val) })
         } else {
             JsonValue::String(val.into())
         }
@@ -464,27 +466,51 @@ impl<'a> From<Option<&'a str>> for JsonValue {
     }
 }
 
-// FIXME
-// impl From<HashMap<String, JsonValue>> for JsonValue {
-//     fn from(mut val: HashMap<String, JsonValue>) -> JsonValue {
-//         let mut object = BTreeMap::new();
+impl From<HashMap<String, JsonValue>> for JsonValue {
+    fn from(mut val: HashMap<String, JsonValue>) -> JsonValue {
+        let mut object = Object::with_capacity(val.len());
 
-//         for (key, value) in val.drain() {
-//             object.insert(key, value);
-//         }
+        for (key, value) in val.drain() {
+            object.insert(&key, value);
+        }
 
-//         JsonValue::Object(object)
-//     }
-// }
+        JsonValue::Object(object)
+    }
+}
 
-// impl From<Option<HashMap<String, JsonValue>>> for JsonValue {
-//     fn from(val: Option<HashMap<String, JsonValue>>) -> JsonValue {
-//         match val {
-//             Some(value) => value.into(),
-//             None        => Null,
-//         }
-//     }
-// }
+impl From<Option<HashMap<String, JsonValue>>> for JsonValue {
+    fn from(val: Option<HashMap<String, JsonValue>>) -> JsonValue {
+        match val {
+            Some(value) => value.into(),
+            None        => Null,
+        }
+    }
+}
+
+impl From<BTreeMap<String, JsonValue>> for JsonValue {
+    fn from(mut val: BTreeMap<String, JsonValue>) -> JsonValue {
+        let mut object = Object::with_capacity(val.len());
+
+        for (key, value) in val.iter_mut() {
+            // Since BTreeMap has no `drain` available, we can use
+            // the mutable iterator and replace all values by nulls,
+            // taking ownership and transfering it to the new `Object`.
+            let value = mem::replace(value, Null);
+            object.insert(key, value);
+        }
+
+        JsonValue::Object(object)
+    }
+}
+
+impl From<Option<BTreeMap<String, JsonValue>>> for JsonValue {
+    fn from(val: Option<BTreeMap<String, JsonValue>>) -> JsonValue {
+        match val {
+            Some(value) => value.into(),
+            None        => Null,
+        }
+    }
+}
 
 impl From<Option<JsonValue>> for JsonValue {
     fn from(val: Option<JsonValue>) -> JsonValue {
@@ -548,6 +574,6 @@ implement!(Number, u32 as f64);
 implement!(Number, u64 as f64);
 implement!(Number, f32 as f64);
 implement!(Number, f64);
-// implement!(Object, Object);
+implement!(Object, Object);
 implement!(Array, Array);
 implement!(Boolean, bool);

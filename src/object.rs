@@ -5,27 +5,56 @@ use value::JsonValue;
 const KEY_BUF_LEN: usize = 30;
 
 struct Node {
+    // Internal buffer to store keys that fit within `KEY_BUF_LEN`,
+    // otherwise this field can contain garbage.
     pub key_buf: [u8; KEY_BUF_LEN],
+
+    // Length of the key in bytes.
     pub key_len: usize,
+
+    // Cached raw pointer to the key, so that we can cheaply construct
+    // a `&str` slice from the `Node` without checking if the key is
+    // allocated separately on the heap, or in the `key_buf`.
     pub key_ptr: *mut u8,
+
+    // A hash of the key, explanation below.
     pub key_hash: u64,
+
+    // Value stored.
     pub value: JsonValue,
+
+    // Store index within the object where one can find a node where hash
+    // is smaller than the hash of this node.
+    // Will default to 0 as root node can't be referrenced anywhere else.
     pub left: usize,
+
+    // Same as above but for nodes with hash larger than this one. If the
+    // hash is the same, but keys are different, the lookup will default
+    // to the right branch as well.
     pub right: usize,
 }
 
 impl fmt::Debug for Node {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(&(self.key_str(), self.left, self.right), f)
+        fmt::Debug::fmt(&(self.key_str(), &self.value, self.left, self.right), f)
     }
 }
 
 impl PartialEq for Node {
     fn eq(&self, other: &Node) -> bool {
-        self.key() == other.key() && self.value == other.value
+        self.key_hash == other.key_hash &&
+        self.key()    == other.key()    &&
+        self.value    == other.value
     }
 }
 
+// Because `Node` contains a raw pointer, `Sync` is not marked on it. This
+// in turn disables `Sync` for `Object`, and eventually `JsonValue`. Without
+// the `Sync` marker it's impossible to create a static `JsonValue`, which
+// would break all the API that returns `&'static JsonValue::Null`. Since
+// `Node` is not exposed anywhere in the API on it's own, and we manage heap
+// of long keys manually, we just need to tell the compiler we know what we
+// are doing here.
 unsafe impl Sync for Node { }
 
 // Simple FNV 1a implementation
@@ -100,6 +129,9 @@ impl Node {
         }
     }
 
+    // While `new` crates a fresh `Node` instance, it cannot do much about
+    // the `key_*` fields. Only once the `Node` somewhere on the heap, we
+    // can determine `key_ptr` that is not going to change.
     #[inline(always)]
     fn attach_key(&mut self, key: &[u8], hash: u64) {
         self.key_len = key.len();
@@ -120,6 +152,9 @@ impl Node {
         }
     }
 
+    // Since `Node`s are stored on a `Vec<Node>`, they will suffer from
+    // reallocation changing `key_ptr` addresses for buffered keys. This
+    // needs to be called on each `Node` after each reallocation to fix that.
     #[inline(always)]
     fn fix_key_ptr(&mut self) {
         if self.key_len <= KEY_BUF_LEN {
@@ -128,29 +163,44 @@ impl Node {
     }
 }
 
+// Because long keys _can_ be stored separately from the `Node` on heap, but are
+// not stored directly on the `Node` in any form aside from the raw pointer,
+// it's essential to clean up the heap allocation when the `Node` is dropped.
 impl Drop for Node {
     fn drop(&mut self) {
         unsafe {
             if self.key_len > KEY_BUF_LEN {
-                let heap = Vec::from_raw_parts(self.key_ptr, self.key_len, self.key_len);
+                // Construct a `Vec` out of the `key_ptr`. Since the key is
+                // always allocated from a slice, the capacity is equal to length.
+                let heap = Vec::from_raw_parts(
+                    self.key_ptr,
+                    self.key_len,
+                    self.key_len
+                );
+
+                // Now that we have an owned `Vec`, dropping it will deallocate it.
                 drop(heap);
             }
         }
     }
 }
 
+// Just like with `Drop`, `Clone` needs a custom implementation that accounts
+// for the fact that key _can_ be heap allcated, thefore any cloning needs to
+// check what type of a key is being held on the node, and if it is heap allocated
+// it needs to make a clone of it.
 impl Clone for Node {
     fn clone(&self) -> Self {
         unsafe {
             if self.key_len > KEY_BUF_LEN {
-                let heap = Vec::from_raw_parts(self.key_ptr, self.key_len, self.key_len);
-                let mut cloned = heap.clone();
+                let mut heap = self.key().to_vec();
+                let ptr = heap.as_mut_ptr();
                 mem::forget(heap);
 
                 Node {
                     key_buf: mem::uninitialized(),
                     key_len: self.key_len,
-                    key_ptr: cloned.as_mut_ptr(),
+                    key_ptr: ptr,
                     key_hash: self.key_hash,
                     value: self.value.clone(),
                     left: self.left,
@@ -171,16 +221,28 @@ impl Clone for Node {
     }
 }
 
-#[derive(Debug, PartialEq)]
+/// A binary tree implementation of string -> `JsonValue` map. You normally don't
+/// have to interact with instances of `Object`, much more likely you will be
+/// using the `JsonValue::Object` variant, which wraps around this struct.
+#[derive(Debug)]
 pub struct Object {
     store: Vec<Node>
 }
 
-
 impl Object {
+    /// Create a new, empty instance of `Object`. Empty `Object` performs no
+    /// allocation until a value is pushed onto it.
     pub fn new() -> Self {
         Object {
             store: Vec::new()
+        }
+    }
+
+    /// Create a new object with memory preallocated with `capacity` for a number
+    /// of entries.
+    pub fn with_capacity(capacity: usize) -> Self {
+        Object {
+            store: Vec::with_capacity(capacity)
         }
     }
 
@@ -218,12 +280,10 @@ impl Object {
         index
     }
 
-    pub fn with_capacity(capacity: usize) -> Self {
-        Object {
-            store: Vec::with_capacity(capacity)
-        }
-    }
-
+    /// Insert a new entry, or override an existing one. Note that `key` has
+    /// to be a `&str` slice and not an owned `String`. The internals of
+    /// `Object` will handle the heap allocation of the key if needed for
+    /// better performance.
     pub fn insert(&mut self, key: &str, value: JsonValue) {
         let key = key.as_bytes();
         let hash = hash_key(key);
@@ -315,6 +375,8 @@ impl Object {
         }
     }
 
+    /// Attempts to remove the value behind `key`, if successful
+    /// will return the `JsonValue` stored behind the `key`.
     pub fn remove(&mut self, key: &str) -> Option<JsonValue> {
         if self.store.len() == 0 {
             return None;
@@ -345,11 +407,17 @@ impl Object {
             }
         }
 
+        // Removing a node would screw the tree badly, it's easier to just
+        // recreate it. This is a very costly operation, but removing nodes
+        // in JSON shouldn't happen very often if at all. Optimizing this
+        // can wait for better times.
         let mut new_object = Object::with_capacity(self.store.len() - 1);
         let mut removed: JsonValue = unsafe { mem::uninitialized() };
 
         for (i, node) in self.store.iter_mut().enumerate() {
             if i == index {
+                // Rust doesn't like us moving things from `node`, even if
+                // it is owned. Replace fixes that.
                 removed = mem::replace(&mut node.value, JsonValue::Null);
             } else {
                 new_object.insert(
@@ -372,6 +440,7 @@ impl Object {
         self.store.is_empty()
     }
 
+    /// Wipe the `Object` clear. The capacity will remain untouched.
     pub fn clear(&mut self) {
         self.store.clear();
     }
@@ -391,6 +460,8 @@ impl Object {
     }
 }
 
+// Custom implementation of `Clone`, as new heap allocation means
+// we have to fix key pointers everywhere!
 impl Clone for Object {
     fn clone(&self) -> Self {
         let mut store = self.store.clone();
@@ -402,6 +473,26 @@ impl Clone for Object {
         Object {
             store: store
         }
+    }
+}
+
+// Because keys can inserted in different order, the safe way to
+// compare `Object`s is to iterate over one and check if the other
+// has all the same keys.
+impl PartialEq for Object {
+    fn eq(&self, other: &Object) -> bool {
+        if self.len() != other.len() {
+            return false;
+        }
+
+        for (key, value) in self.iter() {
+            match other.get(key) {
+                Some(ref other_val) => if *other_val != value { return false; },
+                None                => return false
+            }
+        }
+
+        true
     }
 }
 
