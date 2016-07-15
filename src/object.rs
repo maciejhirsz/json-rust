@@ -8,6 +8,7 @@ struct Node {
     pub key_buf: [u8; KEY_BUF_LEN],
     pub key_len: usize,
     pub key_ptr: *mut u8,
+    pub key_hash: u64,
     pub value: JsonValue,
     pub left: usize,
     pub right: usize,
@@ -26,6 +27,48 @@ impl PartialEq for Node {
 }
 
 unsafe impl Sync for Node { }
+
+// Simple FNV 1a implementation
+//
+// While the `Object` is implemented as a binary tree, not a hash table, the
+// order in which the tree is balanced makes absolutely no difference as long
+// as there is a good chance there is a left or right side to the equation.
+// Comparing a hashed `u64` is faster than comparing `&str` or even `&[u8]`,
+// for larger objects this yields non-trivial performance benefits.
+//
+// Additionally this "randomizes" the keys a bit. Should the keys in an object
+// be inserted in alphabetical order (an example of such a use case would be
+// using an object as a store for entires by ids, where ids are sorted), this
+// will prevent the tree for being constructed in a way that only right branch
+// of a node is always used, effectively producing linear lookup times. Bad!
+// Using this solution fixes that problem.
+//
+// Example:
+//
+// ```
+// println!("{}", hash_key(b"10000056"));
+// println!("{}", hash_key(b"10000057"));
+// println!("{}", hash_key(b"10000058"));
+// println!("{}", hash_key(b"10000059"));
+// ```
+//
+// Produces:
+//
+// ```
+// 15043794053238616431
+// 15043792953726988220
+// 15043800650308385697
+// 15043799550796757486
+// ```
+#[inline(always)]
+fn hash_key(key: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in key {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
 
 impl Node {
     #[inline(always)]
@@ -49,6 +92,7 @@ impl Node {
                 key_buf: mem::uninitialized(),
                 key_len: 0,
                 key_ptr: mem::uninitialized(),
+                key_hash: mem::uninitialized(),
                 value: value,
                 left: 0,
                 right: 0,
@@ -57,8 +101,9 @@ impl Node {
     }
 
     #[inline(always)]
-    fn attach_key(&mut self, key: &[u8]) {
+    fn attach_key(&mut self, key: &[u8], hash: u64) {
         self.key_len = key.len();
+        self.key_hash = hash;
         if key.len() <= KEY_BUF_LEN {
             unsafe {
                 ptr::copy_nonoverlapping(
@@ -106,6 +151,7 @@ impl Clone for Node {
                     key_buf: mem::uninitialized(),
                     key_len: self.key_len,
                     key_ptr: cloned.as_mut_ptr(),
+                    key_hash: self.key_hash,
                     value: self.value.clone(),
                     left: self.left,
                     right: self.right,
@@ -115,6 +161,7 @@ impl Clone for Node {
                     key_buf: self.key_buf,
                     key_len: self.key_len,
                     key_ptr: mem::uninitialized(),
+                    key_hash: self.key_hash,
                     value: self.value.clone(),
                     left: self.left,
                     right: self.right,
@@ -152,15 +199,15 @@ impl Object {
     }
 
     #[inline(always)]
-    fn add_node(&mut self, key: &[u8], value: JsonValue) -> usize {
+    fn add_node(&mut self, key: &[u8], value: JsonValue, hash: u64) -> usize {
         let index = self.store.len();
 
         if index < self.store.capacity() {
             self.store.push(Node::new(value));
-            self.store[index].attach_key(key);
+            self.store[index].attach_key(key, hash);
         } else {
             self.store.push(Node::new(value));
-            self.store[index].attach_key(key);
+            self.store[index].attach_key(key, hash);
 
             // FIXME: don't fix the last element again
             for node in self.store.iter_mut() {
@@ -179,10 +226,11 @@ impl Object {
 
     pub fn insert(&mut self, key: &str, value: JsonValue) {
         let key = key.as_bytes();
+        let hash = hash_key(key);
 
         if self.store.len() == 0 {
             self.store.push(Node::new(value));
-            self.store[0].attach_key(key);
+            self.store[0].attach_key(key, hash);
             return;
         }
 
@@ -190,16 +238,16 @@ impl Object {
         let mut parent = 0;
 
         loop {
-            if key == node.key() {
+            if hash == node.key_hash && key == node.key() {
                 node.value = value;
                 return;
-            } else if key < node.key() {
+            } else if hash < node.key_hash {
                 if node.left != 0 {
                     parent = node.left;
                     node = self.node_at_index_mut(node.left);
                     continue;
                 }
-                self.store[parent].left = self.add_node(key, value);
+                self.store[parent].left = self.add_node(key, value, hash);
                 return;
             } else {
                 if node.right != 0 {
@@ -207,7 +255,7 @@ impl Object {
                     node = self.node_at_index_mut(node.right);
                     continue;
                 }
-                self.store[parent].right = self.add_node(key, value);
+                self.store[parent].right = self.add_node(key, value, hash);
                 return;
             }
         }
@@ -219,24 +267,23 @@ impl Object {
         }
 
         let key = key.as_bytes();
+        let hash = hash_key(key);
 
         let mut node = self.node_at_index(0);
 
         loop {
-            if key == node.key() {
+            if hash == node.key_hash && key == node.key() {
                 return Some(&node.value);
-            } else if key < node.key() {
+            } else if hash < node.key_hash {
                 if node.left == 0 {
                     return None;
                 }
                 node = self.node_at_index(node.left);
-            } else if key > node.key() {
+            } else {
                 if node.right == 0 {
                     return None;
                 }
                 node = self.node_at_index(node.right);
-            } else {
-                return None;
             }
         }
     }
@@ -247,24 +294,23 @@ impl Object {
         }
 
         let key = key.as_bytes();
+        let hash = hash_key(key);
 
         let mut node = self.node_at_index_mut(0);
 
         loop {
-            if key == node.key() {
+            if hash == node.key_hash && key == node.key() {
                 return Some(&mut node.value);
-            } else if key < node.key() {
+            } else if hash < node.key_hash {
                 if node.left == 0 {
                     return None;
                 }
                 node = self.node_at_index_mut(node.left);
-            } else if key > node.key() {
+            } else {
                 if node.right == 0 {
                     return None;
                 }
                 node = self.node_at_index_mut(node.right);
-            } else {
-                return None;
             }
         }
     }
@@ -275,28 +321,27 @@ impl Object {
         }
 
         let key = key.as_bytes();
+        let hash = hash_key(key);
 
         let mut node = self.node_at_index_mut(0);
         let mut index = 0;
 
         // Try to find the node
         loop {
-            if key == node.key() {
+            if hash == node.key_hash && key == node.key() {
                 break;
-            } else if key < node.key() {
+            } else if hash < node.key_hash {
                 if node.left == 0 {
                     return None;
                 }
                 index = node.left;
                 node = self.node_at_index_mut(node.left);
-            } else if key > node.key() {
+            } else {
                 if node.right == 0 {
                     return None;
                 }
                 index = node.right;
                 node = self.node_at_index_mut(node.right);
-            } else {
-                return None;
             }
         }
 
