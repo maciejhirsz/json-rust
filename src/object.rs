@@ -32,15 +32,15 @@ unsafe impl Sync for Node { }
 //
 // While the `Object` is implemented as a binary tree, not a hash table, the
 // order in which the tree is balanced makes absolutely no difference as long
-// as there is a good chance there is a left or right side to the equation.
+// as there is a deterministic left / right ordering of the hashed value.
 // Comparing a hashed `u64` is faster than comparing `&str` or even `&[u8]`,
 // for larger objects this yields non-trivial performance benefits.
 //
 // Additionally this "randomizes" the keys a bit. Should the keys in an object
 // be inserted in alphabetical order (an example of such a use case would be
 // using an object as a store for entires by ids, where ids are sorted), this
-// will prevent the tree for being constructed in a way that only right branch
-// of a node is always used, effectively producing linear lookup times. Bad!
+// will prevent the tree from being constructed in a way where the same branch
+// of each node is always used, effectively producing linear lookup times. Bad!
 // Using this solution fixes that problem.
 //
 // Example:
@@ -55,10 +55,10 @@ unsafe impl Sync for Node { }
 // Produces:
 //
 // ```
-// 15043794053238616431
-// 15043792953726988220
-// 15043800650308385697
-// 15043799550796757486
+// 15043794053238616431  <-- 2nd
+// 15043792953726988220  <-- 1st
+// 15043800650308385697  <-- 4th
+// 15043799550796757486  <-- 3rd
 // ```
 #[inline(always)]
 fn hash_key(key: &[u8]) -> u64 {
