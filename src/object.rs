@@ -178,8 +178,8 @@ impl Drop for Node {
                     self.key_len
                 );
 
-                // Now that we have an owned `Vec<u8>`, it will get deallocated at
-                // the end of the block.
+                // Now that we have an owned `Vec<u8>`, drop it.
+                drop(heap);
             }
         }
     }

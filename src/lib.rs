@@ -198,7 +198,6 @@
 use std::io::Write;
 use std::collections::{ BTreeMap, HashMap };
 use std::{ fmt, result, mem };
-use std::slice;
 
 mod codegen;
 mod parser;
@@ -222,17 +221,19 @@ pub use value::JsonValue::Null;
 /// `json::Result` instead.
 pub type Result<T> = result::Result<T, Error>;
 
-/// Iterator over members of `JsonValue::Array`.
-pub type Members<'a> = slice::Iter<'a, JsonValue>;
+pub mod iterators {
+    /// Iterator over members of `JsonValue::Array`.
+    pub type Members<'a> = ::std::slice::Iter<'a, super::JsonValue>;
 
-/// Mutable iterator over members of `JsonValue::Array`.
-pub type MembersMut<'a> = slice::IterMut<'a, JsonValue>;
+    /// Mutable iterator over members of `JsonValue::Array`.
+    pub type MembersMut<'a> = ::std::slice::IterMut<'a, super::JsonValue>;
 
-/// Iterator over key value pairs of `JsonValue::Object`.
-pub type Entries<'a> = object::Iter<'a>;
+    /// Iterator over key value pairs of `JsonValue::Object`.
+    pub type Entries<'a> = super::object::Iter<'a>;
 
-/// Mutable iterator over key value pairs of `JsonValue::Object`.
-pub type EntriesMut<'a> = object::IterMut<'a>;
+    /// Mutable iterator over key value pairs of `JsonValue::Object`.
+    pub type EntriesMut<'a> = super::object::IterMut<'a>;
+}
 
 #[deprecated(since="0.9.0", note="use `json::Error` instead")]
 pub use Error as JsonError;

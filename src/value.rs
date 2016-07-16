@@ -1,7 +1,9 @@
-use std::ops::{ Index, IndexMut, Deref };
-use { Members, MembersMut, Entries, EntriesMut };
 use { Result, Error };
+
+use std::ops::{ Index, IndexMut, Deref };
 use std::{ mem, usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32 };
+use iterators::{ Members, MembersMut, Entries, EntriesMut };
+
 use short::Short;
 use object::Object;
 
