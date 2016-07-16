@@ -230,6 +230,7 @@ pub struct Object {
 impl Object {
     /// Create a new, empty instance of `Object`. Empty `Object` performs no
     /// allocation until a value is inserted into it.
+    #[inline(always)]
     pub fn new() -> Self {
         Object {
             store: Vec::new()
@@ -238,23 +239,24 @@ impl Object {
 
     /// Create a new `Object` with memory preallocated for `capacity` number
     /// of entries.
+    #[inline(always)]
     pub fn with_capacity(capacity: usize) -> Self {
         Object {
             store: Vec::with_capacity(capacity)
         }
     }
 
+    #[inline(always)]
     fn node_at_index<'a>(&self, index: usize) -> &'a Node {
-        let store_ptr = self.store.as_ptr();
         unsafe {
-            &*store_ptr.offset(index as isize)
+            &*self.store.as_ptr().offset(index as isize)
         }
     }
 
+    #[inline(always)]
     fn node_at_index_mut<'a>(&mut self, index: usize) -> &'a mut Node {
-        let store_ptr = self.store.as_mut_ptr();
         unsafe {
-            &mut *store_ptr.offset(index as isize)
+            &mut *self.store.as_mut_ptr().offset(index as isize)
         }
     }
 
@@ -264,14 +266,13 @@ impl Object {
 
         if index < self.store.capacity() {
             self.store.push(Node::new(value));
-            self.store[index].attach_key(key, hash);
+            self.node_at_index_mut(index).attach_key(key, hash);
         } else {
             self.store.push(Node::new(value));
-            self.store[index].attach_key(key, hash);
+            self.node_at_index_mut(index).attach_key(key, hash);
 
-            // FIXME: don't fix the last element again
-            for node in self.store.iter_mut() {
-                node.fix_key_ptr();
+            for i in 0 .. index - 1 {
+                self.node_at_index_mut(i).fix_key_ptr();
             }
         }
 
@@ -430,10 +431,12 @@ impl Object {
         Some(removed)
     }
 
+    #[inline(always)]
     pub fn len(&self) -> usize {
         self.store.len()
     }
 
+    #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.store.is_empty()
     }

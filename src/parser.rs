@@ -138,8 +138,6 @@ macro_rules! expect_string {
                 continue;
             }
             if ch == b'"' {
-                // result = &$parser.source[start .. $parser.index - 1];
-
                 unsafe {
                     let ptr = $parser.byte_ptr.offset(start as isize);
                     let len = $parser.index - 1 - start;
@@ -594,8 +592,7 @@ impl<'a> Parser<'a> {
             expect!{ self,
                 b']' => break,
                 b',' => {
-                    let value = expect_value!(self);
-                    array.push(value);
+                    array.push(expect_value!(self));
                 }
             };
         }
