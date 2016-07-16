@@ -1,4 +1,4 @@
-use std::{ ptr, str, slice, fmt };
+use std::{ ptr, str, slice, fmt, mem };
 use std::ops::Deref;
 
 pub const MAX_LEN: usize = 30;
@@ -23,8 +23,7 @@ impl Short {
     #[inline]
     pub unsafe fn from_slice(slice: &str) -> Self {
         let mut short = Short {
-            // initializing memory with 0s makes things faster in the long run
-            value: [0; MAX_LEN],
+            value: mem::uninitialized(),
             len: slice.len() as u8,
         };
 
@@ -45,6 +44,7 @@ impl Short {
 }
 
 impl PartialEq for Short {
+    #[inline]
     fn eq(&self, other: &Short) -> bool {
         self.as_str() == other.as_str()
     }

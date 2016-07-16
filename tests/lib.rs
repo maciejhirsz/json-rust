@@ -632,11 +632,11 @@ mod unit {
     fn array_members() {
         let data = array![1, "foo"];
 
-        for member in data.members().unwrap() {
+        for member in data.members() {
             assert!(!member.is_null());
         }
 
-        let mut members = data.members().unwrap();
+        let mut members = data.members();
 
         assert_eq!(members.next().unwrap(), 1);
         assert_eq!(members.next().unwrap(), "foo");
@@ -647,11 +647,11 @@ mod unit {
     fn array_members_rev() {
         let data = array![1, "foo"];
 
-        for member in data.members().unwrap() {
+        for member in data.members() {
             assert!(!member.is_null());
         }
 
-        let mut members = data.members().unwrap().rev();
+        let mut members = data.members().rev();
 
         assert_eq!(members.next().unwrap(), "foo");
         assert_eq!(members.next().unwrap(), 1);
@@ -662,7 +662,7 @@ mod unit {
     fn array_members_mut() {
         let mut data = array![Null, Null];
 
-        for member in data.members_mut().unwrap() {
+        for member in data.members_mut() {
             assert!(member.is_null());
             *member = 100.into();
         }
@@ -675,7 +675,7 @@ mod unit {
         let mut data = array![Null, Null];
         let mut item = 100;
 
-        for member in data.members_mut().unwrap().rev() {
+        for member in data.members_mut().rev() {
             assert!(member.is_null());
             *member = item.into();
             item += 1;
@@ -712,11 +712,11 @@ mod unit {
             "b" => "foo"
         };
 
-        for (_, value) in data.entries().unwrap() {
+        for (_, value) in data.entries() {
             assert!(!value.is_null());
         }
 
-        let mut entries = data.entries().unwrap();
+        let mut entries = data.entries();
 
         let (key, value) = entries.next().unwrap();
         assert_eq!(key, "a");
@@ -736,11 +736,11 @@ mod unit {
             "b" => "foo"
         };
 
-        for (_, value) in data.entries().unwrap().rev() {
+        for (_, value) in data.entries().rev() {
             assert!(!value.is_null());
         }
 
-        let mut entries = data.entries().unwrap().rev();
+        let mut entries = data.entries().rev();
 
         let (key, value) = entries.next().unwrap();
         assert_eq!(key, "b");
@@ -760,7 +760,7 @@ mod unit {
             "b" => Null
         };
 
-        for (_, value) in data.entries_mut().unwrap() {
+        for (_, value) in data.entries_mut() {
             assert!(value.is_null());
             *value = 100.into();
         }
@@ -779,7 +779,7 @@ mod unit {
         };
         let mut item = 100;
 
-        for (_, value) in data.entries_mut().unwrap().rev() {
+        for (_, value) in data.entries_mut().rev() {
             assert!(value.is_null());
             *value = item.into();
             item += 1;
@@ -991,20 +991,6 @@ mod unit {
         data.to_writer(&mut buf);
 
         assert_eq!(String::from_utf8(buf).unwrap(), r#"{"foo":["bar",100,true]}"#);
-    }
-
-    #[test]
-    fn into_iter() {
-        let mut iter = array!["foo", true, 42].into_iter();
-        assert_eq!(iter.next(), Some("foo".into()));
-        assert_eq!(iter.next(), Some(true.into()));
-        assert_eq!(iter.next(), Some(42.into()));
-
-        let mut empty_iter = object!{"foo" => "bar"}.into_iter();
-        assert_eq!(empty_iter.next(), None);
-
-        let mut empty_iter = JsonValue::Null.into_iter();
-        assert_eq!(empty_iter.next(), None);
     }
 }
 
