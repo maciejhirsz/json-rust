@@ -1,4 +1,4 @@
-use std::{ ptr, str, slice, fmt, mem };
+use std::{ ptr, str, slice, fmt };
 use std::ops::Deref;
 
 pub const MAX_LEN: usize = 30;
@@ -23,7 +23,7 @@ impl Short {
     #[inline]
     pub unsafe fn from_slice(slice: &str) -> Self {
         let mut short = Short {
-            value: mem::uninitialized(),
+            value: [0; MAX_LEN],
             len: slice.len() as u8,
         };
 
