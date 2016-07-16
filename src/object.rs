@@ -500,6 +500,15 @@ pub struct Iter<'a> {
     inner: slice::Iter<'a, Node>
 }
 
+impl<'a> Iter<'a> {
+    /// Create an empty iterator that always returns `None`
+    pub fn empty() -> Self {
+        Iter {
+            inner: [].iter()
+        }
+    }
+}
+
 impl<'a> Iterator for Iter<'a> {
     type Item = (&'a str, &'a JsonValue);
 
@@ -518,6 +527,15 @@ impl<'a> DoubleEndedIterator for Iter<'a> {
 
 pub struct IterMut<'a> {
     inner: slice::IterMut<'a, Node>
+}
+
+impl<'a> IterMut<'a> {
+    /// Create an empty iterator that always returns `None`
+    pub fn empty() -> Self {
+        IterMut {
+            inner: [].iter_mut()
+        }
+    }
 }
 
 impl<'a> Iterator for IterMut<'a> {

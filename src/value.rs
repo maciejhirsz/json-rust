@@ -287,43 +287,47 @@ impl JsonValue {
     }
 
     /// Works on `JsonValue::Array` - returns an iterator over members.
-    pub fn members(&self) -> Option<Members> {
+    /// Will return an empty iterator if called on non-array types.
+    pub fn members(&self) -> Members {
         match *self {
             JsonValue::Array(ref vec) => {
-                Some(vec.iter())
+                vec.iter()
             },
-            _ => None
+            _ => [].iter()
         }
     }
 
     /// Works on `JsonValue::Array` - returns a mutable iterator over members.
-    pub fn members_mut(&mut self) -> Option<MembersMut> {
+    /// Will return an empty iterator if called on non-array types.
+    pub fn members_mut(&mut self) -> MembersMut {
         match *self {
             JsonValue::Array(ref mut vec) => {
-                Some(vec.iter_mut())
+                vec.iter_mut()
             },
-            _ => None
+            _ => [].iter_mut()
         }
     }
 
     /// Works on `JsonValue::Object` - returns an iterator over key value pairs.
-    pub fn entries(&self) -> Option<Entries> {
+    /// Will return an empty iterator if called on non-object types.
+    pub fn entries(&self) -> Entries {
         match *self {
             JsonValue::Object(ref object) => {
-                Some(object.iter())
+                object.iter()
             },
-            _ => None
+            _ => Entries::empty()
         }
     }
 
     /// Works on `JsonValue::Object` - returns a mutable iterator over
     /// key value pairs.
-    pub fn entries_mut(&mut self) -> Option<EntriesMut> {
+    /// Will return an empty iterator if called on non-object types.
+    pub fn entries_mut(&mut self) -> EntriesMut {
         match *self {
             JsonValue::Object(ref mut object) => {
-                Some(object.iter_mut())
+                object.iter_mut()
             },
-            _ => None
+            _ => EntriesMut::empty()
         }
     }
 
@@ -500,19 +504,5 @@ impl IndexMut<String> for JsonValue {
 impl<'a> IndexMut<&'a String> for JsonValue {
     fn index_mut(&mut self, index: &String) -> &mut JsonValue {
         self.index_mut(index.deref())
-    }
-}
-
-impl IntoIterator for JsonValue {
-    type Item = JsonValue;
-    type IntoIter = ::std::vec::IntoIter<JsonValue>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        match self {
-            JsonValue::Array(vec) => {
-                vec.into_iter()
-            },
-            _ => Vec::new().into_iter()
-        }
     }
 }
