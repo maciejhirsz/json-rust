@@ -236,27 +236,46 @@ mod unit {
             "age" => 30
         };
 
-        assert_eq!(stringify(object), r#"{"age":30,"name":"Maciej"}"#);
+        assert_eq!(stringify(object), r#"{"name":"Maciej","age":30}"#);
+    }
+
+    #[test]
+    fn stringify_raw_object() {
+        let mut object = json::object::Object::new();
+
+        object.insert("name", "Maciej".into());
+        object.insert("age", 30.into());
+
+        assert_eq!(stringify(object), r#"{"name":"Maciej","age":30}"#);
     }
 
     #[test]
     fn stringify_btree_map() {
-        let mut object = BTreeMap::new();
+        let mut map = BTreeMap::new();
 
-        object.insert("name".into(), "Maciej".into());
-        object.insert("age".into(), 30.into());
+        map.insert("name".into(), "Maciej".into());
+        map.insert("age".into(), 30.into());
 
-        assert_eq!(stringify(object), r#"{"age":30,"name":"Maciej"}"#);
+        // BTreeMap will sort keys
+        assert_eq!(stringify(map), r#"{"age":30,"name":"Maciej"}"#);
     }
 
     #[test]
     fn stringify_hash_map() {
-        let mut object = HashMap::new();
+        let mut map = HashMap::new();
 
-        object.insert("name".into(), "Maciej".into());
-        object.insert("age".into(), 30.into());
+        map.insert("name".into(), "Maciej".into());
+        map.insert("age".into(), 30.into());
 
-        assert_eq!(stringify(object), r#"{"age":30,"name":"Maciej"}"#);
+        // HashMap does not sort keys, but depending on hashing used the
+        // order can be different. Safe bet is to parse the result and
+        // compare parsed objects.
+        let parsed = parse(&stringify(map)).unwrap();
+
+        assert_eq!(parsed, object!{
+            "name" => "Maciej",
+            "age" => 30
+        });
     }
 
     #[test]
@@ -314,9 +333,7 @@ mod unit {
         };
 
         assert_eq!(stringify_pretty(object, 2),
-                   "{\n  \"age\": 50,\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \
-                    \"Porsche\"\n  ],\n  \"name\": \"Urlich\",\n  \"parents\": {\n    \"father\": \
-                    \"Brutus\",\n    \"mother\": \"Helga\"\n  }\n}");
+                   "{\n  \"name\": \"Urlich\",\n  \"age\": 50,\n  \"parents\": {\n    \"mother\": \"Helga\",\n    \"father\": \"Brutus\"\n  },\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \"Porsche\"\n  ]\n}");
     }
 
     #[test]
@@ -781,7 +798,7 @@ mod unit {
             "age" => 30
         };
 
-        assert_eq!(object.dump(), "{\"age\":30,\"name\":\"Maciej\"}");
+        assert_eq!(object.dump(), "{\"name\":\"Maciej\",\"age\":30}");
     }
 
     #[test]
@@ -797,9 +814,7 @@ mod unit {
         };
 
         assert_eq!(object.pretty(2),
-                   "{\n  \"age\": 50,\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \
-                    \"Porsche\"\n  ],\n  \"name\": \"Urlich\",\n  \"parents\": {\n    \"father\": \
-                    \"Brutus\",\n    \"mother\": \"Helga\"\n  }\n}");
+                   "{\n  \"name\": \"Urlich\",\n  \"age\": 50,\n  \"parents\": {\n    \"mother\": \"Helga\",\n    \"father\": \"Brutus\"\n  },\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \"Porsche\"\n  ]\n}");
     }
 
     #[test]
@@ -922,8 +937,8 @@ mod unit {
             "answer" => 42
         };
 
-        assert_eq!(format!("{}", data), r#"{"answer":42,"foo":"bar"}"#);
-        assert_eq!(format!("{:#}", data), "{\n    \"answer\": 42,\n    \"foo\": \"bar\"\n}");
+        assert_eq!(format!("{}", data), r#"{"foo":"bar","answer":42}"#);
+        assert_eq!(format!("{:#}", data), "{\n    \"foo\": \"bar\",\n    \"answer\": 42\n}");
     }
 
     #[test]
