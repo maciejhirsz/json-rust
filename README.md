@@ -110,12 +110,26 @@ Then import it in your `main.rs` / `lib.rs` file:
 extern crate json;
 ```
 
-## Performance
+## Performance and Conformance
 
-There used to be a statement here saying that performance is not the main goal of this crate. It is definitely one of them now.
+There used to be a statement here saying that performance is not the main goal of this
+crate. It is definitely one of them now.
 
-![](http://terhix.com/json-perf-10.png)
+While this crate doesn't provide a way to parse JSON to native Rust structs, it does a
+lot to optimize it's performance for DOM parsing, stringifying and manipulation. It does
+[very well in benchmarks](https://github.com/serde-rs/json-benchmark), in some cases it
+can even outperform parsing to structs.
 
-[The benchmarks](https://github.com/maciejhirsz/json-rust/blob/benches/benches/log.rs) were run on 2012 MacBook Air, your results may vary. Many thanks to [@dtolnay](https://github.com/dtolnay) for providing the baseline struct and test data the tests could be run on.
+This crate implements the standard according to the [
+RFC 7159](https://tools.ietf.org/html/rfc7159) and
+[ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf)
+documents. It makes some compromises when it comes to number precision, but they are
+both within the specification and advised practices for best interoperability,
+specifically those discussed in the RFC.
 
-While this is not necessarily a be-all end-all benchmark, the main takeaway from this is that Serde parsing is much faster when parsing to a struct, since the parser knows exactly the kind of data it needs, and doesn't pay the (re)allocation costs of pushing data to a map. Also worth noting, rustc-serialize suffers since it first has to parse JSON to generic enum-based values, and only then map those onto structs.
+## License
+
+This crate is distributed under the terms of both the MIT license
+and the Apache License (Version 2.0), choose whatever works for you.
+
+See [LICENSE-APACHE](LICENSE-APACHE) and [LICENSE-MIT](LICENSE-MIT) for details.

@@ -992,20 +992,6 @@ mod unit {
 
         assert_eq!(String::from_utf8(buf).unwrap(), r#"{"foo":["bar",100,true]}"#);
     }
-
-    #[test]
-    fn into_iter() {
-        let mut iter = array!["foo", true, 42].into_iter();
-        assert_eq!(iter.next(), Some("foo".into()));
-        assert_eq!(iter.next(), Some(true.into()));
-        assert_eq!(iter.next(), Some(42.into()));
-
-        let mut empty_iter = object!{"foo" => "bar"}.into_iter();
-        assert_eq!(empty_iter.next(), None);
-
-        let mut empty_iter = JsonValue::Null.into_iter();
-        assert_eq!(empty_iter.next(), None);
-    }
 }
 
 mod json_checker_fail {

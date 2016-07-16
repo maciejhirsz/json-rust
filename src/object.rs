@@ -6,7 +6,7 @@ const KEY_BUF_LEN: usize = 30;
 
 struct Node {
     // Internal buffer to store keys that fit within `KEY_BUF_LEN`,
-    // otherwise this field can contain garbage.
+    // otherwise this field will contain garbage.
     pub key_buf: [u8; KEY_BUF_LEN],
 
     // Length of the key in bytes.
@@ -23,12 +23,12 @@ struct Node {
     // Value stored.
     pub value: JsonValue,
 
-    // Store index within the object where one can find a node where hash
-    // is smaller than the hash of this node.
+    // Store vector index pointing to the `Node` for which `key_hash` is smaller
+    // than that of this `Node`.
     // Will default to 0 as root node can't be referrenced anywhere else.
     pub left: usize,
 
-    // Same as above but for nodes with hash larger than this one. If the
+    // Same as above but for `Node`s with hash larger than this one. If the
     // hash is the same, but keys are different, the lookup will default
     // to the right branch as well.
     pub right: usize,
@@ -48,20 +48,21 @@ impl PartialEq for Node {
     }
 }
 
-// Because `Node` contains a raw pointer, `Sync` is not marked on it. This
+// Because `Node` contains a raw pointer, `Sync` marker is missing. This
 // in turn disables `Sync` for `Object`, and eventually `JsonValue`. Without
 // the `Sync` marker it's impossible to create a static `JsonValue`, which
-// would break all the API that returns `&'static JsonValue::Null`. Since
-// `Node` is not exposed anywhere in the API on it's own, and we manage heap
-// of long keys manually, we just need to tell the compiler we know what we
-// are doing here.
+// would break all the API that returns `&'static JsonValue::Null`.
+//
+// Since `Node` is not exposed anywhere in the API on it's own, and we manage
+// heap of long keys manually, we just need to tell the compiler we know what
+// we are doing here.
 unsafe impl Sync for Node { }
 
-// Simple FNV 1a implementation
+// FNV-1a implementation
 //
 // While the `Object` is implemented as a binary tree, not a hash table, the
 // order in which the tree is balanced makes absolutely no difference as long
-// as there is a deterministic left / right ordering of the hashed value.
+// as there is a deterministic left / right ordering with good spread.
 // Comparing a hashed `u64` is faster than comparing `&str` or even `&[u8]`,
 // for larger objects this yields non-trivial performance benefits.
 //
@@ -70,7 +71,6 @@ unsafe impl Sync for Node { }
 // using an object as a store for entires by ids, where ids are sorted), this
 // will prevent the tree from being constructed in a way where the same branch
 // of each node is always used, effectively producing linear lookup times. Bad!
-// Using this solution fixes that problem.
 //
 // Example:
 //
@@ -130,8 +130,9 @@ impl Node {
     }
 
     // While `new` crates a fresh `Node` instance, it cannot do much about
-    // the `key_*` fields. Only once the `Node` somewhere on the heap, we
-    // can determine `key_ptr` that is not going to change.
+    // the `key_*` fields. In case of short keys that can be stored on the
+    // `Node`, only once the `Node` is somewhere on the heap, a persisting
+    // pointer to the key can be obtained.
     #[inline(always)]
     fn attach_key(&mut self, key: &[u8], hash: u64) {
         self.key_len = key.len();
@@ -153,8 +154,8 @@ impl Node {
     }
 
     // Since `Node`s are stored on a `Vec<Node>`, they will suffer from
-    // reallocation changing `key_ptr` addresses for buffered keys. This
-    // needs to be called on each `Node` after each reallocation to fix that.
+    // reallocation, changing `key_ptr` addresses for buffered keys. This
+    // needs to be called on each `Node` after each reallocation.
     #[inline(always)]
     fn fix_key_ptr(&mut self) {
         if self.key_len <= KEY_BUF_LEN {
@@ -163,8 +164,7 @@ impl Node {
     }
 }
 
-// Because long keys _can_ be stored separately from the `Node` on heap, but are
-// not stored directly on the `Node` in any form aside from the raw pointer,
+// Because long keys _can_ be stored separately from the `Node` on heap,
 // it's essential to clean up the heap allocation when the `Node` is dropped.
 impl Drop for Node {
     fn drop(&mut self) {
@@ -178,17 +178,15 @@ impl Drop for Node {
                     self.key_len
                 );
 
-                // Now that we have an owned `Vec`, dropping it will deallocate it.
-                drop(heap);
+                // Now that we have an owned `Vec<u8>`, it will get deallocated at
+                // the end of the block.
             }
         }
     }
 }
 
 // Just like with `Drop`, `Clone` needs a custom implementation that accounts
-// for the fact that key _can_ be heap allcated, thefore any cloning needs to
-// check what type of a key is being held on the node, and if it is heap allocated
-// it needs to make a clone of it.
+// for the fact that key _can_ be separately heap allcated.
 impl Clone for Node {
     fn clone(&self) -> Self {
         unsafe {
