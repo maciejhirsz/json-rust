@@ -265,7 +265,22 @@ impl Object {
         let index = self.store.len();
 
         if index < self.store.capacity() {
-            self.store.push(Node::new(value));
+            // Because we've just checked the capacity, we can avoid
+            // using `push`, and instead do unsafe magic to memcpy
+            // the new node at the correct index without additional
+            // capacity or bound checks.
+            unsafe {
+                let node = Node::new(value);
+                self.store.set_len(index + 1);
+                ptr::copy_nonoverlapping(
+                    &node as *const Node,
+                    self.store.as_mut_ptr().offset(index as isize),
+                    1,
+                );
+                // Since the Node has been copied, we need to forget about
+                // the owned value, else we may run into use after free.
+                mem::forget(node);
+            }
             self.node_at_index_mut(index).attach_key(key, hash);
         } else {
             self.store.push(Node::new(value));
