@@ -745,9 +745,9 @@ impl<'a> Parser<'a> {
             b'\"' => expect_string!(self)
         };
 
-        self.depth += 1;
-
         let mut object = Object::with_capacity(self.get_alloc_size());
+
+        self.depth += 1;
 
         expect!(self, b':');
 
@@ -778,9 +778,10 @@ impl<'a> Parser<'a> {
     fn read_array(&mut self) -> Result<Vec<JsonValue>> {
         let first = expect_value!{ self, b']' => return Ok(Vec::new()) };
 
+        let mut array = Vec::with_capacity(self.get_alloc_size());
+
         self.depth += 1;
 
-        let mut array = Vec::with_capacity(self.get_alloc_size());
         array.push(first);
 
         loop {
