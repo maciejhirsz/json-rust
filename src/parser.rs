@@ -53,6 +53,18 @@ struct Parser<'a> {
 
     // Lenght of the source
     length: usize,
+
+    // Current depth. Objects and arrays increment depth when they
+    // start being parsed, decrement when they stop being parsed.
+    depth: usize,
+
+    // Size stack is an auxiliary array holding expected heap allocation
+    // sizes on each level of depth, up to 16. When an array of objects,
+    // the size stack will be set to the length of the first object parsed,
+    // so that each consecutive object can do a guess for a precise heap
+    // allocation for it's entires, reducing the amount of reallocations
+    // for large files conisderably!
+    size_stack: [usize; 16],
 }
 
 
@@ -411,6 +423,8 @@ impl<'a> Parser<'a> {
             byte_ptr: source.as_ptr(),
             index: 0,
             length: source.len(),
+            depth: 0,
+            size_stack: [3; 16],
         }
     }
 
@@ -707,15 +721,33 @@ impl<'a> Parser<'a> {
         Ok(num * exponent_to_power(e * sign))
     }
 
+    #[inline(always)]
+    fn set_alloc_size(&mut self, size: usize) {
+        if self.depth < 16 {
+            self.size_stack[self.depth] = size;
+        }
+    }
+
+    #[inline(always)]
+    fn get_alloc_size(&mut self) -> usize {
+        if self.depth < 16 {
+            self.size_stack[self.depth]
+        } else {
+            3
+        }
+    }
+
     // Given how compilcated reading numbers and strings is, reading objects
     // is actually pretty simple.
     fn read_object(&mut self) -> Result<Object> {
-        let mut object = Object::with_capacity(3);
-
         let key = expect!{ self,
-            b'}'  => return Ok(object),
+            b'}'  => return Ok(Object::new()),
             b'\"' => expect_string!(self)
         };
+
+        self.depth += 1;
+
+        let mut object = Object::with_capacity(self.get_alloc_size());
 
         expect!(self, b':');
 
@@ -735,6 +767,10 @@ impl<'a> Parser<'a> {
             object.insert(key, expect_value!(self));
         }
 
+        self.depth -= 1;
+
+        self.set_alloc_size(object.len());
+
         Ok(object)
     }
 
@@ -742,7 +778,9 @@ impl<'a> Parser<'a> {
     fn read_array(&mut self) -> Result<Vec<JsonValue>> {
         let first = expect_value!{ self, b']' => return Ok(Vec::new()) };
 
-        let mut array = Vec::with_capacity(2);
+        self.depth += 1;
+
+        let mut array = Vec::with_capacity(self.get_alloc_size());
         array.push(first);
 
         loop {
@@ -753,6 +791,10 @@ impl<'a> Parser<'a> {
                 }
             };
         }
+
+        self.depth -= 1;
+
+        self.set_alloc_size(array.len());
 
         Ok(array)
     }
