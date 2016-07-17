@@ -271,7 +271,7 @@ impl Object {
             self.store.push(Node::new(value));
             self.node_at_index_mut(index).attach_key(key, hash);
 
-            for i in 0 .. index - 1 {
+            for i in 0 .. index {
                 self.node_at_index_mut(i).fix_key_ptr();
             }
         }
