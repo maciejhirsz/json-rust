@@ -157,19 +157,20 @@ macro_rules! expect_string {
     })
 }
 
+static POWERS: [f64; 22] = [
+      1e1,    1e2,    1e3,    1e4,    1e5,    1e6,    1e7,    1e8,
+      1e9,   1e10,   1e11,   1e12,   1e13,   1e14,   1e15,   1e16,
+     1e17,   1e18,   1e19,   1e20,   1e21,   1e22
+];
+
+static NEG_POWERS: [f64; 22] = [
+     1e-1,   1e-2,   1e-3,   1e-4,   1e-5,   1e-6,   1e-7,   1e-8,
+     1e-9,  1e-10,  1e-11,  1e-12,  1e-13,  1e-14,  1e-15,  1e-16,
+    1e-17,  1e-18,  1e-19,  1e-20,  1e-21,  1e-22
+];
+
+#[inline(always)]
 fn exponent_to_power(e: i32) -> f64 {
-    static POWERS: [f64; 22] = [
-          1e1,    1e2,    1e3,    1e4,    1e5,    1e6,    1e7,    1e8,
-          1e9,   1e10,   1e11,   1e12,   1e13,   1e14,   1e15,   1e16,
-         1e17,   1e18,   1e19,   1e20,   1e21,   1e22
-    ];
-
-    static NEG_POWERS: [f64; 22] = [
-         1e-1,   1e-2,   1e-3,   1e-4,   1e-5,   1e-6,   1e-7,   1e-8,
-         1e-9,  1e-10,  1e-11,  1e-12,  1e-13,  1e-14,  1e-15,  1e-16,
-        1e-17,  1e-18,  1e-19,  1e-20,  1e-21,  1e-22
-    ];
-
     let index = (e.abs() - 1) as usize;
 
     // index=0 is e=1
@@ -185,6 +186,7 @@ fn exponent_to_power(e: i32) -> f64 {
     }
 }
 
+#[inline(always)]
 fn make_float(num: u64, e: i32) -> f64 {
     (num as f64) * exponent_to_power(e)
 }
@@ -216,12 +218,67 @@ macro_rules! expect_number {
                     // Avoid multiplication with bitshifts and addition
                     num = (num << 1) + (num << 3) + (ch - b'0') as u64;
                 },
-                b'.' | b'e' | b'E' => {
-                    result = try!($parser.read_number_with_fraction(num, 0));
+                _             => {
+                    let mut e = 0;
+                    result = allow_number_extensions!($parser, num, e, ch);
                     break;
+                }
+            }
+        }
+
+        result
+    })
+}
+
+macro_rules! allow_number_extensions {
+    ($parser:ident, $num:ident, $e:ident, $ch:ident) => ({
+        match $ch {
+            b'.'        => {
+                $parser.bump();
+                expect_fracton!($parser, $num, $e)
+            },
+            b'e' | b'E' => {
+                $parser.bump();
+                try!($parser.expect_exponent($num, $e))
+            },
+            _  => $num as f64
+        }
+    });
+
+    ($parser:ident) => ({
+        let mut num = 0;
+        let mut e = 0;
+        let ch = $parser.read_byte();
+        allow_number_extensions!($parser, num, e, ch)
+    })
+}
+
+macro_rules! expect_fracton {
+    ($parser:ident, $num:ident, $e:ident) => ({
+        let result: f64;
+
+        loop {
+            if $parser.is_eof() {
+                result = make_float($num, $e);
+                break;
+            }
+            let ch = $parser.read_byte();
+
+            match ch {
+                b'0' ... b'9' => {
+                    $parser.bump();
+                    if $num < MAX_PRECISION {
+                        $num = ($num << 3) + ($num << 1) + (ch - b'0') as u64;
+                        $e -= 1;
+                    }
                 },
-                _  => {
-                    result = num as f64;
+                b'e' | b'E' => {
+                    $parser.bump();
+                    result = try!($parser.expect_exponent($num, $e));
+                    break;
+                }
+                _ => {
+                    result = make_float($num, $e);
                     break;
                 }
             }
@@ -244,22 +301,17 @@ macro_rules! expect_value {
             b'[' => JsonValue::Array(try!($parser.read_array())),
             b'{' => JsonValue::Object(try!($parser.read_object())),
             b'"' => expect_string!($parser).into(),
-            b'0' => {
-                let num = try!($parser.read_number_with_fraction(0, 0));
-                JsonValue::Number(num)
-            },
+            b'0' => JsonValue::Number(allow_number_extensions!($parser)),
             b'1' ... b'9' => {
-                let num = expect_number!($parser, ch);
-                JsonValue::Number(num)
+                JsonValue::Number(expect_number!($parser, ch))
             },
             b'-' => {
                 let ch = expect_byte!($parser);
-                let num = match ch {
-                    b'0' => try!($parser.read_number_with_fraction(0, 0)),
+                JsonValue::Number(- match ch {
+                    b'0' => allow_number_extensions!($parser),
                     b'1' ... b'9' => expect_number!($parser, ch),
                     _    => return $parser.unexpected_character(ch)
-                };
-                JsonValue::Number(-num)
+                })
             }
             b't' => {
                 sequence!($parser, b'r', b'u', b'e');
@@ -301,7 +353,7 @@ impl<'a> Parser<'a> {
 
     #[inline(always)]
     fn bump(&mut self) {
-        self.index += 1;
+        self.index = self.index.wrapping_add(1);
     }
 
     fn source_position_from_index(&self, index: usize) -> Position {
@@ -473,7 +525,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn read_big_number(&mut self, num: u64) -> Result<f64> {
+    fn read_big_number(&mut self, mut num: u64) -> Result<f64> {
         // Attempt to continue reading digits that would overflow
         // u64 into freshly converted f64
 
@@ -487,70 +539,46 @@ impl<'a> Parser<'a> {
                     self.bump();
                     e += 1;
                 },
+                b'.' => {
+                    self.bump();
+                    return Ok(expect_fracton!(self, num, e));
+                },
+                b'e' | b'E' => {
+                    self.bump();
+                    return self.expect_exponent(num, e);
+                }
                 _  => break
             }
         }
 
-        self.read_number_with_fraction(num, e)
+        Ok(make_float(num, e))
+        // self.expect_exponent(num, e)
     }
 
-    fn read_number_with_fraction(&mut self, mut num: u64, mut e: i32) -> Result<f64> {
-        if self.is_eof() {
-            return Ok(make_float(num, e));
-        }
+    fn expect_exponent(&mut self, num: u64, e: i32) -> Result<f64> {
+        let mut ch = expect_byte!(self);
+        let sign = match ch {
+            b'-' => {
+                ch = expect_byte!(self);
+                -1
+            },
+            b'+' => {
+                ch = expect_byte!(self);
+                1
+            },
+            _    => 1
+        };
 
-        let mut ch = self.read_byte();
+        let num = make_float(num, e);
 
-        if ch == b'.' {
-            self.bump();
+        let mut e = match ch {
+            b'0' ... b'9' => (ch - b'0') as i32,
+            _ => return self.unexpected_character(ch),
+        };
 
-            loop {
-                if self.is_eof() {
-                    return Ok(make_float(num, e));
-                }
-                ch = self.read_byte();
+        read_num!(self, digit, e = (e << 3) + (e << 1) + digit as i32);
 
-                match ch {
-                    b'0' ... b'9' => {
-                        self.bump();
-                        if num < MAX_PRECISION {
-                            num = (num << 3) + (num << 1) + (ch - b'0') as u64;
-                            e -= 1;
-                        }
-                    },
-                    _ => break
-                }
-            }
-        }
-
-        if ch == b'e' || ch == b'E' {
-            self.bump();
-            ch = expect_byte!(self);
-            let sign = match ch {
-                b'-' => {
-                    ch = expect_byte!(self);
-                    -1
-                },
-                b'+' => {
-                    ch = expect_byte!(self);
-                    1
-                },
-                _    => 1
-            };
-
-            let num = make_float(num, e);
-
-            let mut e = match ch {
-                b'0' ... b'9' => (ch - b'0') as i32,
-                _ => return self.unexpected_character(ch),
-            };
-
-            read_num!(self, digit, e = (e << 3) + (e << 1) + digit as i32);
-
-            return Ok(num * exponent_to_power(e * sign));
-        }
-
-        Ok(make_float(num, e))
+        Ok(num * exponent_to_power(e * sign))
     }
 
     fn read_object(&mut self) -> Result<Object> {
@@ -585,7 +613,7 @@ impl<'a> Parser<'a> {
     fn read_array(&mut self) -> Result<Vec<JsonValue>> {
         let first = expect_value!{ self, b']' => return Ok(Vec::new()) };
 
-        let mut array = Vec::with_capacity(2);
+        let mut array = Vec::with_capacity(3);
         array.push(first);
 
         loop {
