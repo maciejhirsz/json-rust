@@ -17,7 +17,7 @@
 // This makes for some ugly code, but it is faster. Hopefully in the future
 // with MIR support the compiler will get smarter about this.
 
-use std::{ str, slice, char, f64 };
+use std::{ ptr, mem, str, slice, char, f64 };
 use object::Object;
 use { JsonValue, Error, Result };
 
@@ -53,18 +53,6 @@ struct Parser<'a> {
 
     // Lenght of the source
     length: usize,
-
-    // Current depth. Objects and arrays increment depth when they
-    // start being parsed, decrement when they stop being parsed.
-    depth: usize,
-
-    // Size stack is an auxiliary array holding expected heap allocation
-    // sizes on each level of depth, up to 16. When an array of objects,
-    // the size stack will be set to the length of the first object parsed,
-    // so that each consecutive object can do a guess for a precise heap
-    // allocation for it's entires, reducing the amount of reallocations
-    // for large files conisderably!
-    size_stack: [usize; 16],
 }
 
 
@@ -423,8 +411,6 @@ impl<'a> Parser<'a> {
             byte_ptr: source.as_ptr(),
             index: 0,
             length: source.len(),
-            depth: 0,
-            size_stack: [3; 16],
         }
     }
 
@@ -721,22 +707,6 @@ impl<'a> Parser<'a> {
         Ok(num * exponent_to_power(e * sign))
     }
 
-    #[inline(always)]
-    fn set_alloc_size(&mut self, size: usize) {
-        if self.depth < 16 {
-            self.size_stack[self.depth] = size;
-        }
-    }
-
-    #[inline(always)]
-    fn get_alloc_size(&mut self) -> usize {
-        if self.depth < 16 {
-            self.size_stack[self.depth]
-        } else {
-            3
-        }
-    }
-
     // Given how compilcated reading numbers and strings is, reading objects
     // is actually pretty simple.
     fn read_object(&mut self) -> Result<Object> {
@@ -745,9 +715,7 @@ impl<'a> Parser<'a> {
             b'\"' => expect_string!(self)
         };
 
-        let mut object = Object::with_capacity(self.get_alloc_size());
-
-        self.depth += 1;
+        let mut object = Object::with_capacity(3);
 
         expect!(self, b':');
 
@@ -767,10 +735,6 @@ impl<'a> Parser<'a> {
             object.insert(key, expect_value!(self));
         }
 
-        self.depth -= 1;
-
-        self.set_alloc_size(object.len());
-
         Ok(object)
     }
 
@@ -778,24 +742,43 @@ impl<'a> Parser<'a> {
     fn read_array(&mut self) -> Result<Vec<JsonValue>> {
         let first = expect_value!{ self, b']' => return Ok(Vec::new()) };
 
-        let mut array = Vec::with_capacity(self.get_alloc_size());
+        let mut array = Vec::with_capacity(2);
 
-        self.depth += 1;
+        unsafe {
+            // First member can be written to the array without any checks!
+            ptr::copy_nonoverlapping(
+                &first as *const JsonValue,
+                array.as_mut_ptr(),
+                1
+            );
+            mem::forget(first);
+            array.set_len(1);
+        }
 
-        array.push(first);
+        expect!{
+            self,
+            b']' => return Ok(array),
+            b',' => {
+                // Same for the second one!
+                let value = expect_value!(self);
+                unsafe {
+                    ptr::copy_nonoverlapping(
+                        &value as *const JsonValue,
+                        array.as_mut_ptr().offset(1),
+                        1
+                    );
+                    mem::forget(value);
+                    array.set_len(2);
+                }
+            }
+        }
 
         loop {
             expect!{ self,
                 b']' => break,
-                b',' => {
-                    array.push(expect_value!(self));
-                }
+                b',' => array.push(expect_value!(self))
             };
         }
-
-        self.depth -= 1;
-
-        self.set_alloc_size(array.len());
 
         Ok(array)
     }
