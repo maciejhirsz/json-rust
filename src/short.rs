@@ -20,7 +20,7 @@ impl Short {
     /// Typically you should avoid creating your own `Short`s, instead create a
     /// `JsonValue` (either using `"foo".into()` or `JsonValue::from("foo")`) out
     /// of a slice. This will automatically decide on `String` or `Short` for you.
-    #[inline]
+    #[inline(always)]
     pub unsafe fn from_slice(slice: &str) -> Self {
         let mut short = Short {
             value: [0; MAX_LEN],
@@ -69,6 +69,7 @@ impl fmt::Display for Short {
 impl Deref for Short {
     type Target = str;
 
+    #[inline(always)]
     fn deref(&self) -> &str {
         self.as_str()
     }

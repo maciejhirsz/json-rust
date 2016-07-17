@@ -115,13 +115,13 @@ impl Node {
     }
 
     #[inline(always)]
-    fn new(value: JsonValue) -> Node {
+    fn new(value: JsonValue, hash: u64, len: usize) -> Node {
         unsafe {
             Node {
                 key_buf: mem::uninitialized(),
-                key_len: 0,
+                key_len: len,
                 key_ptr: mem::uninitialized(),
-                key_hash: mem::uninitialized(),
+                key_hash: hash,
                 value: value,
                 left: 0,
                 right: 0,
@@ -134,20 +134,18 @@ impl Node {
     // `Node`, only once the `Node` is somewhere on the heap, a persisting
     // pointer to the key can be obtained.
     #[inline(always)]
-    fn attach_key(&mut self, key: &[u8], hash: u64) {
-        self.key_len = key.len();
-        self.key_hash = hash;
-        if key.len() <= KEY_BUF_LEN {
+    fn attach_key(&mut self, key: &[u8]) {
+        if self.key_len <= KEY_BUF_LEN {
             unsafe {
                 ptr::copy_nonoverlapping(
                     key.as_ptr(),
                     self.key_buf.as_mut_ptr(),
-                    key.len()
+                    self.key_len
                 );
             }
             self.key_ptr = self.key_buf.as_mut_ptr();
         } else {
-            let mut heap: Vec<u8> = key.to_vec();
+            let mut heap = key.to_vec();
             self.key_ptr = heap.as_mut_ptr();
             mem::forget(heap);
         }
@@ -270,22 +268,28 @@ impl Object {
             // the new node at the correct index without additional
             // capacity or bound checks.
             unsafe {
-                let node = Node::new(value);
+                let node = Node::new(value, hash, key.len());
                 self.store.set_len(index + 1);
+
+                // To whomever gets concerned: I got better results with
+                // copy than write. Difference in benchmarks wasn't big though.
                 ptr::copy_nonoverlapping(
                     &node as *const Node,
                     self.store.as_mut_ptr().offset(index as isize),
                     1,
                 );
+
                 // Since the Node has been copied, we need to forget about
                 // the owned value, else we may run into use after free.
                 mem::forget(node);
             }
-            self.node_at_index_mut(index).attach_key(key, hash);
+            self.node_at_index_mut(index).attach_key(key);
         } else {
-            self.store.push(Node::new(value));
-            self.node_at_index_mut(index).attach_key(key, hash);
+            self.store.push(Node::new(value, hash, key.len()));
+            self.node_at_index_mut(index).attach_key(key);
 
+            // Index up to the index (old length), we don't need to fix
+            // anything on the Node that just got pushed.
             for i in 0 .. index {
                 self.node_at_index_mut(i).fix_key_ptr();
             }
@@ -303,8 +307,8 @@ impl Object {
         let hash = hash_key(key);
 
         if self.store.len() == 0 {
-            self.store.push(Node::new(value));
-            self.store[0].attach_key(key, hash);
+            self.store.push(Node::new(value, hash, key.len()));
+            self.store[0].attach_key(key);
             return;
         }
 
