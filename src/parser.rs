@@ -17,8 +17,9 @@
 // This makes for some ugly code, but it is faster. Hopefully in the future
 // with MIR support the compiler will get smarter about this.
 
-use std::{ ptr, mem, str, slice, char, f64 };
+use std::{ ptr, mem, str, slice, char };
 use object::Object;
+use number::Number;
 use { JsonValue, Error, Result };
 
 const MAX_PRECISION: u64 = 576460752303423500;
@@ -209,53 +210,12 @@ macro_rules! expect_string {
 }
 
 
-// Cached powers, only within the printable range of f64 precision.
-static POWERS: [f64; 22] = [
-      1e1,    1e2,    1e3,    1e4,    1e5,    1e6,    1e7,    1e8,
-      1e9,   1e10,   1e11,   1e12,   1e13,   1e14,   1e15,   1e16,
-     1e17,   1e18,   1e19,   1e20,   1e21,   1e22
-];
-
-static NEG_POWERS: [f64; 22] = [
-     1e-1,   1e-2,   1e-3,   1e-4,   1e-5,   1e-6,   1e-7,   1e-8,
-     1e-9,  1e-10,  1e-11,  1e-12,  1e-13,  1e-14,  1e-15,  1e-16,
-    1e-17,  1e-18,  1e-19,  1e-20,  1e-21,  1e-22
-];
-
-
-// Get 10 to the power of `e` as f64, use the tables above for performance.
-#[inline(always)]
-fn exponent_to_power(e: i32) -> f64 {
-    let index = (e.abs() - 1) as usize;
-
-    // index=0 is e=1
-    if index < 22 {
-        if e < 0 {
-            NEG_POWERS[index]
-        } else {
-            POWERS[index]
-        }
-    } else {
-        // powf is more accurate
-        10f64.powf(e as f64)
-    }
-}
-
-
-// Just a tiny helper to convert `u64` mantissa and `i32` decimal exponent
-// into a proper `f64`.
-#[inline(always)]
-fn make_float(num: u64, e: i32) -> f64 {
-    (num as f64) * exponent_to_power(e)
-}
-
-
 // Expect a number. Of some kind.
 macro_rules! expect_number {
     ($parser:ident, $first:ident) => ({
         let mut num = ($first - b'0') as u64;
 
-        let result: f64;
+        let result: Number;
 
         // Cap on how many iterations we do while reading to u64
         // in order to avoid an overflow.
@@ -266,7 +226,7 @@ macro_rules! expect_number {
             }
 
             if $parser.is_eof() {
-                result = num as f64;
+                result = num.into();
                 break;
             }
 
@@ -304,7 +264,7 @@ macro_rules! allow_number_extensions {
                 $parser.bump();
                 try!($parser.expect_exponent($num, $e))
             },
-            _  => $num as f64
+            _  => $num.into()
         }
     });
 
@@ -324,11 +284,11 @@ macro_rules! allow_number_extensions {
 // of the number.
 macro_rules! expect_fracton {
     ($parser:ident, $num:ident, $e:ident) => ({
-        let result: f64;
+        let result: Number;
 
         loop {
             if $parser.is_eof() {
-                result = make_float($num, $e);
+                result = Number::from_parts(true, $num, $e as i16);
                 break;
             }
             let ch = $parser.read_byte();
@@ -347,7 +307,7 @@ macro_rules! expect_fracton {
                     break;
                 }
                 _ => {
-                    result = make_float($num, $e);
+                    result = Number::from_parts(true, $num, $e as i16);
                     break;
                 }
             }
@@ -641,11 +601,11 @@ impl<'a> Parser<'a> {
     // but instead of continuing to read into the mantissa, it will increment
     // the exponent. Note that no digits are actually read here, as we already
     // exceeded the precision range of f64 anyway.
-    fn read_big_number(&mut self, mut num: u64) -> Result<f64> {
+    fn read_big_number(&mut self, mut num: u64) -> Result<Number> {
         let mut e = 0i32;
         loop {
             if self.is_eof() {
-                return Ok(make_float(num, e));
+                return Ok(Number::from_parts(true, num, e as i16));
             }
             match self.read_byte() {
                 b'0' ... b'9' => {
@@ -664,12 +624,12 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Ok(make_float(num, e))
+        Ok(Number::from_parts(true, num, e as i16))
     }
 
     // Called in the rare case that a number with `e` notation has been
     // encountered. This is pretty straight forward, I guess.
-    fn expect_exponent(&mut self, num: u64, e: i32) -> Result<f64> {
+    fn expect_exponent(&mut self, num: u64, mut e: i32) -> Result<Number> {
         let mut ch = expect_byte!(self);
         let sign = match ch {
             b'-' => {
@@ -683,10 +643,8 @@ impl<'a> Parser<'a> {
             _    => 1
         };
 
-        let num = make_float(num, e);
-
-        let mut e = match ch {
-            b'0' ... b'9' => (ch - b'0') as i32,
+        e = match ch {
+            b'0' ... b'9' => e * 10 * sign + (ch - b'0') as i32,
             _ => return self.unexpected_character(ch),
         };
 
@@ -704,7 +662,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Ok(num * exponent_to_power(e * sign))
+        Ok(Number::from_parts(true, num, e as i16))
     }
 
     // Given how compilcated reading numbers and strings is, reading objects

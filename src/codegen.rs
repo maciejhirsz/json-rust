@@ -1,10 +1,9 @@
 use std::ptr;
 use std::io::Write;
-use std::num::FpCategory;
 use JsonValue;
+use number::Number;
 
-extern crate itoa;
-extern crate ftoa;
+use util::write::write;
 
 const QU: u8 = b'"';
 const BS: u8 = b'\\';
@@ -54,10 +53,13 @@ pub trait Generator {
 
     fn write_min(&mut self, slice: &[u8], min: u8);
 
+    #[inline(always)]
     fn new_line(&mut self) {}
 
+    #[inline(always)]
     fn indent(&mut self) {}
 
+    #[inline(always)]
     fn dedent(&mut self) {}
 
     #[inline(never)]
@@ -95,28 +97,9 @@ pub trait Generator {
     }
 
     #[inline(always)]
-    fn write_number(&mut self, num: f64) {
-        match num.classify() {
-            FpCategory::Normal    |
-            FpCategory::Subnormal => {
-                if num.fract() == 0.0 && num.abs() < 1e19 {
-                    itoa::write(self.get_writer(), num as i64).unwrap();
-                } else {
-                    ftoa::write(self.get_writer(), num).unwrap();
-                }
-            },
-            FpCategory::Zero => {
-                if num.is_sign_negative() {
-                    self.write(b"-0");
-                } else {
-                    self.write_char(b'0');
-                }
-            },
-            FpCategory::Nan      |
-            FpCategory::Infinite => {
-                self.write(b"null");
-            }
-        }
+    fn write_number(&mut self, num: &Number) {
+        let (positive, mantissa, exponent) = num.as_parts();
+        write(self.get_writer(), positive, mantissa, exponent).unwrap();
     }
 
     fn write_json(&mut self, json: &JsonValue) {
@@ -124,7 +107,7 @@ pub trait Generator {
             JsonValue::Null               => self.write(b"null"),
             JsonValue::Short(ref short)   => self.write_string(short.as_str()),
             JsonValue::String(ref string) => self.write_string(string),
-            JsonValue::Number(ref number) => self.write_number(*number),
+            JsonValue::Number(ref number) => self.write_number(number),
             JsonValue::Boolean(true)      => self.write(b"true"),
             JsonValue::Boolean(false)     => self.write(b"false"),
             JsonValue::Array(ref array)   => {
