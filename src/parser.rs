@@ -22,6 +22,8 @@ use object::Object;
 use number::Number;
 use { JsonValue, Error, Result };
 
+// This is not actual max precision, but a treshold at which number parsing
+// kicks into checked math.
 const MAX_PRECISION: u64 = 576460752303423500;
 
 
@@ -220,7 +222,7 @@ macro_rules! expect_number {
         // Cap on how many iterations we do while reading to u64
         // in order to avoid an overflow.
         loop {
-            if num >= 576460752303423500 {
+            if num >= MAX_PRECISION {
                 result = try!($parser.read_big_number(num));
                 break;
             }
@@ -299,6 +301,16 @@ macro_rules! expect_fracton {
                     if $num < MAX_PRECISION {
                         $num = ($num << 3) + ($num << 1) + (ch - b'0') as u64;
                         $e -= 1;
+                    } else {
+                        match $num.checked_mul(10).and_then(|num| {
+                            num.checked_add((ch - b'0') as u64)
+                        }) {
+                            Some(result) => {
+                                $num = result;
+                                $e -= 1;
+                            },
+                            None => {}
+                        }
                     }
                 },
                 b'e' | b'E' => {
@@ -607,10 +619,16 @@ impl<'a> Parser<'a> {
             if self.is_eof() {
                 return Ok(Number::from_parts(true, num, e as i16));
             }
-            match self.read_byte() {
+            let ch = self.read_byte();
+            match ch {
                 b'0' ... b'9' => {
                     self.bump();
-                    e += 1;
+                    match num.checked_mul(10).and_then(|num| {
+                        num.checked_add((ch - b'0') as u64)
+                    }) {
+                        Some(result) => num = result,
+                        None         => e += 1 ,
+                    }
                 },
                 b'.' => {
                     self.bump();

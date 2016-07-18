@@ -187,6 +187,11 @@ mod unit {
     }
 
     #[test]
+    fn stringify_very_large_number_no_fraction() {
+        assert_eq!(stringify(7e70), "7e70");
+    }
+
+    #[test]
     fn stringify_very_small_number() {
         assert_eq!(stringify(3.141592653589793e-16), "3.141592653589793e-16");
     }
@@ -364,7 +369,13 @@ mod unit {
 
     #[test]
     fn parse_very_long_float() {
-        assert_eq!(parse("2.22507385850720113605740979670913197593481954635164564e-308").unwrap(), 2.225073858507201e-308);
+        let parsed = parse("2.22507385850720113605740979670913197593481954635164564e-308").unwrap();
+
+        // Handles convertion correctly
+        assert_eq!(parsed.as_f64().unwrap(), 2.225073858507201e-308);
+
+        // Exhausts u64
+        assert_eq!(parsed, Number::from_parts(true, 2225073858507201136, -326));
     }
 
     #[test]
@@ -1252,23 +1263,69 @@ mod number {
     use super::json::number::Number;
 
     #[test]
-    fn parse_small_float() {
+    fn eq() {
+        assert_eq!(
+            Number::from_parts(true, 500, 0),
+            Number::from_parts(true, 500, 0)
+        );
+    }
+
+    #[test]
+    fn eq_normalize_left_positive() {
+        assert_eq!(
+            Number::from_parts(true, 5, 2),
+            Number::from_parts(true, 500, 0)
+        );
+    }
+
+    #[test]
+    fn eq_normalize_left_negative() {
+        assert_eq!(
+            Number::from_parts(true, 5, -2),
+            Number::from_parts(true, 500, -4)
+        );
+    }
+
+    #[test]
+    fn eq_normalize_right_positive() {
+        assert_eq!(
+            Number::from_parts(true, 500, 0),
+            Number::from_parts(true, 5, 2)
+        );
+    }
+
+    #[test]
+    fn eq_normalize_right_negative() {
+        assert_eq!(
+            Number::from_parts(true, 500, -4),
+            Number::from_parts(true, 5, -2)
+        );
+    }
+
+    #[test]
+    fn from_small_float() {
         assert_eq!(Number::from(0.05), Number::from_parts(true, 5, -2));
     }
 
-
     #[test]
-    fn parse_very_small_float() {
+    fn from_very_small_float() {
         assert_eq!(Number::from(5e-50), Number::from_parts(true, 5, -50));
     }
 
     #[test]
-    fn parse_big_float() {
+    fn from_big_float() {
         assert_eq!(Number::from(500), Number::from_parts(true, 500, 0));
     }
 
     #[test]
-    fn parse_very_big_float() {
+    fn from_very_big_float() {
         assert_eq!(Number::from(5e50), Number::from_parts(true, 5, 50));
+    }
+
+    #[test]
+    fn into_very_small_float() {
+        let number = Number::from_parts(true, 2225073858507201136, -326);
+
+        assert_eq!(f64::from(number), 2.225073858507201e-308);
     }
 }
