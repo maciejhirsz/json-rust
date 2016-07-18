@@ -187,6 +187,11 @@ mod unit {
     }
 
     #[test]
+    fn stringify_very_large_number_no_fraction() {
+        assert_eq!(stringify(7e70), "7e70");
+    }
+
+    #[test]
     fn stringify_very_small_number() {
         assert_eq!(stringify(3.141592653589793e-16), "3.141592653589793e-16");
     }

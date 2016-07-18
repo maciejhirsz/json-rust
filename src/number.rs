@@ -66,9 +66,10 @@ impl PartialEq for Number {
 impl fmt::Display for Number {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut buf = Vec::new();
-
-        let (positive, mantissa, exponent) = self.as_parts();
-        write(&mut buf, positive, mantissa, exponent).unwrap();
+        unsafe {
+            let (positive, mantissa, exponent) = self.as_parts();
+            write(&mut buf, positive, mantissa, exponent).unwrap();
+        }
         f.write_str(&unsafe { String::from_utf8_unchecked(buf) })
     }
 }

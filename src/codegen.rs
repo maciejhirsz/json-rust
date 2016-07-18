@@ -99,7 +99,9 @@ pub trait Generator {
     #[inline(always)]
     fn write_number(&mut self, num: &Number) {
         let (positive, mantissa, exponent) = num.as_parts();
-        write(self.get_writer(), positive, mantissa, exponent).unwrap();
+        unsafe {
+            write(self.get_writer(), positive, mantissa, exponent).unwrap();
+        }
     }
 
     fn write_json(&mut self, json: &JsonValue) {
