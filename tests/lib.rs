@@ -358,6 +358,11 @@ mod unit {
     }
 
     #[test]
+    fn parse_small_number() {
+        assert_eq!(parse("0.05").unwrap(), 0.05);
+    }
+
+    #[test]
     fn parse_very_long_float() {
         assert_eq!(parse("2.22507385850720113605740979670913197593481954635164564e-308").unwrap(), 2.225073858507201e-308);
     }
@@ -1240,5 +1245,30 @@ mod json_checker_pass {
         }
 
         "#).is_ok());
+    }
+}
+
+mod number {
+    use super::json::number::Number;
+
+    #[test]
+    fn parse_small_float() {
+        assert_eq!(Number::from(0.05), Number::from_parts(true, 5, -2));
+    }
+
+
+    #[test]
+    fn parse_very_small_float() {
+        assert_eq!(Number::from(5e-50), Number::from_parts(true, 5, -50));
+    }
+
+    #[test]
+    fn parse_big_float() {
+        assert_eq!(Number::from(500), Number::from_parts(true, 500, 0));
+    }
+
+    #[test]
+    fn parse_very_big_float() {
+        assert_eq!(Number::from(5e50), Number::from_parts(true, 5, 50));
     }
 }
