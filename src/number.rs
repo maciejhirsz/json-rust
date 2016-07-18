@@ -42,9 +42,24 @@ impl PartialEq for Number {
             return true;
         }
 
-        self.positive == other.positive &&
-        self.mantissa == other.mantissa &&
-        self.exponent == other.exponent
+        if self.positive != other.positive {
+            return false;
+        }
+
+        let e_diff = self.exponent - other.exponent;
+
+        if e_diff == 0 {
+            return self.mantissa == other.mantissa;
+        } else if e_diff > 0 {
+            // TODO: use cached powers
+            self.mantissa
+                .wrapping_mul(10u64.pow(e_diff as u32)) == other.mantissa
+        } else {
+            // TODO: use cached powers
+            self.mantissa == other.mantissa
+                                  .wrapping_mul(10u64.pow(-e_diff as u32))
+        }
+
     }
 }
 
@@ -112,13 +127,31 @@ fn exponent_to_power_f32(e: i16) -> f32 {
 
 impl From<Number> for f64 {
     fn from(num: Number) -> f64 {
-        (num.mantissa as f64) * exponent_to_power_f64(num.exponent)
+        let mut n = num.mantissa as f64;
+        let mut e = num.exponent;
+
+        if e < -308 {
+            n *= exponent_to_power_f64(e + 308);
+            e = -308;
+        }
+
+        let f = n * exponent_to_power_f64(e);
+        if num.positive { f } else { -f }
     }
 }
 
 impl From<Number> for f32 {
     fn from(num: Number) -> f32 {
-        (num.mantissa as f32) * exponent_to_power_f32(num.exponent)
+        let mut n = num.mantissa as f32;
+        let mut e = num.exponent;
+
+        if e < -127 {
+            n *= exponent_to_power_f32(e + 127);
+            e = -127;
+        }
+
+        let f = n * exponent_to_power_f32(e);
+        if num.positive { f } else { -f }
     }
 }
 
@@ -186,22 +219,6 @@ macro_rules! impl_unsigned {
             }
         }
 
-        impl PartialEq<$t> for Number {
-            fn eq(&self, other: &$t) -> bool {
-                self.positive &&
-                self.exponent == 0 &&
-                self.mantissa == *other as u64
-            }
-        }
-
-        impl PartialEq<Number> for $t {
-            fn eq(&self, other: &Number) -> bool {
-                other.positive &&
-                other.exponent == 0 &&
-                other.mantissa == *self as u64
-            }
-        }
-
         impl_integer!($t);
     )*)
 }
@@ -227,41 +244,13 @@ macro_rules! impl_signed {
             }
         }
 
-        impl PartialEq<$t> for Number {
-            fn eq(&self, other: &$t) -> bool {
-                if *other < 0 {
-                    !self.positive &&
-                    self.exponent == 0 &&
-                    self.mantissa == (-*other) as u64
-                } else {
-                    self.positive &&
-                    self.exponent == 0 &&
-                    self.mantissa == *other as u64
-                }
-            }
-        }
-
-        impl PartialEq<Number> for $t {
-            fn eq(&self, other: &Number) -> bool {
-                if *self < 0 {
-                    !other.positive &&
-                    other.exponent == 0 &&
-                    other.mantissa == (-*self) as u64
-                } else {
-                    other.positive &&
-                    other.exponent == 0 &&
-                    other.mantissa == *self as u64
-                }
-            }
-        }
-
         impl_integer!($t);
     )*)
 }
 
 
 macro_rules! impl_integer {
-    ($t:ty) => (
+    ($t:ty) => {
         impl From<Number> for $t {
             fn from(num: Number) -> $t {
                 let (positive, mantissa, exponent) = num.as_parts();
@@ -282,7 +271,19 @@ macro_rules! impl_integer {
                 }
             }
         }
-    )
+
+        impl PartialEq<$t> for Number {
+            fn eq(&self, other: &$t) -> bool {
+                *self == Number::from(*other)
+            }
+        }
+
+        impl PartialEq<Number> for $t {
+            fn eq(&self, other: &Number) -> bool {
+                Number::from(*self) == *other
+            }
+        }
+    }
 }
 
 impl_signed!(isize, i8, i16, i32, i64);
