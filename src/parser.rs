@@ -1,22 +1,63 @@
-use std::{ str, slice, char, f64 };
+// HERE BE DRAGONS!
+// ================
+//
+// Making a fast parser is hard. This is a _not so naive_ implementation of
+// recursive descent that does almost nothing. _There is no backtracking_, the
+// whole parsing is 100% predictive, even though it's not BNF, and will have
+// linear performance based on the length of the source!
+//
+// There is a lot of macros here! Like, woah! This is mostly due to the fact
+// that Rust isn't very cool about optimizing inlined functions that return
+// a `Result` type. Since different functions will have different `Result`
+// signatures, the `try!` macro will always have to repackage our results.
+// With macros those issues don't exist, the macro will return an unpackaged
+// result - whatever it is - and if we ever stumble upon the error, we can
+// return an `Err` without worrying about the exact signature of `Result`.
+//
+// This makes for some ugly code, but it is faster. Hopefully in the future
+// with MIR support the compiler will get smarter about this.
+
+use std::{ ptr, mem, str, slice, char, f64 };
 use object::Object;
 use { JsonValue, Error, Result };
 
 const MAX_PRECISION: u64 = 576460752303423500;
 
+
+// Position is only used when we stumble upon an unexpected character. We don't
+// track lines during parsing, as that would mean doing unnecessary work.
+// Instead, if an error occurs, we figure out the line and column from the
+// current index position of the parser.
 struct Position {
     pub line: usize,
     pub column: usize,
 }
 
+
+// The `Parser` struct keeps track of indexing over our buffer. All niceness
+// has been abandonned in favor of raw pointer magic. Does that make you feel
+// dirty? _Good._
 struct Parser<'a> {
+    // Helper buffer for parsing strings that can't be just memcopied from
+    // the original source (escaped characters)
     buffer: Vec<u8>,
+
+    // String slice to parse
     source: &'a str,
+
+    // Byte pointer to the slice above
     byte_ptr: *const u8,
+
+    // Current index
     index: usize,
+
+    // Lenght of the source
     length: usize,
 }
 
+
+// Read a byte from the source.
+// Will return an error if there are no more bytes.
 macro_rules! expect_byte {
     ($parser:ident) => ({
         if $parser.is_eof() {
@@ -29,7 +70,16 @@ macro_rules! expect_byte {
     })
 }
 
-macro_rules! sequence {
+
+// Expect a sequence of specific bytes in specific order, error otherwise.
+// This is useful for reading the 3 JSON identifiers:
+//
+// - "t" has to be followed by "rue"
+// - "f" has to be followed by "alse"
+// - "n" has to be followed by "ull"
+//
+// Anything else is an error.
+macro_rules! expect_sequence {
     ($parser:ident, $( $ch:pat ),*) => {
         $(
             match expect_byte!($parser) {
@@ -40,45 +90,40 @@ macro_rules! sequence {
     }
 }
 
-macro_rules! read_num {
-    ($parser:ident, $num:ident, $then:expr) => {
-        loop {
-            if $parser.is_eof() { break; }
-            let ch = $parser.read_byte();
-            match ch {
-                b'0' ... b'9' => {
-                    $parser.bump();
-                    let $num = ch - b'0';
-                    $then;
-                },
-                _  => break
-            }
-        }
-    }
-}
 
-macro_rules! consume_whitespace {
-    ($parser:ident, $ch:ident) => {
-        match $ch {
+// A drop in macro for when we expect to read a byte, but we don't care
+// about any whitespace characters that might occure before it.
+macro_rules! expect_byte_ignore_whitespace {
+    ($parser:ident) => ({
+        let mut ch = expect_byte!($parser);
+
+        // Don't go straight for the loop, assume we are in the clear first.
+        match ch {
             // whitespace
             9 ... 13 | 32 => {
                 loop {
                     match expect_byte!($parser) {
                         9 ... 13 | 32 => {},
-                        ch            => { $ch = ch; break }
+                        next          => {
+                            ch = next;
+                            break;
+                        }
                     }
                 }
             },
             _ => {}
         }
-    }
+
+        ch
+    })
 }
 
+
+// Expect a particular byte to be next. Also available with a variant
+// creates a `match` expression just to ease some pain.
 macro_rules! expect {
     ($parser:ident, $byte:expr) => ({
-        let mut ch = expect_byte!($parser);
-
-        consume_whitespace!($parser, ch);
+        let ch = expect_byte_ignore_whitespace!($parser);
 
         if ch != $byte {
             return $parser.unexpected_character(ch)
@@ -86,9 +131,7 @@ macro_rules! expect {
     });
 
     {$parser:ident $(, $byte:pat => $then:expr )*} => ({
-        let mut ch = expect_byte!($parser);
-
-        consume_whitespace!($parser, ch);
+        let ch = expect_byte_ignore_whitespace!($parser);
 
         match ch {
             $(
@@ -100,13 +143,14 @@ macro_rules! expect {
     })
 }
 
+
+// Look up table that marks which characters are allowed in their raw
+// form in a string.
 const QU: bool = false;  // double quote       0x22
 const BS: bool = false;  // backslash          0x5C
 const CT: bool = false;  // control character  0x00 ... 0x1F
 const __: bool = true;
 
-// Look up table that marks which characters are allowed in their raw
-// form in a string.
 static ALLOWED: [bool; 256] = [
 // 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
   CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, // 0
@@ -127,6 +171,13 @@ static ALLOWED: [bool; 256] = [
   __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // F
 ];
 
+
+// Expect a string. This is called after encontering, and consuming, a
+// double quote character. This macro has a happy path variant where it
+// does almost nothing as long as all characters are allowed (as described
+// in the look up table above). If it encounters a closing quote without
+// any escapes, it will use a slice straight from the source, avoiding
+// unnecessary buffering.
 macro_rules! expect_string {
     ($parser:ident) => ({
         let result: &str;
@@ -138,8 +189,6 @@ macro_rules! expect_string {
                 continue;
             }
             if ch == b'"' {
-                // result = &$parser.source[start .. $parser.index - 1];
-
                 unsafe {
                     let ptr = $parser.byte_ptr.offset(start as isize);
                     let len = $parser.index - 1 - start;
@@ -159,19 +208,24 @@ macro_rules! expect_string {
     })
 }
 
+
+// Cached powers, only within the printable range of f64 precision.
+static POWERS: [f64; 22] = [
+      1e1,    1e2,    1e3,    1e4,    1e5,    1e6,    1e7,    1e8,
+      1e9,   1e10,   1e11,   1e12,   1e13,   1e14,   1e15,   1e16,
+     1e17,   1e18,   1e19,   1e20,   1e21,   1e22
+];
+
+static NEG_POWERS: [f64; 22] = [
+     1e-1,   1e-2,   1e-3,   1e-4,   1e-5,   1e-6,   1e-7,   1e-8,
+     1e-9,  1e-10,  1e-11,  1e-12,  1e-13,  1e-14,  1e-15,  1e-16,
+    1e-17,  1e-18,  1e-19,  1e-20,  1e-21,  1e-22
+];
+
+
+// Get 10 to the power of `e` as f64, use the tables above for performance.
+#[inline(always)]
 fn exponent_to_power(e: i32) -> f64 {
-    static POWERS: [f64; 22] = [
-          1e1,    1e2,    1e3,    1e4,    1e5,    1e6,    1e7,    1e8,
-          1e9,   1e10,   1e11,   1e12,   1e13,   1e14,   1e15,   1e16,
-         1e17,   1e18,   1e19,   1e20,   1e21,   1e22
-    ];
-
-    static NEG_POWERS: [f64; 22] = [
-         1e-1,   1e-2,   1e-3,   1e-4,   1e-5,   1e-6,   1e-7,   1e-8,
-         1e-9,  1e-10,  1e-11,  1e-12,  1e-13,  1e-14,  1e-15,  1e-16,
-        1e-17,  1e-18,  1e-19,  1e-20,  1e-21,  1e-22
-    ];
-
     let index = (e.abs() - 1) as usize;
 
     // index=0 is e=1
@@ -187,10 +241,16 @@ fn exponent_to_power(e: i32) -> f64 {
     }
 }
 
+
+// Just a tiny helper to convert `u64` mantissa and `i32` decimal exponent
+// into a proper `f64`.
+#[inline(always)]
 fn make_float(num: u64, e: i32) -> f64 {
     (num as f64) * exponent_to_power(e)
 }
 
+
+// Expect a number. Of some kind.
 macro_rules! expect_number {
     ($parser:ident, $first:ident) => ({
         let mut num = ($first - b'0') as u64;
@@ -218,12 +278,9 @@ macro_rules! expect_number {
                     // Avoid multiplication with bitshifts and addition
                     num = (num << 1) + (num << 3) + (ch - b'0') as u64;
                 },
-                b'.' | b'e' | b'E' => {
-                    result = try!($parser.read_number_with_fraction(num, 0));
-                    break;
-                },
-                _  => {
-                    result = num as f64;
+                _             => {
+                    let mut e = 0;
+                    result = allow_number_extensions!($parser, num, e, ch);
                     break;
                 }
             }
@@ -233,11 +290,82 @@ macro_rules! expect_number {
     })
 }
 
+
+// Invoked after parsing an integer, this will account for fractions and/or
+// `e` notation.
+macro_rules! allow_number_extensions {
+    ($parser:ident, $num:ident, $e:ident, $ch:ident) => ({
+        match $ch {
+            b'.'        => {
+                $parser.bump();
+                expect_fracton!($parser, $num, $e)
+            },
+            b'e' | b'E' => {
+                $parser.bump();
+                try!($parser.expect_exponent($num, $e))
+            },
+            _  => $num as f64
+        }
+    });
+
+    // Alternative variant that defaults everything to 0. This is actually
+    // quite handy as the only number that can begin with zero, has to have
+    // a zero mantissa. Leading zeroes are illegal in JSON!
+    ($parser:ident) => ({
+        let mut num = 0;
+        let mut e = 0;
+        let ch = $parser.read_byte();
+        allow_number_extensions!($parser, num, e, ch)
+    })
+}
+
+
+// If a dot `b"."` byte has been read, start reading the decimal fraction
+// of the number.
+macro_rules! expect_fracton {
+    ($parser:ident, $num:ident, $e:ident) => ({
+        let result: f64;
+
+        loop {
+            if $parser.is_eof() {
+                result = make_float($num, $e);
+                break;
+            }
+            let ch = $parser.read_byte();
+
+            match ch {
+                b'0' ... b'9' => {
+                    $parser.bump();
+                    if $num < MAX_PRECISION {
+                        $num = ($num << 3) + ($num << 1) + (ch - b'0') as u64;
+                        $e -= 1;
+                    }
+                },
+                b'e' | b'E' => {
+                    $parser.bump();
+                    result = try!($parser.expect_exponent($num, $e));
+                    break;
+                }
+                _ => {
+                    result = make_float($num, $e);
+                    break;
+                }
+            }
+        }
+
+        result
+    })
+}
+
+
+// This is where the magic happens. This macro will read from the source
+// and try to create an instance of `JsonValue`. Note that it only reads
+// bytes that _begin_ a JSON value, however it can also accept an optional
+// pattern with custom logic. This is used in arrays, which expect either
+// a value or a closing bracket `b"]"`.
 macro_rules! expect_value {
     {$parser:ident $(, $byte:pat => $then:expr )*} => ({
-        let mut ch = expect_byte!($parser);
-
-        consume_whitespace!($parser, ch);
+        let ch = expect_byte_ignore_whitespace!($parser);
 
         match ch {
             $(
@@ -246,33 +374,28 @@ macro_rules! expect_value {
             b'[' => JsonValue::Array(try!($parser.read_array())),
             b'{' => JsonValue::Object(try!($parser.read_object())),
             b'"' => expect_string!($parser).into(),
-            b'0' => {
-                let num = try!($parser.read_number_with_fraction(0, 0));
-                JsonValue::Number(num)
-            },
+            b'0' => JsonValue::Number(allow_number_extensions!($parser)),
             b'1' ... b'9' => {
-                let num = expect_number!($parser, ch);
-                JsonValue::Number(num)
+                JsonValue::Number(expect_number!($parser, ch))
             },
             b'-' => {
                 let ch = expect_byte!($parser);
-                let num = match ch {
-                    b'0' => try!($parser.read_number_with_fraction(0, 0)),
+                JsonValue::Number(- match ch {
+                    b'0' => allow_number_extensions!($parser),
                     b'1' ... b'9' => expect_number!($parser, ch),
                     _    => return $parser.unexpected_character(ch)
-                };
-                JsonValue::Number(-num)
+                })
             }
             b't' => {
-                sequence!($parser, b'r', b'u', b'e');
+                expect_sequence!($parser, b'r', b'u', b'e');
                 JsonValue::Boolean(true)
             },
             b'f' => {
-                sequence!($parser, b'a', b'l', b's', b'e');
+                expect_sequence!($parser, b'a', b'l', b's', b'e');
                 JsonValue::Boolean(false)
             },
             b'n' => {
-                sequence!($parser, b'u', b'l', b'l');
+                expect_sequence!($parser, b'u', b'l', b'l');
                 JsonValue::Null
             },
             _ => return $parser.unexpected_character(ch)
@@ -291,21 +414,33 @@ impl<'a> Parser<'a> {
         }
     }
 
+    // Check if we are at the end of the source.
     #[inline(always)]
     fn is_eof(&mut self) -> bool {
         self.index == self.length
     }
 
+    // Read a byte from the source. Note that this does not increment
+    // the index. In few cases (all of them related to number parsing)
+    // we want to peek at the byte before doing anything. This will,
+    // very very rarely, lead to a situation where the same byte is read
+    // twice, but since this operation is using a raw pointer, the cost
+    // is virtually irrelevant.
     #[inline(always)]
     fn read_byte(&mut self) -> u8 {
         unsafe { *self.byte_ptr.offset(self.index as isize) }
     }
 
+    // Manually increment the index. Calling `read_byte` and then `bump`
+    // is equivalent to consuming a byte on an iterator.
     #[inline(always)]
     fn bump(&mut self) {
-        self.index += 1;
+        self.index = self.index.wrapping_add(1);
     }
 
+    // Figure out the `Position` in the source. This doesn't look like it's
+    // very fast - it probably isn't, and it doesn't really have to be.
+    // This method is only called when an unexpected character error occurs.
     fn source_position_from_index(&self, index: usize) -> Position {
         let (bytes, _) = self.source.split_at(index-1);
 
@@ -317,9 +452,15 @@ impl<'a> Parser<'a> {
         }
     }
 
+    // So we got an unexpected character, now what? Well, figure out where
+    // it is, and throw an error!
     fn unexpected_character<T: Sized>(&mut self, byte: u8) -> Result<T> {
         let pos = self.source_position_from_index(self.index);
 
+        // If the first byte is non ASCII (> 127), attempt to read the
+        // codepoint from the following UTF-8 sequence. This can lead
+        // to a fun scenario where an unexpected character error can
+        // produce an end of json or UTF-8 failure error first :).
         let ch = if byte & 0x80 != 0 {
             let mut buf = [byte,0,0,0];
             let mut len = 0usize;
@@ -360,6 +501,7 @@ impl<'a> Parser<'a> {
         })
     }
 
+    // Boring
     fn read_hexdec_digit(&mut self) -> Result<u32> {
         let ch = expect_byte!(self);
         Ok(match ch {
@@ -370,6 +512,7 @@ impl<'a> Parser<'a> {
         } as u32)
     }
 
+    // Boring
     fn read_hexdec_codepoint(&mut self) -> Result<u32> {
         Ok(
             try!(self.read_hexdec_digit()) << 12 |
@@ -379,6 +522,9 @@ impl<'a> Parser<'a> {
         )
     }
 
+    // Oh look, some action. This method reads an escaped unicode
+    // sequence such as `\uDEAD` from the string. Except `DEAD` is
+    // not a valid codepoint, so it also needs to handle errors...
     fn read_codepoint(&mut self) -> Result<()> {
         let mut codepoint = try!(self.read_hexdec_codepoint());
 
@@ -388,7 +534,7 @@ impl<'a> Parser<'a> {
                 codepoint -= 0xD800;
                 codepoint <<= 10;
 
-                sequence!(self, b'\\', b'u');
+                expect_sequence!(self, b'\\', b'u');
 
                 let lower = try!(self.read_hexdec_codepoint());
 
@@ -425,11 +571,19 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    // What's so complex about strings you may ask? Not that much really.
+    // This method is called if the `expect_string!` macro encounters an
+    // escape. The added complexity is that it will have to use an internal
+    // buffer to read all the escaped characters into, before finally
+    // producing a usable slice. What it means it that parsing "foo\bar"
+    // is whole lot slower than parsing "foobar", as the former suffers from
+    // having to be read from source to a buffer and then from a buffer to
+    // our target string. Nothing to be done about this, really.
     fn read_complex_string<'b>(&mut self, start: usize) -> Result<&'b str> {
-        // let mut buffer = Vec::new();
         self.buffer.clear();
         let mut ch = b'\\';
 
+        // TODO: Use fastwrite here as well
         self.buffer.extend_from_slice(self.source[start .. self.index - 1].as_bytes());
 
         loop {
@@ -469,16 +623,25 @@ impl<'a> Parser<'a> {
         // cannot occur in front of a codepoint > 127, this is safe.
         Ok(unsafe {
             str::from_utf8_unchecked(
-                // Construct the slice from parts to satisfy the borrow checker
+                // Because the buffer is stored on the parser, returning it
+                // as a slice here freaks out the borrow checker. The compiler
+                // can't know that the buffer isn't used till the result
+                // of this function is long used and irrelevant. To avoid
+                // issues here, we construct a new slice from raw parts, which
+                // then has lifetime bound to the outer function scope instead
+                // of the parser itself.
                 slice::from_raw_parts(self.buffer.as_ptr(), self.buffer.len())
             )
         })
     }
 
-    fn read_big_number(&mut self, num: u64) -> Result<f64> {
-        // Attempt to continue reading digits that would overflow
-        // u64 into freshly converted f64
-
+    // Big numbers! If the `expect_number!` reaches a point where the decimal
+    // mantissa could have overflown the size of u64, it will switch to this
+    // control path instead. This method will pick up where the macro started,
+    // but instead of continuing to read into the mantissa, it will increment
+    // the exponent. Note that no digits are actually read here, as we already
+    // exceeded the precision range of f64 anyway.
+    fn read_big_number(&mut self, mut num: u64) -> Result<f64> {
         let mut e = 0i32;
         loop {
             if self.is_eof() {
@@ -489,79 +652,70 @@ impl<'a> Parser<'a> {
                     self.bump();
                     e += 1;
                 },
+                b'.' => {
+                    self.bump();
+                    return Ok(expect_fracton!(self, num, e));
+                },
+                b'e' | b'E' => {
+                    self.bump();
+                    return self.expect_exponent(num, e);
+                }
                 _  => break
             }
-        }
-
-        self.read_number_with_fraction(num, e)
-    }
-
-    fn read_number_with_fraction(&mut self, mut num: u64, mut e: i32) -> Result<f64> {
-        if self.is_eof() {
-            return Ok(make_float(num, e));
-        }
-
-        let mut ch = self.read_byte();
-
-        if ch == b'.' {
-            self.bump();
-
-            loop {
-                if self.is_eof() {
-                    return Ok(make_float(num, e));
-                }
-                ch = self.read_byte();
-
-                match ch {
-                    b'0' ... b'9' => {
-                        self.bump();
-                        if num < MAX_PRECISION {
-                            num = (num << 3) + (num << 1) + (ch - b'0') as u64;
-                            e -= 1;
-                        }
-                    },
-                    _ => break
-                }
-            }
-        }
-
-        if ch == b'e' || ch == b'E' {
-            self.bump();
-            ch = expect_byte!(self);
-            let sign = match ch {
-                b'-' => {
-                    ch = expect_byte!(self);
-                    -1
-                },
-                b'+' => {
-                    ch = expect_byte!(self);
-                    1
-                },
-                _    => 1
-            };
-
-            let num = make_float(num, e);
-
-            let mut e = match ch {
-                b'0' ... b'9' => (ch - b'0') as i32,
-                _ => return self.unexpected_character(ch),
-            };
-
-            read_num!(self, digit, e = (e << 3) + (e << 1) + digit as i32);
-
-            return Ok(num * exponent_to_power(e * sign));
         }
 
         Ok(make_float(num, e))
     }
 
-    fn read_object(&mut self) -> Result<Object> {
-        let mut object = Object::with_capacity(3);
+    // Called in the rare case that a number with `e` notation has been
+    // encountered. This is pretty straight forward, I guess.
+    fn expect_exponent(&mut self, num: u64, e: i32) -> Result<f64> {
+        let mut ch = expect_byte!(self);
+        let sign = match ch {
+            b'-' => {
+                ch = expect_byte!(self);
+                -1
+            },
+            b'+' => {
+                ch = expect_byte!(self);
+                1
+            },
+            _    => 1
+        };
 
+        let num = make_float(num, e);
+
+        let mut e = match ch {
+            b'0' ... b'9' => (ch - b'0') as i32,
+            _ => return self.unexpected_character(ch),
+        };
+
+        loop {
+            if self.is_eof() {
+                break;
+            }
+            let ch = self.read_byte();
+            match ch {
+                b'0' ... b'9' => {
+                    self.bump();
+                    e = (e << 3) + (e << 1) + (ch - b'0') as i32;
+                },
+                _  => break
+            }
+        }
+
+        Ok(num * exponent_to_power(e * sign))
+    }
+
+    // Given how compilcated reading numbers and strings is, reading objects
+    // is actually pretty simple.
+    fn read_object(&mut self) -> Result<Object> {
         let key = expect!{ self,
-            b'}'  => return Ok(object),
+            b'}'  => return Ok(Object::new()),
             b'\"' => expect_string!(self)
         };
+
+        let mut object = Object::with_capacity(3);
 
         expect!(self, b':');
 
@@ -584,26 +738,57 @@ impl<'a> Parser<'a> {
         Ok(object)
     }
 
+    // And reading arrays is simpler still!
     fn read_array(&mut self) -> Result<Vec<JsonValue>> {
         let first = expect_value!{ self, b']' => return Ok(Vec::new()) };
 
         let mut array = Vec::with_capacity(2);
-        array.push(first);
+
+        unsafe {
+            // First member can be written to the array without any checks!
+            ptr::copy_nonoverlapping(
+                &first as *const JsonValue,
+                array.as_mut_ptr(),
+                1
+            );
+            mem::forget(first);
+            array.set_len(1);
+        }
+
+        expect!{
+            self,
+            b']' => return Ok(array),
+            b',' => {
+                // Same for the second one!
+                let value = expect_value!(self);
+                unsafe {
+                    ptr::copy_nonoverlapping(
+                        &value as *const JsonValue,
+                        array.as_mut_ptr().offset(1),
+                        1
+                    );
+                    mem::forget(value);
+                    array.set_len(2);
+                }
+            }
+        }
 
         loop {
             expect!{ self,
                 b']' => break,
-                b',' => {
-                    let value = expect_value!(self);
-                    array.push(value);
-                }
+                b',' => array.push(expect_value!(self))
             };
         }
 
         Ok(array)
     }
 
-    fn ensure_end(&mut self) -> Result<()> {
+    // Parse away!
+    fn parse(&mut self) -> Result<JsonValue> {
+        let value = expect_value!(self);
+
+        // We have read whatever value was there, but we need to make sure
+        // there is nothing left to read - if there is, that's an error.
         while !self.is_eof() {
             match self.read_byte() {
                 9 ... 13 | 32 => self.bump(),
@@ -614,20 +799,12 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Ok(())
-    }
-
-    fn value(&mut self) -> Result<JsonValue> {
-        Ok(expect_value!(self))
+        Ok(value)
     }
 }
 
+// All that hard work, and in the end it's just a single function in the API.
+#[inline]
 pub fn parse(source: &str) -> Result<JsonValue> {
-    let mut parser = Parser::new(source);
-
-    let value = try!(parser.value());
-
-    try!(parser.ensure_end());
-
-    Ok(value)
+    Parser::new(source).parse()
 }

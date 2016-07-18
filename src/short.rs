@@ -20,10 +20,9 @@ impl Short {
     /// Typically you should avoid creating your own `Short`s, instead create a
     /// `JsonValue` (either using `"foo".into()` or `JsonValue::from("foo")`) out
     /// of a slice. This will automatically decide on `String` or `Short` for you.
-    #[inline]
+    #[inline(always)]
     pub unsafe fn from_slice(slice: &str) -> Self {
         let mut short = Short {
-            // initializing memory with 0s makes things faster in the long run
             value: [0; MAX_LEN],
             len: slice.len() as u8,
         };
@@ -45,6 +44,7 @@ impl Short {
 }
 
 impl PartialEq for Short {
+    #[inline]
     fn eq(&self, other: &Short) -> bool {
         self.as_str() == other.as_str()
     }
@@ -69,6 +69,7 @@ impl fmt::Display for Short {
 impl Deref for Short {
     type Target = str;
 
+    #[inline(always)]
     fn deref(&self) -> &str {
         self.as_str()
     }

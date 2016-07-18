@@ -7,6 +7,8 @@ use iterators::{ Members, MembersMut, Entries, EntriesMut };
 use short::Short;
 use object::Object;
 
+// These are convenience macros for converting `f64` to the `$unsigned` type.
+// The macros check that the numbers are representable the target type.
 macro_rules! f64_to_unsinged {
     ($unsigned:ident, $value:expr) => {
         if $value < 0.0 || $value > $unsigned::MAX as f64 {
