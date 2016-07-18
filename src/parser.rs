@@ -629,7 +629,7 @@ impl<'a> Parser<'a> {
 
     // Called in the rare case that a number with `e` notation has been
     // encountered. This is pretty straight forward, I guess.
-    fn expect_exponent(&mut self, num: u64, mut e: i32) -> Result<Number> {
+    fn expect_exponent(&mut self, num: u64, big_e: i32) -> Result<Number> {
         let mut ch = expect_byte!(self);
         let sign = match ch {
             b'-' => {
@@ -643,8 +643,8 @@ impl<'a> Parser<'a> {
             _    => 1
         };
 
-        e = match ch {
-            b'0' ... b'9' => e * 10 * sign + (ch - b'0') as i32,
+        let mut e = match ch {
+            b'0' ... b'9' => (ch - b'0') as i32,
             _ => return self.unexpected_character(ch),
         };
 
@@ -662,7 +662,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Ok(Number::from_parts(true, num, e as i16))
+        Ok(Number::from_parts(true, num, (big_e + (e * sign)) as i16))
     }
 
     // Given how compilcated reading numbers and strings is, reading objects
