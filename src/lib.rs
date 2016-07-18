@@ -197,6 +197,7 @@
 //! ```
 
 use std::io::Write;
+use std::num::FpCategory;
 use std::collections::{ BTreeMap, HashMap };
 use std::{ fmt, result, mem };
 
@@ -204,11 +205,14 @@ mod codegen;
 mod parser;
 mod value;
 mod error;
+mod util;
 
 pub mod short;
 pub mod object;
+pub mod number;
 
 use short::Short;
+use number::Number;
 use object::Object;
 
 pub use error::Error;
@@ -379,50 +383,8 @@ macro_rules! implement_extras {
     }
 }
 
-macro_rules! implement {
-    ($to:ident, $from:ty as $wanted:ty) => {
-        impl From<$from> for JsonValue {
-            fn from(val: $from) -> JsonValue {
-                JsonValue::$to(val as $wanted)
-            }
-        }
-
-        impl PartialEq<$from> for JsonValue {
-            fn eq(&self, other: &$from) -> bool {
-                match *self {
-                    JsonValue::$to(ref value) => value == &(*other as $wanted),
-                    _ => false
-                }
-            }
-        }
-
-        impl<'a> PartialEq<$from> for &'a JsonValue {
-            fn eq(&self, other: &$from) -> bool {
-                match **self {
-                    JsonValue::$to(ref value) => value == &(*other as $wanted),
-                    _ => false
-                }
-            }
-        }
-
-        impl PartialEq<JsonValue> for $from {
-            fn eq(&self, other: &JsonValue) -> bool {
-                match *other {
-                    JsonValue::$to(ref value) => value == &(*self as $wanted),
-                    _ => false
-                }
-            }
-        }
-
-        implement_extras!($from);
-    };
+macro_rules! implement_eq {
     ($to:ident, $from:ty) => {
-        impl From<$from> for JsonValue {
-            fn from(val: $from) -> JsonValue {
-                JsonValue::$to(val)
-            }
-        }
-
         impl PartialEq<$from> for JsonValue {
             fn eq(&self, other: &$from) -> bool {
                 match *self {
@@ -449,7 +411,43 @@ macro_rules! implement {
                 }
             }
         }
+    }
+}
 
+macro_rules! implement {
+    ($to:ident, $from:ty as float) => {
+        impl From<$from> for JsonValue {
+            fn from(val: $from) -> JsonValue {
+                match val.classify() {
+                    FpCategory::Infinite |
+                    FpCategory::Nan      => JsonValue::Null,
+
+                    _                    => JsonValue::Number(val.into())
+                }
+            }
+        }
+
+        implement_eq!($to, $from);
+        implement_extras!($from);
+    };
+    ($to:ident, $from:ty as num) => {
+        impl From<$from> for JsonValue {
+            fn from(val: $from) -> JsonValue {
+                JsonValue::$to(val.into())
+            }
+        }
+
+        implement_eq!($to, $from);
+        implement_extras!($from);
+    };
+    ($to:ident, $from:ty) => {
+        impl From<$from> for JsonValue {
+            fn from(val: $from) -> JsonValue {
+                JsonValue::$to(val)
+            }
+        }
+
+        implement_eq!($to, $from);
         implement_extras!($from);
     }
 }
@@ -569,18 +567,19 @@ impl<'a> PartialEq<JsonValue> for str {
 }
 
 implement!(String, String);
-implement!(Number, isize as f64);
-implement!(Number, usize as f64);
-implement!(Number, i8 as f64);
-implement!(Number, i16 as f64);
-implement!(Number, i32 as f64);
-implement!(Number, i64 as f64);
-implement!(Number, u8 as f64);
-implement!(Number, u16 as f64);
-implement!(Number, u32 as f64);
-implement!(Number, u64 as f64);
-implement!(Number, f32 as f64);
-implement!(Number, f64);
+implement!(Number, isize as num);
+implement!(Number, usize as num);
+implement!(Number, i8 as num);
+implement!(Number, i16 as num);
+implement!(Number, i32 as num);
+implement!(Number, i64 as num);
+implement!(Number, u8 as num);
+implement!(Number, u16 as num);
+implement!(Number, u32 as num);
+implement!(Number, u64 as num);
+implement!(Number, f32 as float);
+implement!(Number, f64 as float);
+implement!(Number, Number);
 implement!(Object, Object);
 implement!(Array, Array);
 implement!(Boolean, bool);

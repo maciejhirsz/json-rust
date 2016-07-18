@@ -7,6 +7,7 @@ mod unit {
     use std::f64;
     use std::collections::BTreeMap;
     use std::collections::HashMap;
+    use json::number::Number;
     use json::{ stringify, stringify_pretty, parse, JsonValue, JsonError, Null };
 
     #[test]
@@ -136,33 +137,33 @@ mod unit {
 
     #[test]
     fn stringify_precise_positive_number() {
-        assert_eq!(JsonValue::Number(1.2345f64).dump(), "1.2345");
+        assert_eq!(JsonValue::from(1.2345f64).dump(), "1.2345");
     }
 
     #[test]
     fn stringify_precise_negative_number() {
-        assert_eq!(JsonValue::Number(-1.2345f64).dump(), "-1.2345");
+        assert_eq!(JsonValue::from(-1.2345f64).dump(), "-1.2345");
     }
 
     #[test]
     fn stringify_zero() {
-        assert_eq!(JsonValue::Number(0.0).dump(), "0");
+        assert_eq!(JsonValue::from(0.0).dump(), "0");
     }
 
     #[test]
     fn stringify_nan() {
-        assert_eq!(JsonValue::Number(f64::NAN).dump(), "null");
+        assert_eq!(JsonValue::from(f64::NAN).dump(), "null");
     }
 
     #[test]
     fn stringify_infinity() {
-        assert_eq!(JsonValue::Number(f64::INFINITY).dump(), "null");
-        assert_eq!(JsonValue::Number(f64::NEG_INFINITY).dump(), "null");
+        assert_eq!(JsonValue::from(f64::INFINITY).dump(), "null");
+        assert_eq!(JsonValue::from(f64::NEG_INFINITY).dump(), "null");
     }
 
     #[test]
     fn stringify_negative_zero() {
-        assert_eq!(JsonValue::Number(-0f64).dump(), "-0");
+        assert_eq!(JsonValue::from(-0f64).dump(), "-0");
     }
 
     #[test]
@@ -368,7 +369,7 @@ mod unit {
 
     #[test]
     fn parse_negative_zero() {
-        assert_eq!(parse("-0").unwrap(), JsonValue::Number(-0f64));
+        assert_eq!(parse("-0").unwrap(), JsonValue::from(-0f64));
     }
 
     #[test]
@@ -523,7 +524,7 @@ mod unit {
     fn parse_and_index_from_array() {
         let data = parse(r#"[100, 200, false, null, "foo"]"#).unwrap();
 
-        assert_eq!(data[0], 100);
+        assert_eq!(data[0], Number::from(100));
         assert_eq!(data[1], 200);
         assert_eq!(data[2], false);
         assert_eq!(data[3], Null);
