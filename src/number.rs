@@ -16,8 +16,8 @@ const NAN_MASK: u8 = !1;
 #[derive(Copy, Clone, Debug)]
 pub struct Number {
     category: u8,
-    mantissa: u64,
     exponent: i16,
+    mantissa: u64,
 }
 
 impl Number {
@@ -25,8 +25,8 @@ impl Number {
     pub fn from_parts(positive: bool, mantissa: u64, exponent: i16) -> Self {
         Number {
             category: positive as u8,
-            mantissa: mantissa,
             exponent: exponent,
+            mantissa: mantissa,
         }
     }
 
@@ -249,8 +249,8 @@ macro_rules! impl_unsigned {
             fn from(num: $t) -> Number {
                 Number {
                     category: POSITIVE,
-                    mantissa: num as u64,
                     exponent: 0,
+                    mantissa: num as u64,
                 }
             }
         }
@@ -267,14 +267,14 @@ macro_rules! impl_signed {
                 if num < 0 {
                     Number {
                         category: NEGATIVE,
-                        mantissa: -num as u64,
                         exponent: 0,
+                        mantissa: -num as u64,
                     }
                 } else {
                     Number {
                         category: POSITIVE,
-                        mantissa: num as u64,
                         exponent: 0,
+                        mantissa: num as u64,
                     }
                 }
             }
@@ -332,8 +332,8 @@ impl ops::Neg for Number {
     fn neg(self) -> Number {
         Number {
             category: self.category ^ POSITIVE,
-            mantissa: self.mantissa,
             exponent: self.exponent,
+            mantissa: self.mantissa,
         }
     }
 }
@@ -354,8 +354,8 @@ impl ops::Mul for Number {
                 // Xor all the things!                              ^ _ ^
 
                 category: self.category ^ other.category ^ POSITIVE,
-                mantissa: self.mantissa * other.mantissa,
                 exponent: self.exponent + other.exponent,
+                mantissa: self.mantissa * other.mantissa,
             }
         }
     }

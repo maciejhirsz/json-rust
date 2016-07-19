@@ -2,7 +2,7 @@ use std::{ ptr, mem, str, slice, fmt };
 
 use value::JsonValue;
 
-const KEY_BUF_LEN: usize = 30;
+const KEY_BUF_LEN: usize = 32;
 
 struct Node {
     // Internal buffer to store keys that fit within `KEY_BUF_LEN`,
