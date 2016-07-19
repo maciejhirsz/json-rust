@@ -197,7 +197,6 @@
 //! ```
 
 use std::io::Write;
-use std::num::FpCategory;
 use std::collections::{ BTreeMap, HashMap };
 use std::{ fmt, result, mem };
 
@@ -415,21 +414,6 @@ macro_rules! implement_eq {
 }
 
 macro_rules! implement {
-    ($to:ident, $from:ty as float) => {
-        impl From<$from> for JsonValue {
-            fn from(val: $from) -> JsonValue {
-                match val.classify() {
-                    FpCategory::Infinite |
-                    FpCategory::Nan      => JsonValue::Null,
-
-                    _                    => JsonValue::Number(val.into())
-                }
-            }
-        }
-
-        implement_eq!($to, $from);
-        implement_extras!($from);
-    };
     ($to:ident, $from:ty as num) => {
         impl From<$from> for JsonValue {
             fn from(val: $from) -> JsonValue {
@@ -577,8 +561,8 @@ implement!(Number, u8 as num);
 implement!(Number, u16 as num);
 implement!(Number, u32 as num);
 implement!(Number, u64 as num);
-implement!(Number, f32 as float);
-implement!(Number, f64 as float);
+implement!(Number, f32 as num);
+implement!(Number, f64 as num);
 implement!(Number, Number);
 implement!(Object, Object);
 implement!(Array, Array);

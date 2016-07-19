@@ -1,10 +1,21 @@
-use std::{ ops, fmt };
+use std::{ ops, fmt, f32, f64 };
+use std::num::FpCategory;
 use util::grisu2;
 use util::write::write;
 
+pub const NAN: Number = Number {
+    category: NAN_MASK,
+    mantissa: 0,
+    exponent: 0
+};
+
+const NEGATIVE: u8 = 0;
+const POSITIVE: u8 = 1;
+const NAN_MASK: u8 = !1;
+
 #[derive(Copy, Clone, Debug)]
 pub struct Number {
-    positive: bool,
+    category: u8,
     mantissa: u64,
     exponent: i16,
 }
@@ -13,7 +24,7 @@ impl Number {
     #[inline]
     pub fn from_parts(positive: bool, mantissa: u64, exponent: i16) -> Self {
         Number {
-            positive: positive,
+            category: positive as u8,
             mantissa: mantissa,
             exponent: exponent,
         }
@@ -21,28 +32,34 @@ impl Number {
 
     #[inline]
     pub fn as_parts(&self) -> (bool, u64, i16) {
-        (self.positive, self.mantissa, self.exponent)
+        (self.category == POSITIVE, self.mantissa, self.exponent)
     }
 
     #[inline]
     pub fn is_sign_positive(&self) -> bool {
-        self.positive
+        self.category == POSITIVE
     }
 
     #[inline]
     pub fn is_zero(&self) -> bool {
         self.mantissa == 0
     }
+
+    #[inline]
+    pub fn is_nan(&self) -> bool {
+        self.category & NAN_MASK != 0
+    }
 }
 
 impl PartialEq for Number {
     #[inline]
     fn eq(&self, other: &Number) -> bool {
-        if self.is_zero() && other.is_zero() {
+        if self.is_zero() && other.is_zero()
+        || self.is_nan()  && other.is_nan() {
             return true;
         }
 
-        if self.positive != other.positive {
+        if self.category != other.category {
             return false;
         }
 
@@ -65,12 +82,15 @@ impl PartialEq for Number {
 
 impl fmt::Display for Number {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut buf = Vec::new();
         unsafe {
+            if self.is_nan() {
+                return f.write_str("nan")
+            }
             let (positive, mantissa, exponent) = self.as_parts();
+            let mut buf = Vec::new();
             write(&mut buf, positive, mantissa, exponent).unwrap();
+            f.write_str(&String::from_utf8_unchecked(buf))
         }
-        f.write_str(&unsafe { String::from_utf8_unchecked(buf) })
     }
 }
 
@@ -128,6 +148,8 @@ fn exponent_to_power_f32(e: i16) -> f32 {
 
 impl From<Number> for f64 {
     fn from(num: Number) -> f64 {
+        if num.is_nan() { return f64::NAN; }
+
         let mut n = num.mantissa as f64;
         let mut e = num.exponent;
 
@@ -137,12 +159,14 @@ impl From<Number> for f64 {
         }
 
         let f = n * exponent_to_power_f64(e);
-        if num.positive { f } else { -f }
+        if num.is_sign_positive() { f } else { -f }
     }
 }
 
 impl From<Number> for f32 {
     fn from(num: Number) -> f32 {
+        if num.is_nan() { return f32::NAN; }
+
         let mut n = num.mantissa as f32;
         let mut e = num.exponent;
 
@@ -152,12 +176,17 @@ impl From<Number> for f32 {
         }
 
         let f = n * exponent_to_power_f32(e);
-        if num.positive { f } else { -f }
+        if num.is_sign_positive() { f } else { -f }
     }
 }
 
 impl From<f64> for Number {
     fn from(float: f64) -> Number {
+        match float.classify() {
+            FpCategory::Infinite | FpCategory::Nan => return NAN,
+            _ => {}
+        }
+
         if !float.is_sign_positive() {
             let (mantissa, exponent) = grisu2::convert(-float);
 
@@ -172,6 +201,11 @@ impl From<f64> for Number {
 
 impl From<f32> for Number {
     fn from(float: f32) -> Number {
+        match float.classify() {
+            FpCategory::Infinite | FpCategory::Nan => return NAN,
+            _ => {}
+        }
+
         if !float.is_sign_positive() {
             let (mantissa, exponent) = grisu2::convert(-float as f64);
 
@@ -211,9 +245,10 @@ impl PartialEq<Number> for f32 {
 macro_rules! impl_unsigned {
     ($( $t:ty ),*) => ($(
         impl From<$t> for Number {
+            #[inline]
             fn from(num: $t) -> Number {
                 Number {
-                    positive: true,
+                    category: POSITIVE,
                     mantissa: num as u64,
                     exponent: 0,
                 }
@@ -231,13 +266,13 @@ macro_rules! impl_signed {
             fn from(num: $t) -> Number {
                 if num < 0 {
                     Number {
-                        positive: false,
+                        category: NEGATIVE,
                         mantissa: -num as u64,
                         exponent: 0,
                     }
                 } else {
                     Number {
-                        positive: true,
+                        category: POSITIVE,
                         mantissa: num as u64,
                         exponent: 0,
                     }
@@ -296,7 +331,7 @@ impl ops::Neg for Number {
     #[inline]
     fn neg(self) -> Number {
         Number {
-            positive: !self.positive,
+            category: self.category ^ POSITIVE,
             mantissa: self.mantissa,
             exponent: self.exponent,
         }
@@ -308,10 +343,20 @@ impl ops::Mul for Number {
 
     #[inline]
     fn mul(self, other: Number) -> Number {
-        Number {
-            positive: self.positive && other.positive,
-            mantissa: self.mantissa * other.mantissa,
-            exponent: self.exponent + other.exponent,
+        // If either is a NaN, return a NaN
+        if (self.category | other.category) & NAN_MASK != 0 {
+            NAN
+        } else {
+            Number {
+                // If both signs are the same, xoring will produce 0.
+                // If they are different, xoring will produce 1.
+                // Xor again with 1 to get a proper proper sign!
+                // Xor all the things!                              ^ _ ^
+
+                category: self.category ^ other.category ^ POSITIVE,
+                mantissa: self.mantissa * other.mantissa,
+                exponent: self.exponent + other.exponent,
+            }
         }
     }
 }
