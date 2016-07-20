@@ -49,6 +49,11 @@ impl Number {
     pub fn is_nan(&self) -> bool {
         self.category & NAN_MASK != 0
     }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.is_zero() || self.is_nan()
+    }
 }
 
 impl PartialEq for Number {

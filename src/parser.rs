@@ -260,7 +260,7 @@ macro_rules! allow_number_extensions {
         match $ch {
             b'.'        => {
                 $parser.bump();
-                expect_fracton!($parser, $num, $e)
+                expect_fraction!($parser, $num, $e)
             },
             b'e' | b'E' => {
                 $parser.bump();
@@ -284,7 +284,7 @@ macro_rules! allow_number_extensions {
 
 // If a dot `b"."` byte has been read, start reading the decimal fraction
 // of the number.
-macro_rules! expect_fracton {
+macro_rules! expect_fraction {
     ($parser:ident, $num:ident, $e:ident) => ({
         let result: Number;
 
@@ -632,7 +632,7 @@ impl<'a> Parser<'a> {
                 },
                 b'.' => {
                     self.bump();
-                    return Ok(expect_fracton!(self, num, e));
+                    return Ok(expect_fraction!(self, num, e));
                 },
                 b'e' | b'E' => {
                     self.bump();

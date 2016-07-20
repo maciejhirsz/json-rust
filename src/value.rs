@@ -112,7 +112,7 @@ impl JsonValue {
             JsonValue::Null               => true,
             JsonValue::Short(ref value)   => value.is_empty(),
             JsonValue::String(ref value)  => value.is_empty(),
-            JsonValue::Number(ref value)  => value.is_zero(),
+            JsonValue::Number(ref value)  => value.is_empty(),
             JsonValue::Boolean(ref value) => !value,
             JsonValue::Array(ref value)   => value.is_empty(),
             JsonValue::Object(ref value)  => value.is_empty(),
