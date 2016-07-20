@@ -2,7 +2,7 @@
 
 # json-rust
 
-![](https://img.shields.io/travis/maciejhirsz/json-rust.svg)
+![](https://travis-ci.org/maciejhirsz/json-rust.svg)
 ![](https://img.shields.io/crates/v/json.svg)
 ![](https://img.shields.io/crates/l/json.svg)
 
