@@ -59,6 +59,29 @@ mod unit {
     }
 
     #[test]
+    fn as_fixed_point() {
+        let number = JsonValue::from(3.14);
+
+        assert_eq!(number.as_fixed_point_u64(4).unwrap(), 31400_u64);
+        assert_eq!(number.as_fixed_point_u64(2).unwrap(), 314_u64);
+        assert_eq!(number.as_fixed_point_u64(0).unwrap(), 3_u64);
+
+        assert_eq!(number.as_fixed_point_i64(4).unwrap(), 31400_i64);
+        assert_eq!(number.as_fixed_point_i64(2).unwrap(), 314_i64);
+        assert_eq!(number.as_fixed_point_i64(0).unwrap(), 3_i64);
+
+        let number = JsonValue::from(-3.14);
+
+        assert_eq!(number.as_fixed_point_u64(4), None);
+        assert_eq!(number.as_fixed_point_u64(2), None);
+        assert_eq!(number.as_fixed_point_u64(0), None);
+
+        assert_eq!(number.as_fixed_point_i64(4).unwrap(), -31400_i64);
+        assert_eq!(number.as_fixed_point_i64(2).unwrap(), -314_i64);
+        assert_eq!(number.as_fixed_point_i64(0).unwrap(), -3_i64);
+    }
+
+    #[test]
     fn is_as_boolean() {
         let boolean = JsonValue::Boolean(true);
 
@@ -1261,6 +1284,30 @@ mod json_checker_pass {
 
 mod number {
     use super::json::number::Number;
+    use std::f64;
+
+    #[test]
+    fn is_nan() {
+        assert!(Number::from(f64::NAN).is_nan());
+    }
+
+    #[test]
+    fn is_zero() {
+        assert!(Number::from(0).is_zero());
+        assert!(Number::from_parts(true, 0, 0).is_zero());
+        assert!(Number::from_parts(true, 0, 100).is_zero());
+        assert!(Number::from_parts(true, 0, -100).is_zero());
+        assert!(Number::from_parts(false, 0, 0).is_zero());
+        assert!(Number::from_parts(false, 0, 100).is_zero());
+        assert!(Number::from_parts(false, 0, -100).is_zero());
+        assert!(!Number::from(f64::NAN).is_zero());
+    }
+
+    #[test]
+    fn is_empty() {
+        assert!(Number::from(0).is_empty());
+        assert!(Number::from(f64::NAN).is_empty());
+    }
 
     #[test]
     fn eq() {
@@ -1327,5 +1374,33 @@ mod number {
         let number = Number::from_parts(true, 2225073858507201136, -326);
 
         assert_eq!(f64::from(number), 2.225073858507201e-308);
+    }
+
+    #[test]
+    fn as_fixed_point_u64() {
+        assert_eq!(Number::from(1.2345).as_fixed_point_u64(4).unwrap(), 12345);
+        assert_eq!(Number::from(1.2345).as_fixed_point_u64(2).unwrap(), 123);
+        assert_eq!(Number::from(1.2345).as_fixed_point_u64(0).unwrap(), 1);
+
+        assert_eq!(Number::from(5).as_fixed_point_u64(0).unwrap(), 5);
+        assert_eq!(Number::from(5).as_fixed_point_u64(2).unwrap(), 500);
+        assert_eq!(Number::from(5).as_fixed_point_u64(4).unwrap(), 50000);
+
+        assert_eq!(Number::from(-1).as_fixed_point_u64(0), None);
+        assert_eq!(Number::from(f64::NAN).as_fixed_point_u64(0), None);
+    }
+
+    #[test]
+    fn as_fixed_point_i64() {
+        assert_eq!(Number::from(-1.2345).as_fixed_point_i64(4).unwrap(), -12345);
+        assert_eq!(Number::from(-1.2345).as_fixed_point_i64(2).unwrap(), -123);
+        assert_eq!(Number::from(-1.2345).as_fixed_point_i64(0).unwrap(), -1);
+
+        assert_eq!(Number::from(-5).as_fixed_point_i64(0).unwrap(), -5);
+        assert_eq!(Number::from(-5).as_fixed_point_i64(2).unwrap(), -500);
+        assert_eq!(Number::from(-5).as_fixed_point_i64(4).unwrap(), -50000);
+
+        assert_eq!(Number::from(-1).as_fixed_point_i64(0), Some(-1));
+        assert_eq!(Number::from(f64::NAN).as_fixed_point_i64(0), None);
     }
 }

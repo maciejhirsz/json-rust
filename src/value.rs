@@ -195,6 +195,20 @@ impl JsonValue {
         }
     }
 
+    pub fn as_fixed_point_u64(&self, point: u16) -> Option<u64> {
+        match *self {
+            JsonValue::Number(ref value) => value.as_fixed_point_u64(point),
+            _                            => None
+        }
+    }
+
+    pub fn as_fixed_point_i64(&self, point: u16) -> Option<i64> {
+        match *self {
+            JsonValue::Number(ref value) => value.as_fixed_point_i64(point),
+            _                            => None
+        }
+    }
+
     /// Take over the ownership of the value, leaving `Null` in it's place.
     ///
     /// ## Example

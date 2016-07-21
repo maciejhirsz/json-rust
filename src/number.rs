@@ -42,7 +42,7 @@ impl Number {
 
     #[inline]
     pub fn is_zero(&self) -> bool {
-        self.mantissa == 0
+        self.mantissa == 0 && !self.is_nan()
     }
 
     #[inline]
@@ -52,7 +52,47 @@ impl Number {
 
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.is_zero() || self.is_nan()
+        self.mantissa == 0 || self.is_nan()
+    }
+
+    pub fn as_fixed_point_u64(&self, point: u16) -> Option<u64> {
+        if self.category != POSITIVE {
+            return None;
+        }
+
+        let e_diff = point as i16 + self.exponent;
+
+        Some(if e_diff == 0 {
+            self.mantissa
+        } else if e_diff < 0 {
+            // TODO: use cached powers
+            self.mantissa.wrapping_div(10u64.pow(-e_diff as u32))
+        } else {
+            // TODO: use cached powers
+            self.mantissa.wrapping_mul(10u64.pow(e_diff as u32))
+        })
+    }
+
+    pub fn as_fixed_point_i64(&self, point: u16) -> Option<i64> {
+        if self.is_nan() {
+            return None;
+        }
+
+        let num = if self.is_sign_positive() {
+            self.mantissa as i64
+        } else {
+            -(self.mantissa as i64)
+        };
+
+        let e_diff = point as i16 + self.exponent;
+
+        Some(if e_diff == 0 {
+            num
+        } else if e_diff < 0 {
+            num.wrapping_div(10i64.pow(-e_diff as u32))
+        } else {
+            num.wrapping_mul(10i64.pow(e_diff as u32))
+        })
     }
 }
 
