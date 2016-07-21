@@ -16,8 +16,8 @@ const NAN_MASK: u8 = !1;
 #[derive(Copy, Clone, Debug)]
 pub struct Number {
     category: u8,
-    mantissa: u64,
     exponent: i16,
+    mantissa: u64,
 }
 
 impl Number {
@@ -25,8 +25,8 @@ impl Number {
     pub fn from_parts(positive: bool, mantissa: u64, exponent: i16) -> Self {
         Number {
             category: positive as u8,
-            mantissa: mantissa,
             exponent: exponent,
+            mantissa: mantissa,
         }
     }
 
@@ -42,12 +42,55 @@ impl Number {
 
     #[inline]
     pub fn is_zero(&self) -> bool {
-        self.mantissa == 0
+        self.mantissa == 0 && !self.is_nan()
     }
 
     #[inline]
     pub fn is_nan(&self) -> bool {
         self.category & NAN_MASK != 0
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.mantissa == 0 || self.is_nan()
+    }
+
+    pub fn as_fixed_point_u64(&self, point: u16) -> Option<u64> {
+        if self.category != POSITIVE {
+            return None;
+        }
+
+        let e_diff = point as i16 + self.exponent;
+
+        Some(if e_diff == 0 {
+            self.mantissa
+        } else if e_diff < 0 {
+            self.mantissa.wrapping_div(decimal_power(-e_diff as u16))
+        } else {
+            self.mantissa.wrapping_mul(decimal_power(e_diff as u16))
+        })
+    }
+
+    pub fn as_fixed_point_i64(&self, point: u16) -> Option<i64> {
+        if self.is_nan() {
+            return None;
+        }
+
+        let num = if self.is_sign_positive() {
+            self.mantissa as i64
+        } else {
+            -(self.mantissa as i64)
+        };
+
+        let e_diff = point as i16 + self.exponent;
+
+        Some(if e_diff == 0 {
+            num
+        } else if e_diff < 0 {
+            num.wrapping_div(decimal_power(-e_diff as u16) as i64)
+        } else {
+            num.wrapping_mul(decimal_power(e_diff as u16) as i64)
+        })
     }
 }
 
@@ -68,13 +111,13 @@ impl PartialEq for Number {
         if e_diff == 0 {
             return self.mantissa == other.mantissa;
         } else if e_diff > 0 {
-            // TODO: use cached powers
-            self.mantissa
-                .wrapping_mul(10u64.pow(e_diff as u32)) == other.mantissa
+            let power = decimal_power(e_diff as u16);
+
+            self.mantissa.wrapping_mul(power) == other.mantissa
         } else {
-            // TODO: use cached powers
-            self.mantissa == other.mantissa
-                                  .wrapping_mul(10u64.pow(-e_diff as u32))
+            let power = decimal_power(-e_diff as u16);
+
+            self.mantissa == other.mantissa.wrapping_mul(power)
         }
 
     }
@@ -249,8 +292,8 @@ macro_rules! impl_unsigned {
             fn from(num: $t) -> Number {
                 Number {
                     category: POSITIVE,
-                    mantissa: num as u64,
                     exponent: 0,
+                    mantissa: num as u64,
                 }
             }
         }
@@ -267,14 +310,14 @@ macro_rules! impl_signed {
                 if num < 0 {
                     Number {
                         category: NEGATIVE,
-                        mantissa: -num as u64,
                         exponent: 0,
+                        mantissa: -num as u64,
                     }
                 } else {
                     Number {
                         category: POSITIVE,
-                        mantissa: num as u64,
                         exponent: 0,
+                        mantissa: num as u64,
                     }
                 }
             }
@@ -332,8 +375,8 @@ impl ops::Neg for Number {
     fn neg(self) -> Number {
         Number {
             category: self.category ^ POSITIVE,
-            mantissa: self.mantissa,
             exponent: self.exponent,
+            mantissa: self.mantissa,
         }
     }
 }
@@ -354,8 +397,8 @@ impl ops::Mul for Number {
                 // Xor all the things!                              ^ _ ^
 
                 category: self.category ^ other.category ^ POSITIVE,
-                mantissa: self.mantissa * other.mantissa,
                 exponent: self.exponent + other.exponent,
+                mantissa: self.mantissa * other.mantissa,
             }
         }
     }
@@ -365,5 +408,37 @@ impl ops::MulAssign for Number {
     #[inline]
     fn mul_assign(&mut self, other: Number) {
         *self = *self * other;
+    }
+}
+
+#[inline]
+fn decimal_power(e: u16) -> u64 {
+    static CACHED: [u64; 20] = [
+        1,
+        10,
+        100,
+        1000,
+        10000,
+        100000,
+        1000000,
+        10000000,
+        100000000,
+        1000000000,
+        10000000000,
+        100000000000,
+        1000000000000,
+        10000000000000,
+        100000000000000,
+        1000000000000000,
+        10000000000000000,
+        100000000000000000,
+        1000000000000000000,
+        10000000000000000000,
+    ];
+
+    if e < 20 {
+        CACHED[e as usize]
+    } else {
+        10u64.pow(e as u32)
     }
 }
