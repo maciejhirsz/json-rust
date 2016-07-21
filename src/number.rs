@@ -65,11 +65,9 @@ impl Number {
         Some(if e_diff == 0 {
             self.mantissa
         } else if e_diff < 0 {
-            // TODO: use cached powers
-            self.mantissa.wrapping_div(10u64.pow(-e_diff as u32))
+            self.mantissa.wrapping_div(decimal_power(-e_diff as u16))
         } else {
-            // TODO: use cached powers
-            self.mantissa.wrapping_mul(10u64.pow(e_diff as u32))
+            self.mantissa.wrapping_mul(decimal_power(e_diff as u16))
         })
     }
 
@@ -89,9 +87,9 @@ impl Number {
         Some(if e_diff == 0 {
             num
         } else if e_diff < 0 {
-            num.wrapping_div(10i64.pow(-e_diff as u32))
+            num.wrapping_div(decimal_power(-e_diff as u16) as i64)
         } else {
-            num.wrapping_mul(10i64.pow(e_diff as u32))
+            num.wrapping_mul(decimal_power(e_diff as u16) as i64)
         })
     }
 }
@@ -113,13 +111,13 @@ impl PartialEq for Number {
         if e_diff == 0 {
             return self.mantissa == other.mantissa;
         } else if e_diff > 0 {
-            // TODO: use cached powers
-            self.mantissa
-                .wrapping_mul(10u64.pow(e_diff as u32)) == other.mantissa
+            let power = decimal_power(e_diff as u16);
+
+            self.mantissa.wrapping_mul(power) == other.mantissa
         } else {
-            // TODO: use cached powers
-            self.mantissa == other.mantissa
-                                  .wrapping_mul(10u64.pow(-e_diff as u32))
+            let power = decimal_power(-e_diff as u16);
+
+            self.mantissa == other.mantissa.wrapping_mul(power)
         }
 
     }
@@ -410,5 +408,37 @@ impl ops::MulAssign for Number {
     #[inline]
     fn mul_assign(&mut self, other: Number) {
         *self = *self * other;
+    }
+}
+
+#[inline]
+fn decimal_power(e: u16) -> u64 {
+    static CACHED: [u64; 20] = [
+        1,
+        10,
+        100,
+        1000,
+        10000,
+        100000,
+        1000000,
+        10000000,
+        100000000,
+        1000000000,
+        10000000000,
+        100000000000,
+        1000000000000,
+        10000000000000,
+        100000000000000,
+        1000000000000000,
+        10000000000000000,
+        100000000000000000,
+        1000000000000000000,
+        10000000000000000000,
+    ];
+
+    if e < 20 {
+        CACHED[e as usize]
+    } else {
+        10u64.pow(e as u32)
     }
 }
