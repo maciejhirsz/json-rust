@@ -3,6 +3,7 @@ use std::num::FpCategory;
 use util::grisu2;
 use util::write::write;
 
+/// NaN value represented in `Number` type. NaN is equal to itself.
 pub const NAN: Number = Number {
     category: NAN_MASK,
     mantissa: 0,
@@ -13,14 +14,45 @@ const NEGATIVE: u8 = 0;
 const POSITIVE: u8 = 1;
 const NAN_MASK: u8 = !1;
 
+/// Number representation used inside `JsonValue`. You can easily convert
+/// the `Number` type into native Rust number types and back, or use the
+/// equality operator with another number type.
+///
+/// ```
+/// # use json::number::Number;
+/// let foo: Number = 3.14.into();
+/// let bar: f64 = foo.into();
+///
+/// assert_eq!(foo, 3.14);
+/// assert_eq!(bar, 3.14);
+/// ```
+///
+/// More often than not you will deal with `JsonValue::Number` variant that
+/// wraps around this type, instead of using the methods here directly.
 #[derive(Copy, Clone, Debug)]
 pub struct Number {
+    // A byte describing the sign and NaN-ness of the number.
+    // category == 0 -> negative sign
+    // category == 1 -> positive sign
+    // category >  1 -> NaN
     category: u8,
+
+    // Decimal exponent, analog to `e` notation in string form.
     exponent: i16,
+
+    // Integer base before sing and exponent applied.
     mantissa: u64,
 }
 
 impl Number {
+    /// Construct a new `Number` from parts. This can't create a NaN value.
+    ///
+    /// ```
+    /// # use json::number::Number;
+    /// let pi = Number::from_parts(true, 3141592653589793, -15);
+    ///
+    /// assert_eq!(pi, 3.141592653589793);
+    /// ```
     #[inline]
     pub fn from_parts(positive: bool, mantissa: u64, exponent: i16) -> Self {
         Number {
@@ -30,6 +62,17 @@ impl Number {
         }
     }
 
+    /// Reverse to `from_parts` - obtain parts from an existing `Number`.
+    ///
+    /// ```
+    /// # use json::number::Number;
+    /// let pi = Number::from(3.141592653589793);
+    /// let (positive, mantissa, exponent) = pi.as_parts();
+    ///
+    /// assert_eq!(positive, true);
+    /// assert_eq!(mantissa, 3141592653589793);
+    /// assert_eq!(exponent, -15);
+    /// ```
     #[inline]
     pub fn as_parts(&self) -> (bool, u64, i16) {
         (self.category == POSITIVE, self.mantissa, self.exponent)
@@ -50,11 +93,28 @@ impl Number {
         self.category & NAN_MASK != 0
     }
 
+    /// Test if the number is NaN or has a zero value.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.mantissa == 0 || self.is_nan()
     }
 
+    /// Obtain an integer at a fixed decimal point. This is useful for
+    /// converting monetary values and doing arithmetic on them without
+    /// rounding errors introduced by floating point operations.
+    ///
+    /// Will return `None` if `Number` is negative or a NaN.
+    ///
+    /// ```
+    /// # use json::number::Number;
+    /// let price_a = Number::from(5.99);
+    /// let price_b = Number::from(7);
+    /// let price_c = Number::from(10.2);
+    ///
+    /// assert_eq!(price_a.as_fixed_point_u64(2), Some(599));
+    /// assert_eq!(price_b.as_fixed_point_u64(2), Some(700));
+    /// assert_eq!(price_c.as_fixed_point_u64(2), Some(1020));
+    /// ```
     pub fn as_fixed_point_u64(&self, point: u16) -> Option<u64> {
         if self.category != POSITIVE {
             return None;
@@ -71,6 +131,17 @@ impl Number {
         })
     }
 
+    /// Analog to `as_fixed_point_u64`, except returning a signed
+    /// `i64`, properly handling negative numbers.
+    ///
+    /// ```
+    /// # use json::number::Number;
+    /// let balance_a = Number::from(-1.49);
+    /// let balance_b = Number::from(42);
+    ///
+    /// assert_eq!(balance_a.as_fixed_point_i64(2), Some(-149));
+    /// assert_eq!(balance_b.as_fixed_point_i64(2), Some(4200));
+    /// ```
     pub fn as_fixed_point_i64(&self, point: u16) -> Option<i64> {
         if self.is_nan() {
             return None;
@@ -381,35 +452,38 @@ impl ops::Neg for Number {
     }
 }
 
-impl ops::Mul for Number {
-    type Output = Number;
+// Commented out for now - not doing math ops for 0.10.0
+// -----------------------------------------------------
+//
+// impl ops::Mul for Number {
+//     type Output = Number;
 
-    #[inline]
-    fn mul(self, other: Number) -> Number {
-        // If either is a NaN, return a NaN
-        if (self.category | other.category) & NAN_MASK != 0 {
-            NAN
-        } else {
-            Number {
-                // If both signs are the same, xoring will produce 0.
-                // If they are different, xoring will produce 1.
-                // Xor again with 1 to get a proper proper sign!
-                // Xor all the things!                              ^ _ ^
+//     #[inline]
+//     fn mul(self, other: Number) -> Number {
+//         // If either is a NaN, return a NaN
+//         if (self.category | other.category) & NAN_MASK != 0 {
+//             NAN
+//         } else {
+//             Number {
+//                 // If both signs are the same, xoring will produce 0.
+//                 // If they are different, xoring will produce 1.
+//                 // Xor again with 1 to get a proper proper sign!
+//                 // Xor all the things!                              ^ _ ^
 
-                category: self.category ^ other.category ^ POSITIVE,
-                exponent: self.exponent + other.exponent,
-                mantissa: self.mantissa * other.mantissa,
-            }
-        }
-    }
-}
+//                 category: self.category ^ other.category ^ POSITIVE,
+//                 exponent: self.exponent + other.exponent,
+//                 mantissa: self.mantissa * other.mantissa,
+//             }
+//         }
+//     }
+// }
 
-impl ops::MulAssign for Number {
-    #[inline]
-    fn mul_assign(&mut self, other: Number) {
-        *self = *self * other;
-    }
-}
+// impl ops::MulAssign for Number {
+//     #[inline]
+//     fn mul_assign(&mut self, other: Number) {
+//         *self = *self * other;
+//     }
+// }
 
 #[inline]
 fn decimal_power(e: u16) -> u64 {

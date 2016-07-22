@@ -195,6 +195,23 @@ impl JsonValue {
         }
     }
 
+    /// Obtain an integer at a fixed decimal point. This is useful for
+    /// converting monetary values and doing arithmetic on them without
+    /// rounding errors introduced by floating point operations.
+    ///
+    /// Will return `None` if `Number` called on a value that's not a number,
+    /// or if the number is negative or a NaN.
+    ///
+    /// ```
+    /// # use json::JsonValue;
+    /// let price_a = JsonValue::from(5.99);
+    /// let price_b = JsonValue::from(7);
+    /// let price_c = JsonValue::from(10.2);
+    ///
+    /// assert_eq!(price_a.as_fixed_point_u64(2), Some(599));
+    /// assert_eq!(price_b.as_fixed_point_u64(2), Some(700));
+    /// assert_eq!(price_c.as_fixed_point_u64(2), Some(1020));
+    /// ```
     pub fn as_fixed_point_u64(&self, point: u16) -> Option<u64> {
         match *self {
             JsonValue::Number(ref value) => value.as_fixed_point_u64(point),
@@ -202,6 +219,17 @@ impl JsonValue {
         }
     }
 
+    /// Analog to `as_fixed_point_u64`, except returning a signed
+    /// `i64`, properly handling negative numbers.
+    ///
+    /// ```
+    /// # use json::JsonValue;
+    /// let balance_a = JsonValue::from(-1.49);
+    /// let balance_b = JsonValue::from(42);
+    ///
+    /// assert_eq!(balance_a.as_fixed_point_i64(2), Some(-149));
+    /// assert_eq!(balance_b.as_fixed_point_i64(2), Some(4200));
+    /// ```
     pub fn as_fixed_point_i64(&self, point: u16) -> Option<i64> {
         match *self {
             JsonValue::Number(ref value) => value.as_fixed_point_i64(point),
