@@ -15,7 +15,6 @@ pub enum Error {
     UnexpectedEndOfJson,
     FailedUtf8Parsing,
     WrongType(String),
-    UndefinedField(String),
 }
 
 impl Error {
@@ -38,7 +37,6 @@ impl fmt::Display for Error {
             UnexpectedEndOfJson   => write!(f, "Unexpected end of JSON"),
             FailedUtf8Parsing     => write!(f, "Failed to parse UTF-8 bytes"),
             WrongType(ref s)      => write!(f, "Wrong type, expected: {}", s),
-            UndefinedField(ref s) => write!(f, "Undefined field: {}", s)
         }
     }
 }
@@ -51,7 +49,6 @@ impl error::Error for Error {
             UnexpectedEndOfJson        => "Unexpected end of JSON",
             FailedUtf8Parsing          => "Failed to read bytes as UTF-8 from JSON",
             WrongType(_)               => "Wrong type",
-            UndefinedField(_)          => "Undefined field",
         }
     }
 }

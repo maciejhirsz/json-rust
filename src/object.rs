@@ -2,7 +2,7 @@ use std::{ ptr, mem, str, slice, fmt };
 
 use value::JsonValue;
 
-const KEY_BUF_LEN: usize = 30;
+const KEY_BUF_LEN: usize = 32;
 
 struct Node {
     // Internal buffer to store keys that fit within `KEY_BUF_LEN`,
@@ -130,9 +130,9 @@ impl Node {
     }
 
     // While `new` crates a fresh `Node` instance, it cannot do much about
-    // the `key_*` fields. In case of short keys that can be stored on the
-    // `Node`, only once the `Node` is somewhere on the heap, a persisting
-    // pointer to the key can be obtained.
+    // the `key_*` fields. In the case a short key can be stored on the `Node`
+    // itself, only once the `Node` is allocated on the heap can we obtain a
+    // persisting pointer to it.
     #[inline(always)]
     fn attach_key(&mut self, key: &[u8]) {
         if self.key_len <= KEY_BUF_LEN {
@@ -151,9 +151,9 @@ impl Node {
         }
     }
 
-    // Since `Node`s are stored on a `Vec<Node>`, they will suffer from
-    // reallocation, changing `key_ptr` addresses for buffered keys. This
-    // needs to be called on each `Node` after each reallocation.
+    // Since we store `Node`s on a vector, it will suffer from reallocation.
+    // Whenever that happens, `key_ptr` for short keys will turn into dangling
+    // pointers and will need to be re-cached.
     #[inline(always)]
     fn fix_key_ptr(&mut self) {
         if self.key_len <= KEY_BUF_LEN {

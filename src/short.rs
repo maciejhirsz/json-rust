@@ -5,8 +5,8 @@ pub const MAX_LEN: usize = 30;
 
 #[derive(Clone, Copy)]
 pub struct Short {
-    value: [u8; MAX_LEN],
     len: u8,
+    value: [u8; MAX_LEN],
 }
 
 /// A `Short` is a small string, up to `MAX_LEN` bytes, that can be managed without

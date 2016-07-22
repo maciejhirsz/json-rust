@@ -1,17 +1,22 @@
 use { Result, Error };
 
 use std::ops::{ Index, IndexMut, Deref };
-use std::{ mem, usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32 };
-use iterators::{ Members, MembersMut, Entries, EntriesMut };
+use std::{ fmt, mem, usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32 };
+use std::io::Write;
 
 use short::Short;
+use number::Number;
 use object::Object;
+use iterators::{ Members, MembersMut, Entries, EntriesMut };
+use codegen::{ Generator, PrettyGenerator, DumpGenerator, WriterGenerator };
+
+mod implements;
 
 // These are convenience macros for converting `f64` to the `$unsigned` type.
 // The macros check that the numbers are representable the target type.
-macro_rules! f64_to_unsinged {
-    ($unsigned:ident, $value:expr) => {
-        if $value < 0.0 || $value > $unsigned::MAX as f64 {
+macro_rules! number_to_unsigned {
+    ($unsigned:ident, $value:expr, $high:ty) => {
+        if $value > $unsigned::MAX as $high {
             None
         } else {
             Some($value as $unsigned)
@@ -19,9 +24,9 @@ macro_rules! f64_to_unsinged {
     }
 }
 
-macro_rules! f64_to_singed {
-    ($signed:ident, $value:expr) => {
-        if $value < $signed::MIN as f64 || $value > $signed::MAX as f64 {
+macro_rules! number_to_signed {
+    ($signed:ident, $value:expr, $high:ty) => {
+        if $value < $signed::MIN as $high || $value > $signed::MAX as $high {
             None
         } else {
             Some($value as $signed)
@@ -34,11 +39,38 @@ pub enum JsonValue {
     Null,
     Short(Short),
     String(String),
-    Number(f64),
+    Number(Number),
     Boolean(bool),
     Object(Object),
     Array(Vec<JsonValue>),
 }
+
+
+/// Implements formatting
+///
+/// ```
+/// # use json;
+/// let data = json::parse(r#"{"url":"https://github.com/"}"#).unwrap();
+/// println!("{}", data);
+/// println!("{:#}", data);
+/// ```
+impl fmt::Display for JsonValue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if f.alternate() {
+            f.write_str(&self.pretty(4))
+        } else {
+            match *self {
+                JsonValue::Short(ref value)   => value.fmt(f),
+                JsonValue::String(ref value)  => value.fmt(f),
+                JsonValue::Number(ref value)  => value.fmt(f),
+                JsonValue::Boolean(ref value) => value.fmt(f),
+                JsonValue::Null               => f.write_str("null"),
+                _                             => f.write_str(&self.dump())
+            }
+        }
+    }
+}
+
 
 static NULL: JsonValue = JsonValue::Null;
 
@@ -53,6 +85,27 @@ impl JsonValue {
     /// When creating array with data, consider using the `array!` macro.
     pub fn new_array() -> JsonValue {
         JsonValue::Array(Vec::new())
+    }
+
+    /// Prints out the value as JSON string.
+    pub fn dump(&self) -> String {
+        let mut gen = DumpGenerator::new();
+        gen.write_json(self);
+        gen.consume()
+    }
+
+    /// Pretty prints out the value as JSON string. Takes an argument that's
+    /// number of spaces to indent new blocks with.
+    pub fn pretty(&self, spaces: u16) -> String {
+        let mut gen = PrettyGenerator::new(spaces);
+        gen.write_json(self);
+        gen.consume()
+    }
+
+    /// Dumps the JSON as byte stream into an instance of `std::io::Write`.
+    pub fn to_writer<W: Write>(&self, writer: &mut W) {
+        let mut gen = WriterGenerator::new(writer);
+        gen.write_json(self);
     }
 
     pub fn is_string(&self) -> bool {
@@ -111,7 +164,7 @@ impl JsonValue {
             JsonValue::Null               => true,
             JsonValue::Short(ref value)   => value.is_empty(),
             JsonValue::String(ref value)  => value.is_empty(),
-            JsonValue::Number(ref value)  => !value.is_normal(),
+            JsonValue::Number(ref value)  => value.is_empty(),
             JsonValue::Boolean(ref value) => !value,
             JsonValue::Array(ref value)   => value.is_empty(),
             JsonValue::Object(ref value)  => value.is_empty(),
@@ -126,61 +179,113 @@ impl JsonValue {
         }
     }
 
-    pub fn as_f64(&self) -> Option<f64> {
+    pub fn as_number(&self) -> Option<Number> {
         match *self {
-            JsonValue::Number(ref value) => Some(*value),
-            _                            => None
+            JsonValue::Number(value) => Some(value),
+            _                        => None
         }
     }
 
+    pub fn as_f64(&self) -> Option<f64> {
+        self.as_number().map(|value| value.into())
+    }
+
     pub fn as_f32(&self) -> Option<f32> {
-        self.as_f64().and_then(|value| f64_to_singed!(f32, value))
+        self.as_number().map(|value| value.into())
     }
 
     pub fn as_u64(&self) -> Option<u64> {
-        self.as_f64().and_then(|value| f64_to_unsinged!(u64, value))
+        self.as_number().and_then(|value| {
+            if value.is_sign_positive() {
+                Some(value.into())
+            } else {
+                None
+            }
+        })
     }
 
     pub fn as_u32(&self) -> Option<u32> {
-        self.as_f64().and_then(|value| f64_to_unsinged!(u32, value))
+        self.as_u64().and_then(|value| number_to_unsigned!(u32, value, u64))
     }
 
     pub fn as_u16(&self) -> Option<u16> {
-        self.as_f64().and_then(|value| f64_to_unsinged!(u16, value))
+        self.as_u64().and_then(|value| number_to_unsigned!(u16, value, u64))
     }
 
     pub fn as_u8(&self) -> Option<u8> {
-        self.as_f64().and_then(|value| f64_to_unsinged!(u8, value))
+        self.as_u64().and_then(|value| number_to_unsigned!(u8, value, u64))
     }
 
     pub fn as_usize(&self) -> Option<usize> {
-        self.as_f64().and_then(|value| f64_to_unsinged!(usize, value))
+        self.as_u64().and_then(|value| number_to_unsigned!(usize, value, u64))
     }
 
     pub fn as_i64(&self) -> Option<i64> {
-        self.as_f64().and_then(|value| f64_to_singed!(i64, value))
+        self.as_number().map(|value| value.into())
     }
 
     pub fn as_i32(&self) -> Option<i32> {
-        self.as_f64().and_then(|value| f64_to_singed!(i32, value))
+        self.as_i64().and_then(|value| number_to_signed!(i32, value, i64))
     }
 
     pub fn as_i16(&self) -> Option<i16> {
-        self.as_f64().and_then(|value| f64_to_singed!(i16, value))
+        self.as_i64().and_then(|value| number_to_signed!(i16, value, i64))
     }
 
     pub fn as_i8(&self) -> Option<i8> {
-        self.as_f64().and_then(|value| f64_to_singed!(i8, value))
+        self.as_i64().and_then(|value| number_to_signed!(i8, value, i64))
     }
 
     pub fn as_isize(&self) -> Option<isize> {
-        self.as_f64().and_then(|value| f64_to_singed!(isize, value))
+        self.as_i64().and_then(|value| number_to_signed!(isize, value, i64))
     }
 
     pub fn as_bool(&self) -> Option<bool> {
         match *self {
             JsonValue::Boolean(ref value) => Some(*value),
             _                             => None
+        }
+    }
+
+    /// Obtain an integer at a fixed decimal point. This is useful for
+    /// converting monetary values and doing arithmetic on them without
+    /// rounding errors introduced by floating point operations.
+    ///
+    /// Will return `None` if `Number` called on a value that's not a number,
+    /// or if the number is negative or a NaN.
+    ///
+    /// ```
+    /// # use json::JsonValue;
+    /// let price_a = JsonValue::from(5.99);
+    /// let price_b = JsonValue::from(7);
+    /// let price_c = JsonValue::from(10.2);
+    ///
+    /// assert_eq!(price_a.as_fixed_point_u64(2), Some(599));
+    /// assert_eq!(price_b.as_fixed_point_u64(2), Some(700));
+    /// assert_eq!(price_c.as_fixed_point_u64(2), Some(1020));
+    /// ```
+    pub fn as_fixed_point_u64(&self, point: u16) -> Option<u64> {
+        match *self {
+            JsonValue::Number(ref value) => value.as_fixed_point_u64(point),
+            _                            => None
+        }
+    }
+
+    /// Analog to `as_fixed_point_u64`, except returning a signed
+    /// `i64`, properly handling negative numbers.
+    ///
+    /// ```
+    /// # use json::JsonValue;
+    /// let balance_a = JsonValue::from(-1.49);
+    /// let balance_b = JsonValue::from(42);
+    ///
+    /// assert_eq!(balance_a.as_fixed_point_i64(2), Some(-149));
+    /// assert_eq!(balance_b.as_fixed_point_i64(2), Some(4200));
+    /// ```
+    pub fn as_fixed_point_i64(&self, point: u16) -> Option<i64> {
+        match *self {
+            JsonValue::Number(ref value) => value.as_fixed_point_i64(point),
+            _                            => None
         }
     }
 
@@ -207,11 +312,14 @@ impl JsonValue {
         mem::replace(self, JsonValue::Null)
     }
 
-    /// Checks that self is a string, returns an owned Rust `String, leaving
+    /// Checks that self is a string, returns an owned Rust `String`, leaving
     /// `Null` in it's place.
     ///
-    /// This is the cheapest way to obtain an owned `String` from JSON, as no
-    /// extra heap allocation is performend.
+    /// - If the contained string is already a heap allocated `String`, then
+    /// the ownership is moved without any heap allocation.
+    ///
+    /// - If the contained string is a `Short`, this will perform a heap
+    /// allocation to convert the types for you.
     ///
     /// ## Example
     ///
