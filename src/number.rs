@@ -1,7 +1,7 @@
 use std::{ ops, fmt, f32, f64 };
 use std::num::FpCategory;
 use util::grisu2;
-use util::write::write;
+use util::print_dec;
 
 /// NaN value represented in `Number` type. NaN is equal to itself.
 pub const NAN: Number = Number {
@@ -203,7 +203,7 @@ impl fmt::Display for Number {
             }
             let (positive, mantissa, exponent) = self.as_parts();
             let mut buf = Vec::new();
-            write(&mut buf, positive, mantissa, exponent).unwrap();
+            print_dec::write(&mut buf, positive, mantissa, exponent).unwrap();
             f.write_str(&String::from_utf8_unchecked(buf))
         }
     }

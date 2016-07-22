@@ -1,3 +1,11 @@
+// This is a modified version of the `itoa` crate by David Tolnay:
+// https://github.com/dtolnay/itoa
+//
+// The crate itself borrows code from the stdlib of Rust.
+//
+// The algorithm here was modified from being able to just writing integers,
+// to printing decimal floating points.
+
 use std::{io, mem, ptr, slice};
 
 const DEC_DIGITS_LUT: &'static[u8] =

@@ -3,7 +3,7 @@ use std::io::Write;
 use JsonValue;
 use number::Number;
 
-use util::write::write;
+use util::print_dec;
 
 const QU: u8 = b'"';
 const BS: u8 = b'\\';
@@ -104,7 +104,12 @@ pub trait Generator {
         }
         let (positive, mantissa, exponent) = num.as_parts();
         unsafe {
-            write(self.get_writer(), positive, mantissa, exponent).unwrap();
+            print_dec::write(
+                self.get_writer(),
+                positive,
+                mantissa,
+                exponent
+            ).unwrap();
         }
     }
 

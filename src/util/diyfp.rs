@@ -1,3 +1,6 @@
+// This file comes from the `dtoa` port by David Tolnay:
+// https://github.com/dtolnay/dtoa
+//
 // Copyright 2016 Dtoa Developers
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
