@@ -1,12 +1,16 @@
 use { Result, Error };
 
 use std::ops::{ Index, IndexMut, Deref };
-use std::{ mem, usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32 };
+use std::{ fmt, mem, usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32 };
+use std::io::Write;
 
-use iterators::{ Members, MembersMut, Entries, EntriesMut };
 use short::Short;
 use number::Number;
 use object::Object;
+use iterators::{ Members, MembersMut, Entries, EntriesMut };
+use codegen::{ Generator, PrettyGenerator, DumpGenerator, WriterGenerator };
+
+mod implements;
 
 // These are convenience macros for converting `f64` to the `$unsigned` type.
 // The macros check that the numbers are representable the target type.
@@ -41,6 +45,33 @@ pub enum JsonValue {
     Array(Vec<JsonValue>),
 }
 
+
+/// Implements formatting
+///
+/// ```
+/// # use json;
+/// let data = json::parse(r#"{"url":"https://github.com/"}"#).unwrap();
+/// println!("{}", data);
+/// println!("{:#}", data);
+/// ```
+impl fmt::Display for JsonValue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if f.alternate() {
+            f.write_str(&self.pretty(4))
+        } else {
+            match *self {
+                JsonValue::Short(ref value)   => value.fmt(f),
+                JsonValue::String(ref value)  => value.fmt(f),
+                JsonValue::Number(ref value)  => value.fmt(f),
+                JsonValue::Boolean(ref value) => value.fmt(f),
+                JsonValue::Null               => f.write_str("null"),
+                _                             => f.write_str(&self.dump())
+            }
+        }
+    }
+}
+
+
 static NULL: JsonValue = JsonValue::Null;
 
 impl JsonValue {
@@ -54,6 +85,27 @@ impl JsonValue {
     /// When creating array with data, consider using the `array!` macro.
     pub fn new_array() -> JsonValue {
         JsonValue::Array(Vec::new())
+    }
+
+    /// Prints out the value as JSON string.
+    pub fn dump(&self) -> String {
+        let mut gen = DumpGenerator::new();
+        gen.write_json(self);
+        gen.consume()
+    }
+
+    /// Pretty prints out the value as JSON string. Takes an argument that's
+    /// number of spaces to indent new blocks with.
+    pub fn pretty(&self, spaces: u16) -> String {
+        let mut gen = PrettyGenerator::new(spaces);
+        gen.write_json(self);
+        gen.consume()
+    }
+
+    /// Dumps the JSON as byte stream into an instance of `std::io::Write`.
+    pub fn to_writer<W: Write>(&self, writer: &mut W) {
+        let mut gen = WriterGenerator::new(writer);
+        gen.write_json(self);
     }
 
     pub fn is_string(&self) -> bool {
