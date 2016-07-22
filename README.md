@@ -125,9 +125,8 @@ can even outperform parsing to structs.
 This crate implements the standard according to the [
 RFC 7159](https://tools.ietf.org/html/rfc7159) and
 [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf)
-documents. It makes some compromises when it comes to number precision, but they are
-both within the specification and advised practices for best interoperability,
-specifically those discussed in the RFC.
+documents. For the best interoperability numbers are treated stored as 64bit precision
+mantissa with 16 bit decimal exponent for floating point representation.
 
 ## License
 

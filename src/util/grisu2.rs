@@ -1,3 +1,20 @@
+// This file comes from the `dtoa` port by David Tolnay:
+// https://github.com/dtolnay/dtoa
+//
+// It's an implementation of a Grisu2 algorithm by Florian Loitsch:
+// http://www.cs.tufts.edu/~nr/cs257/archive/florian-loitsch/printf.pdf
+//
+// The algorithm here has been modified to produce a `u64` mantisa and
+// a decimal exponent instead of writing to a string.
+//
+// Copyright 2016 Dtoa Developers
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
 use util::diyfp::{ self, DiyFp };
 
 #[inline]

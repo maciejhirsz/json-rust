@@ -22,7 +22,7 @@ use object::Object;
 use number::Number;
 use { JsonValue, Error, Result };
 
-// This is not actual max precision, but a treshold at which number parsing
+// This is not actual max precision, but a threshold at which number parsing
 // kicks into checked math.
 const MAX_PRECISION: u64 = 576460752303423500;
 
@@ -95,7 +95,7 @@ macro_rules! expect_sequence {
 
 
 // A drop in macro for when we expect to read a byte, but we don't care
-// about any whitespace characters that might occure before it.
+// about any whitespace characters that might occur before it.
 macro_rules! expect_byte_ignore_whitespace {
     ($parser:ident) => ({
         let mut ch = expect_byte!($parser);
