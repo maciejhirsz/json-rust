@@ -32,9 +32,10 @@ const NAN_MASK: u8 = !1;
 #[derive(Copy, Clone, Debug)]
 pub struct Number {
     // A byte describing the sign and NaN-ness of the number.
-    // category == 0 -> negative sign
-    // category == 1 -> positive sign
-    // category >  1 -> NaN
+    //
+    // category == 0 (NEGATIVE constant)         -> negative sign
+    // category == 1 (POSITIVE constnat)         -> positive sign
+    // category >  1 (matches NAN_MASK constant) -> NaN
     category: u8,
 
     // Decimal exponent, analog to `e` notation in string form.
