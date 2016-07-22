@@ -261,7 +261,20 @@ pub fn stringify_pretty<T>(root: T, spaces: u16) -> String where T: Into<JsonVal
     root.pretty(spaces)
 }
 
-
+/// Helper macro for creating instances of `JsonValue::Array`.
+///
+/// ```
+/// # #[macro_use] extern crate json;
+/// # fn main() {
+/// let data = array!["foo", 42, false];
+///
+/// assert_eq!(data[0], "foo");
+/// assert_eq!(data[1], 42);
+/// assert_eq!(data[2], false);
+///
+/// assert_eq!(data.dump(), r#"["foo",42,false]"#);
+/// # }
+/// ```
 #[macro_export]
 macro_rules! array {
     [] => ($crate::JsonValue::new_array());
@@ -277,6 +290,22 @@ macro_rules! array {
     })
 }
 
+/// Helper macro for creating instances of `JsonValue::Object`.
+///
+/// ```
+/// # #[macro_use] extern crate json;
+/// # fn main() {
+/// let data = object!{
+///     "foo" => 42,
+///     "bar" => false
+/// };
+///
+/// assert_eq!(data["foo"], 42);
+/// assert_eq!(data["bar"], false);
+///
+/// assert_eq!(data.dump(), r#"{"foo":42,"bar":false}"#);
+/// # }
+/// ```
 #[macro_export]
 macro_rules! object {
     {} => ($crate::JsonValue::new_object());
