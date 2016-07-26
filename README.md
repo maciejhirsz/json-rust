@@ -119,7 +119,7 @@ crate. It is definitely one of them now.
 
 While this crate doesn't provide a way to parse JSON to native Rust structs, it does a
 lot to optimize it's performance for DOM parsing, stringifying and manipulation. It does
-[very well in benchmarks](https://github.com/serde-rs/json-benchmark), in some cases it
+[very well in benchmarks](http://json.rs/), in some cases it
 can even outperform parsing to structs.
 
 This crate implements the standard according to the [
