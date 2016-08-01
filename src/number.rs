@@ -209,55 +209,56 @@ impl fmt::Display for Number {
     }
 }
 
-fn exponent_to_power_f64(e: i16) -> f64 {
-    static POS_POWERS: [f64; 23] = [
+fn exponentiate_f64(n: f64, e: i16) -> f64 {
+    static CACHE_POWERS: [f64; 23] = [
           1.0,    1e1,    1e2,    1e3,    1e4,    1e5,    1e6,    1e7,
           1e8,    1e9,   1e10,   1e11,   1e12,   1e13,   1e14,   1e15,
          1e16,   1e17,   1e18,   1e19,   1e20,   1e21,   1e22
     ];
 
-    static NEG_POWERS: [f64; 23] = [
-          1.0,   1e-1,   1e-2,   1e-3,   1e-4,   1e-5,   1e-6,   1e-7,
-         1e-8,   1e-9,  1e-10,  1e-11,  1e-12,  1e-13,  1e-14,  1e-15,
-        1e-16,  1e-17,  1e-18,  1e-19,  1e-20,  1e-21,  1e-22
-    ];
+    if e >= 0 {
+        let index = e as usize;
 
-    let index = e.abs() as usize;
-
-    if index < 23 {
-        if e < 0 {
-            NEG_POWERS[index]
+        n * if index < 23 {
+            CACHE_POWERS[index]
         } else {
-            POS_POWERS[index]
+            10f64.powf(index as f64)
         }
     } else {
-        // powf is more accurate
-        10f64.powf(e as f64)
+        let index = -e as usize;
+
+        n / if index < 23 {
+            CACHE_POWERS[index]
+        } else {
+            10f64.powf(index as f64)
+        }
     }
 }
 
-fn exponent_to_power_f32(e: i16) -> f32 {
-    static POS_POWERS: [f32; 16] = [
+
+fn exponentiate_f32(n: f32, e: i16) -> f32 {
+    static CACHE_POWERS: [f32; 23] = [
           1.0,    1e1,    1e2,    1e3,    1e4,    1e5,    1e6,    1e7,
-          1e8,    1e9,   1e10,   1e11,   1e12,   1e13,   1e14,   1e15
+          1e8,    1e9,   1e10,   1e11,   1e12,   1e13,   1e14,   1e15,
+         1e16,   1e17,   1e18,   1e19,   1e20,   1e21,   1e22
     ];
 
-    static NEG_POWERS: [f32; 16] = [
-          1.0,   1e-1,   1e-2,   1e-3,   1e-4,   1e-5,   1e-6,   1e-7,
-         1e-8,   1e-9,  1e-10,  1e-11,  1e-12,  1e-13,  1e-14,  1e-15
-    ];
+    if e >= 0 {
+        let index = e as usize;
 
-    let index = e.abs() as usize;
-
-    if index < 16 {
-        if e < 0 {
-            NEG_POWERS[index]
+        n * if index < 23 {
+            CACHE_POWERS[index]
         } else {
-            POS_POWERS[index]
+            10f32.powf(index as f32)
         }
     } else {
-        // powf is more accurate
-        10f32.powf(e as f32)
+        let index = -e as usize;
+
+        n / if index < 23 {
+            CACHE_POWERS[index]
+        } else {
+            10f32.powf(index as f32)
+        }
     }
 }
 
@@ -269,11 +270,11 @@ impl From<Number> for f64 {
         let mut e = num.exponent;
 
         if e < -308 {
-            n *= exponent_to_power_f64(e + 308);
+            n = exponentiate_f64(n, e + 308);
             e = -308;
         }
 
-        let f = n * exponent_to_power_f64(e);
+        let f = exponentiate_f64(n, e);
         if num.is_sign_positive() { f } else { -f }
     }
 }
@@ -286,11 +287,11 @@ impl From<Number> for f32 {
         let mut e = num.exponent;
 
         if e < -127 {
-            n *= exponent_to_power_f32(e + 127);
+            n = exponentiate_f32(n, e + 127);
             e = -127;
         }
 
-        let f = n * exponent_to_power_f32(e);
+        let f = exponentiate_f32(n, e);
         if num.is_sign_positive() { f } else { -f }
     }
 }
