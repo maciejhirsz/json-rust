@@ -121,3 +121,8 @@ fn as_fixed_point_i64() {
     assert_eq!(Number::from(-1).as_fixed_point_i64(0), Some(-1));
     assert_eq!(Number::from(f64::NAN).as_fixed_point_i64(0), None);
 }
+
+#[test]
+fn convert_f64_precision() {
+    assert_eq!(Number::from_parts(true, 4750000000000001, -18), 0.004750000000000001);
+}
