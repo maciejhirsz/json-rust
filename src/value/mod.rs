@@ -380,12 +380,18 @@ impl JsonValue {
     }
 
     /// Works on `JsonValue::Array` - checks if the array contains a value
-    pub fn contains<T>(&self, item: T) -> bool where T: Into<JsonValue> {
+    pub fn contains<T>(&self, item: T) -> bool where T: PartialEq<JsonValue> {
         match *self {
-            JsonValue::Array(ref vec) => {
-                vec.contains(&item.into())
-            },
-            _ => false
+            JsonValue::Array(ref vec) => vec.iter().any(|member| item == *member),
+            _                         => false
+        }
+    }
+
+    /// Works on `JsonValue::Object` - checks if the object has a key
+    pub fn has_key(&self, key: &str) -> bool {
+        match *self {
+            JsonValue::Object(ref object) => object.get(key).is_some(),
+            _                             => false
         }
     }
 
