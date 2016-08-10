@@ -308,6 +308,53 @@ impl<'a, W> Generator for WriterGenerator<'a, W> where W: Write {
     }
 }
 
+
+pub struct PrettyWriterGenerator<'a, W: 'a + Write> {
+    writer: &'a mut W,
+    dent: u16,
+    spaces_per_indent: u16,
+}
+
+impl<'a, W> PrettyWriterGenerator<'a, W> where W: 'a + Write {
+    pub fn new(writer: &'a mut W) -> Self {
+        PrettyWriterGenerator {
+            writer: writer,
+            dent: 0,
+            spaces_per_indent: 4,
+        }
+    }
+}
+
+impl<'a, W> Generator for PrettyWriterGenerator<'a, W> where W: Write {
+    type T = W;
+
+    #[inline(always)]
+    fn get_writer(&mut self) -> &mut W {
+        &mut self.writer
+    }
+
+    #[inline(always)]
+    fn write_min(&mut self, slice: &[u8], _: u8) -> io::Result<()> {
+        self.writer.write_all(slice)
+    }
+
+    fn new_line(&mut self) -> io::Result<()> {
+        try!(self.write_char(b'\n'));
+        for _ in 0..(self.dent * self.spaces_per_indent) {
+            try!(self.write_char(b' '));
+        }
+        Ok(())
+    }
+
+    fn indent(&mut self) {
+        self.dent += 1;
+    }
+
+    fn dedent(&mut self) {
+        self.dent -= 1;
+    }
+}
+
 // From: https://github.com/dtolnay/fastwrite/blob/master/src/lib.rs#L68
 //
 // LLVM is not able to lower `Vec::extend_from_slice` into a memcpy, so this

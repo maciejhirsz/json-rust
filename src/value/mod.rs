@@ -8,7 +8,7 @@ use short::Short;
 use number::Number;
 use object::Object;
 use iterators::{ Members, MembersMut, Entries, EntriesMut };
-use codegen::{ Generator, PrettyGenerator, DumpGenerator, WriterGenerator };
+use codegen::{ Generator, PrettyGenerator, DumpGenerator, WriterGenerator, PrettyWriterGenerator };
 
 mod implements;
 
@@ -108,10 +108,10 @@ impl JsonValue {
         gen.write_json(self)
     }
 
-    // pub fn to_writer_pretty<W: Write>(&self, writer: &mut W) -> io::Error {
-    //     let mut gen = PrettyWriterGenerator::new(writer);
-    //     gen.write_json(self)
-    // }
+    pub fn to_writer_pretty<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+        let mut gen = PrettyWriterGenerator::new(writer);
+        gen.write_json(self)
+    }
 
     pub fn is_string(&self) -> bool {
         match *self {
