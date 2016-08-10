@@ -2,7 +2,7 @@ use { Result, Error };
 
 use std::ops::{ Index, IndexMut, Deref };
 use std::{ fmt, mem, usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32 };
-use std::io::Write;
+use std::io::{ self, Write };
 
 use short::Short;
 use number::Number;
@@ -90,7 +90,7 @@ impl JsonValue {
     /// Prints out the value as JSON string.
     pub fn dump(&self) -> String {
         let mut gen = DumpGenerator::new();
-        gen.write_json(self);
+        gen.write_json(self).expect("Can't fail");
         gen.consume()
     }
 
@@ -98,15 +98,20 @@ impl JsonValue {
     /// number of spaces to indent new blocks with.
     pub fn pretty(&self, spaces: u16) -> String {
         let mut gen = PrettyGenerator::new(spaces);
-        gen.write_json(self);
+        gen.write_json(self).expect("Can't fail");
         gen.consume()
     }
 
     /// Dumps the JSON as byte stream into an instance of `std::io::Write`.
-    pub fn to_writer<W: Write>(&self, writer: &mut W) {
+    pub fn to_writer<W: Write>(&self, writer: &mut W) -> io::Result<()> {
         let mut gen = WriterGenerator::new(writer);
-        gen.write_json(self);
+        gen.write_json(self)
     }
+
+    // pub fn to_writer_pretty<W: Write>(&self, writer: &mut W) -> io::Error {
+    //     let mut gen = PrettyWriterGenerator::new(writer);
+    //     gen.write_json(self)
+    // }
 
     pub fn is_string(&self) -> bool {
         match *self {

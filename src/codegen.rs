@@ -2,6 +2,7 @@ use std::ptr;
 use std::io::Write;
 use JsonValue;
 use number::Number;
+use std::io;
 
 use util::print_dec;
 
@@ -42,19 +43,19 @@ pub trait Generator {
     fn get_writer(&mut self) -> &mut Self::T;
 
     #[inline(always)]
-    fn write(&mut self, slice: &[u8]) {
-        self.get_writer().write_all(slice).unwrap();
+    fn write(&mut self, slice: &[u8]) -> io::Result<()> {
+        self.get_writer().write_all(slice)
     }
 
     #[inline(always)]
-    fn write_char(&mut self, ch: u8) {
-        self.get_writer().write_all(&[ch]).unwrap();
+    fn write_char(&mut self, ch: u8) -> io::Result<()> {
+        self.get_writer().write_all(&[ch])
     }
 
-    fn write_min(&mut self, slice: &[u8], min: u8);
+    fn write_min(&mut self, slice: &[u8], min: u8) -> io::Result<()>;
 
     #[inline(always)]
-    fn new_line(&mut self) {}
+    fn new_line(&mut self) -> io::Result<()> { Ok(()) }
 
     #[inline(always)]
     fn indent(&mut self) {}
@@ -63,28 +64,28 @@ pub trait Generator {
     fn dedent(&mut self) {}
 
     #[inline(never)]
-    fn write_string_complex(&mut self, string: &str, mut start: usize) {
-        self.write(string[ .. start].as_bytes());
+    fn write_string_complex(&mut self, string: &str, mut start: usize) -> io::Result<()> {
+        try!(self.write(string[ .. start].as_bytes()));
 
         for (index, ch) in string.bytes().enumerate().skip(start) {
             let escape = ESCAPED[ch as usize];
             if escape > 0 {
-                self.write(string[start .. index].as_bytes());
-                self.write(&[b'\\', escape]);
+                try!(self.write(string[start .. index].as_bytes()));
+                try!(self.write(&[b'\\', escape]));
                 start = index + 1;
             }
             if escape == b'u' {
-                write!(self.get_writer(), "{:04x}", ch).unwrap();
+                try!(write!(self.get_writer(), "{:04x}", ch));
             }
         }
-        self.write(string[start ..].as_bytes());
+        try!(self.write(string[start ..].as_bytes()));
 
-        self.write_char(b'"');
+        self.write_char(b'"')
     }
 
     #[inline(always)]
-    fn write_string(&mut self, string: &str) {
-        self.write_char(b'"');
+    fn write_string(&mut self, string: &str) -> io::Result<()> {
+        try!(self.write_char(b'"'));
 
         for (index, ch) in string.bytes().enumerate() {
             if ESCAPED[ch as usize] > 0 {
@@ -92,15 +93,14 @@ pub trait Generator {
             }
         }
 
-        self.write(string.as_bytes());
-        self.write_char(b'"');
+        try!(self.write(string.as_bytes()));
+        self.write_char(b'"')
     }
 
     #[inline(always)]
-    fn write_number(&mut self, num: &Number) {
+    fn write_number(&mut self, num: &Number) -> io::Result<()> {
         if num.is_nan() {
-            self.write(b"null");
-            return;
+            return self.write(b"null");
         }
         let (positive, mantissa, exponent) = num.as_parts();
         unsafe {
@@ -109,11 +109,11 @@ pub trait Generator {
                 positive,
                 mantissa,
                 exponent
-            ).unwrap();
+            )
         }
     }
 
-    fn write_json(&mut self, json: &JsonValue) {
+    fn write_json(&mut self, json: &JsonValue) -> io::Result<()> {
         match *json {
             JsonValue::Null               => self.write(b"null"),
             JsonValue::Short(ref short)   => self.write_string(short.as_str()),
@@ -122,54 +122,54 @@ pub trait Generator {
             JsonValue::Boolean(true)      => self.write(b"true"),
             JsonValue::Boolean(false)     => self.write(b"false"),
             JsonValue::Array(ref array)   => {
-                self.write_char(b'[');
+                try!(self.write_char(b'['));
                 let mut iter = array.iter();
 
                 if let Some(item) = iter.next() {
                     self.indent();
-                    self.new_line();
-                    self.write_json(item);
+                    try!(self.new_line());
+                    try!(self.write_json(item));
                 } else {
-                    self.write_char(b']');
-                    return;
+                    try!(self.write_char(b']'));
+                    return Ok(());
                 }
 
                 for item in iter {
-                    self.write_char(b',');
-                    self.new_line();
-                    self.write_json(item);
+                    try!(self.write_char(b','));
+                    try!(self.new_line());
+                    try!(self.write_json(item));
                 }
 
                 self.dedent();
-                self.new_line();
-                self.write_char(b']');
+                try!(self.new_line());
+                self.write_char(b']')
             },
             JsonValue::Object(ref object) => {
-                self.write_char(b'{');
+                try!(self.write_char(b'{'));
                 let mut iter = object.iter();
 
                 if let Some((key, value)) = iter.next() {
                     self.indent();
-                    self.new_line();
-                    self.write_string(key);
-                    self.write_min(b": ", b':');
-                    self.write_json(value);
+                    try!(self.new_line());
+                    try!(self.write_string(key));
+                    try!(self.write_min(b": ", b':'));
+                    try!(self.write_json(value));
                 } else {
-                    self.write_char(b'}');
-                    return;
+                    try!(self.write_char(b'}'));
+                    return Ok(());
                 }
 
                 for (key, value) in iter {
-                    self.write_char(b',');
-                    self.new_line();
-                    self.write_string(key);
-                    self.write_min(b": ", b':');
-                    self.write_json(value);
+                    try!(self.write_char(b','));
+                    try!(self.new_line());
+                    try!(self.write_string(key));
+                    try!(self.write_min(b": ", b':'));
+                    try!(self.write_json(value));
                 }
 
                 self.dedent();
-                self.new_line();
-                self.write_char(b'}');
+                try!(self.new_line());
+                self.write_char(b'}')
             }
         }
     }
@@ -196,13 +196,15 @@ impl DumpGenerator {
 impl Generator for DumpGenerator {
     type T = Vec<u8>;
 
-    fn write(&mut self, slice: &[u8]) {
+    fn write(&mut self, slice: &[u8]) -> io::Result<()> {
         extend_from_slice(&mut self.code, slice);
+        Ok(())
     }
 
     #[inline(always)]
-    fn write_char(&mut self, ch: u8) {
-        self.code.push(ch)
+    fn write_char(&mut self, ch: u8) -> io::Result<()> {
+        self.code.push(ch);
+        Ok(())
     }
 
     #[inline(always)]
@@ -211,8 +213,9 @@ impl Generator for DumpGenerator {
     }
 
     #[inline(always)]
-    fn write_min(&mut self, _: &[u8], min: u8) {
+    fn write_min(&mut self, _: &[u8], min: u8) -> io::Result<()> {
         self.code.push(min);
+        Ok(())
     }
 }
 
@@ -240,13 +243,15 @@ impl Generator for PrettyGenerator {
     type T = Vec<u8>;
 
     #[inline(always)]
-    fn write(&mut self, slice: &[u8]) {
+    fn write(&mut self, slice: &[u8]) -> io::Result<()> {
         extend_from_slice(&mut self.code, slice);
+        Ok(())
     }
 
     #[inline(always)]
-    fn write_char(&mut self, ch: u8) {
-        self.code.push(ch)
+    fn write_char(&mut self, ch: u8) -> io::Result<()> {
+        self.code.push(ch);
+        Ok(())
     }
 
     #[inline(always)]
@@ -255,15 +260,17 @@ impl Generator for PrettyGenerator {
     }
 
     #[inline(always)]
-    fn write_min(&mut self, slice: &[u8], _: u8) {
-        self.code.extend_from_slice(slice);
+    fn write_min(&mut self, slice: &[u8], _: u8) -> io::Result<()> {
+        extend_from_slice(&mut self.code, slice);
+        Ok(())
     }
 
-    fn new_line(&mut self) {
+    fn new_line(&mut self) -> io::Result<()> {
         self.code.push(b'\n');
         for _ in 0..(self.dent * self.spaces_per_indent) {
             self.code.push(b' ');
         }
+        Ok(())
     }
 
     fn indent(&mut self) {
@@ -296,8 +303,8 @@ impl<'a, W> Generator for WriterGenerator<'a, W> where W: Write {
     }
 
     #[inline(always)]
-    fn write_min(&mut self, _: &[u8], min: u8) {
-        self.writer.write_all(&[min]).unwrap();
+    fn write_min(&mut self, _: &[u8], min: u8) -> io::Result<()> {
+        self.writer.write_all(&[min])
     }
 }
 
