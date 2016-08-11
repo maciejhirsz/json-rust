@@ -4,5 +4,5 @@ version = "0.10.2"
 authors = ["Maciej Hirsz <maciej.hirsz@gmail.com>"]
 description = "JSON implementation in Rust"
 repository = "https://github.com/maciejhirsz/json-rust"
-documentation = "http://terhix.com/doc/json/"
+documentation = "http://json.rs/doc/json/"
 license = "MIT/Apache-2.0"
