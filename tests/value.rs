@@ -517,7 +517,7 @@ fn writer_generator() {
 
     let mut buf = Vec::new();
 
-    data.to_writer(&mut buf).expect("Can't fail with a Vec");
+    data.write(&mut buf).expect("Can't fail with a Vec");
 
     assert_eq!(String::from_utf8(buf).unwrap(), r#"{"foo":["bar",100,true]}"#);
 }
@@ -530,7 +530,7 @@ fn pretty_writer_generator() {
 
     let mut buf = Vec::new();
 
-    data.to_writer_pretty(&mut buf).expect("Can't fail with a Vec");
+    data.write_pretty(&mut buf, 4).expect("Can't fail with a Vec");
 
     assert_eq!(String::from_utf8(buf).unwrap(), "{\n    \"foo\": [\n        \"bar\",\n        100,\n        true\n    ]\n}");
 }

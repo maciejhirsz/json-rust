@@ -316,11 +316,11 @@ pub struct PrettyWriterGenerator<'a, W: 'a + Write> {
 }
 
 impl<'a, W> PrettyWriterGenerator<'a, W> where W: 'a + Write {
-    pub fn new(writer: &'a mut W) -> Self {
+    pub fn new(writer: &'a mut W, spaces: u16) -> Self {
         PrettyWriterGenerator {
             writer: writer,
             dent: 0,
-            spaces_per_indent: 4,
+            spaces_per_indent: spaces,
         }
     }
 }

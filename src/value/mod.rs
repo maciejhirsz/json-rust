@@ -102,14 +102,24 @@ impl JsonValue {
         gen.consume()
     }
 
-    /// Dumps the JSON as byte stream into an instance of `std::io::Write`.
-    pub fn to_writer<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+    /// Writes the JSON as byte stream into an implementor of `std::io::Write`.
+    ///
+    /// This method is deprecated as it will panic on io errors, use `write` instead.
+    #[deprecated(since="0.10.2", note="use `JsonValue::write` instead")]
+    pub fn to_writer<W: Write>(&self, writer: &mut W) {
+        let mut gen = WriterGenerator::new(writer);
+        gen.write_json(self).expect("Deprecated");
+    }
+
+    /// Writes the JSON as byte stream into an implementor of `std::io::Write`.
+    pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
         let mut gen = WriterGenerator::new(writer);
         gen.write_json(self)
     }
 
-    pub fn to_writer_pretty<W: Write>(&self, writer: &mut W) -> io::Result<()> {
-        let mut gen = PrettyWriterGenerator::new(writer);
+    /// Writes the JSON as byte stream into an implementor of `std::io::Write`.
+    pub fn write_pretty<W: Write>(&self, writer: &mut W, spaces: u16) -> io::Result<()> {
+        let mut gen = PrettyWriterGenerator::new(writer, spaces);
         gen.write_json(self)
     }
 
