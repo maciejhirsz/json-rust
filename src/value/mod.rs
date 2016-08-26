@@ -2,13 +2,13 @@ use { Result, Error };
 
 use std::ops::{ Index, IndexMut, Deref };
 use std::{ fmt, mem, usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32 };
-use std::io::Write;
+use std::io::{ self, Write };
 
 use short::Short;
 use number::Number;
 use object::Object;
 use iterators::{ Members, MembersMut, Entries, EntriesMut };
-use codegen::{ Generator, PrettyGenerator, DumpGenerator, WriterGenerator };
+use codegen::{ Generator, PrettyGenerator, DumpGenerator, WriterGenerator, PrettyWriterGenerator };
 
 mod implements;
 
@@ -90,7 +90,7 @@ impl JsonValue {
     /// Prints out the value as JSON string.
     pub fn dump(&self) -> String {
         let mut gen = DumpGenerator::new();
-        gen.write_json(self);
+        gen.write_json(self).expect("Can't fail");
         gen.consume()
     }
 
@@ -98,14 +98,29 @@ impl JsonValue {
     /// number of spaces to indent new blocks with.
     pub fn pretty(&self, spaces: u16) -> String {
         let mut gen = PrettyGenerator::new(spaces);
-        gen.write_json(self);
+        gen.write_json(self).expect("Can't fail");
         gen.consume()
     }
 
-    /// Dumps the JSON as byte stream into an instance of `std::io::Write`.
+    /// Writes the JSON as byte stream into an implementor of `std::io::Write`.
+    ///
+    /// This method is deprecated as it will panic on io errors, use `write` instead.
+    #[deprecated(since="0.10.2", note="use `JsonValue::write` instead")]
     pub fn to_writer<W: Write>(&self, writer: &mut W) {
         let mut gen = WriterGenerator::new(writer);
-        gen.write_json(self);
+        gen.write_json(self).expect("Deprecated");
+    }
+
+    /// Writes the JSON as byte stream into an implementor of `std::io::Write`.
+    pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+        let mut gen = WriterGenerator::new(writer);
+        gen.write_json(self)
+    }
+
+    /// Writes the JSON as byte stream into an implementor of `std::io::Write`.
+    pub fn write_pretty<W: Write>(&self, writer: &mut W, spaces: u16) -> io::Result<()> {
+        let mut gen = PrettyWriterGenerator::new(writer, spaces);
+        gen.write_json(self)
     }
 
     pub fn is_string(&self) -> bool {
@@ -375,12 +390,18 @@ impl JsonValue {
     }
 
     /// Works on `JsonValue::Array` - checks if the array contains a value
-    pub fn contains<T>(&self, item: T) -> bool where T: Into<JsonValue> {
+    pub fn contains<T>(&self, item: T) -> bool where T: PartialEq<JsonValue> {
         match *self {
-            JsonValue::Array(ref vec) => {
-                vec.contains(&item.into())
-            },
-            _ => false
+            JsonValue::Array(ref vec) => vec.iter().any(|member| item == *member),
+            _                         => false
+        }
+    }
+
+    /// Works on `JsonValue::Object` - checks if the object has a key
+    pub fn has_key(&self, key: &str) -> bool {
+        match *self {
+            JsonValue::Object(ref object) => object.get(key).is_some(),
+            _                             => false
         }
     }
 
