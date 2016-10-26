@@ -237,8 +237,7 @@ macro_rules! expect_number {
             match ch {
                 b'0' ... b'9' => {
                     $parser.bump();
-                    // Avoid multiplication with bitshifts and addition
-                    num = (num << 1) + (num << 3) + (ch - b'0') as u64;
+                    num = num * 10 + (ch - b'0') as u64;
                 },
                 _             => {
                     let mut e = 0;
@@ -288,9 +287,31 @@ macro_rules! expect_fraction {
     ($parser:ident, $num:ident, $e:ident) => ({
         let result: Number;
 
+        let ch = expect_byte!($parser);
+
+        match ch {
+            b'0' ... b'9' => {
+                if $num < MAX_PRECISION {
+                    $num = $num * 10 + (ch - b'0') as u64;
+                    $e -= 1;
+                } else {
+                    match $num.checked_mul(10).and_then(|num| {
+                        num.checked_add((ch - b'0') as u64)
+                    }) {
+                        Some(result) => {
+                            $num = result;
+                            $e -= 1;
+                        },
+                        None => {}
+                    }
+                }
+            },
+            _ => return $parser.unexpected_character(ch)
+        }
+
         loop {
             if $parser.is_eof() {
-                result = Number::from_parts(true, $num, $e as i16);
+                result = Number::from_parts(true, $num, $e);
                 break;
             }
             let ch = $parser.read_byte();
@@ -299,7 +320,7 @@ macro_rules! expect_fraction {
                 b'0' ... b'9' => {
                     $parser.bump();
                     if $num < MAX_PRECISION {
-                        $num = ($num << 3) + ($num << 1) + (ch - b'0') as u64;
+                        $num = $num * 10 + (ch - b'0') as u64;
                         $e -= 1;
                     } else {
                         match $num.checked_mul(10).and_then(|num| {
@@ -319,7 +340,7 @@ macro_rules! expect_fraction {
                     break;
                 }
                 _ => {
-                    result = Number::from_parts(true, $num, $e as i16);
+                    result = Number::from_parts(true, $num, $e);
                     break;
                 }
             }
@@ -614,10 +635,10 @@ impl<'a> Parser<'a> {
     // the exponent. Note that no digits are actually read here, as we already
     // exceeded the precision range of f64 anyway.
     fn read_big_number(&mut self, mut num: u64) -> Result<Number> {
-        let mut e = 0i32;
+        let mut e = 0i16;
         loop {
             if self.is_eof() {
-                return Ok(Number::from_parts(true, num, e as i16));
+                return Ok(Number::from_parts(true, num, e));
             }
             let ch = self.read_byte();
             match ch {
@@ -642,12 +663,12 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Ok(Number::from_parts(true, num, e as i16))
+        Ok(Number::from_parts(true, num, e))
     }
 
     // Called in the rare case that a number with `e` notation has been
     // encountered. This is pretty straight forward, I guess.
-    fn expect_exponent(&mut self, num: u64, big_e: i32) -> Result<Number> {
+    fn expect_exponent(&mut self, num: u64, big_e: i16) -> Result<Number> {
         let mut ch = expect_byte!(self);
         let sign = match ch {
             b'-' => {
@@ -662,7 +683,7 @@ impl<'a> Parser<'a> {
         };
 
         let mut e = match ch {
-            b'0' ... b'9' => (ch - b'0') as i32,
+            b'0' ... b'9' => (ch - b'0') as i16,
             _ => return self.unexpected_character(ch),
         };
 
@@ -674,13 +695,13 @@ impl<'a> Parser<'a> {
             match ch {
                 b'0' ... b'9' => {
                     self.bump();
-                    e = (e << 3) + (e << 1) + (ch - b'0') as i32;
+                    e = e.saturating_mul(10).saturating_add((ch - b'0') as i16);
                 },
                 _  => break
             }
         }
 
-        Ok(Number::from_parts(true, num, (big_e + (e * sign)) as i16))
+        Ok(Number::from_parts(true, num, (big_e.saturating_add(e * sign))))
     }
 
     // Given how compilcated reading numbers and strings is, reading objects

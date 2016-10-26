@@ -488,7 +488,7 @@ impl ops::Neg for Number {
 // }
 
 #[inline]
-fn decimal_power(e: u16) -> u64 {
+fn decimal_power(mut e: u16) -> u64 {
     static CACHED: [u64; 20] = [
         1,
         10,
@@ -515,6 +515,12 @@ fn decimal_power(e: u16) -> u64 {
     if e < 20 {
         CACHED[e as usize]
     } else {
-        10u64.pow(e as u32)
+        let mut pow = 1u64;
+        while e >= 20 {
+            pow = pow.saturating_mul(CACHED[(e % 20) as usize]);
+            e /= 20;
+        }
+
+        pow
     }
 }
