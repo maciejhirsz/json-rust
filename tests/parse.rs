@@ -25,6 +25,16 @@ fn parse_number() {
 }
 
 #[test]
+fn uncode_identifier() {
+    assert!(parse("[C3A9] <=> [é]").is_err());
+}
+
+#[test]
+fn parse_period_requires_digit() {
+    assert!(parse("[1.]").is_err());
+}
+
+#[test]
 fn parse_small_number() {
     assert_eq!(parse("0.05").unwrap(), 0.05);
 }
@@ -38,6 +48,13 @@ fn parse_very_long_float() {
 
     // Exhausts u64
     assert_eq!(parsed, Number::from_parts(true, 2225073858507201136, -326));
+}
+
+#[test]
+fn parse_very_long_exponent() {
+    let parsed = parse("1e999999999999999999999999999999999999999999999999999999999999").unwrap();
+
+    assert_eq!(parsed, Number::from_parts(true, 1, 32767));
 }
 
 #[test]
