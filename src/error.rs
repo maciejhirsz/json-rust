@@ -13,6 +13,7 @@ pub enum Error {
         column: usize,
     },
     UnexpectedEndOfJson,
+    ExceededDepthLimit,
     FailedUtf8Parsing,
     WrongType(String),
 }
@@ -35,6 +36,7 @@ impl fmt::Display for Error {
             } => write!(f, "Unexpected character: {} at ({}:{})", ch, line, column),
 
             UnexpectedEndOfJson   => write!(f, "Unexpected end of JSON"),
+            ExceededDepthLimit    => write!(f, "Exceeded depth limit"),
             FailedUtf8Parsing     => write!(f, "Failed to parse UTF-8 bytes"),
             WrongType(ref s)      => write!(f, "Wrong type, expected: {}", s),
         }
@@ -44,9 +46,11 @@ impl fmt::Display for Error {
 impl error::Error for Error {
     fn description(&self) -> &str {
         use Error::*;
+
         match *self {
             UnexpectedCharacter { .. } => "Unexpected character",
             UnexpectedEndOfJson        => "Unexpected end of JSON",
+            ExceededDepthLimit         => "Exceeded depth limit",
             FailedUtf8Parsing          => "Failed to read bytes as UTF-8 from JSON",
             WrongType(_)               => "Wrong type",
         }

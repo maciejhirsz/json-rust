@@ -285,3 +285,36 @@ fn parse_escaped_unicode_surrogate_fail() {
 
     assert!(err.is_err());
 }
+
+#[test]
+fn parse_deeply_nested_arrays_and_objects() {
+    let depth = 256;
+    let mut text = String::new();
+    for _ in 0..depth {
+        text.push_str("[{\"a\":");
+    }
+    text.push_str("null");
+    for _ in 0..depth {
+        text.push_str("}]");
+    }
+
+    parse(&text).unwrap();
+
+    assert!(true);
+}
+
+#[test]
+fn parse_error_after_depth_limit() {
+    let depth = 5000;
+    let mut text = String::new();
+    for _ in 0..depth {
+        text.push_str("[{\"a\":");
+    }
+    text.push_str("null");
+    for _ in 0..depth {
+        text.push_str("}]");
+    }
+
+    assert_eq!(parse(&text), Err(json::Error::ExceededDepthLimit));
+}
+
