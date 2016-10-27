@@ -339,6 +339,13 @@ impl Object {
         }
     }
 
+    #[inline]
+    pub fn override_last(&mut self, value: JsonValue) {
+        if let Some(node) = self.store.last_mut() {
+            node.value = value;
+        }
+    }
+
     pub fn get(&self, key: &str) -> Option<&JsonValue> {
         if self.store.len() == 0 {
             return None;

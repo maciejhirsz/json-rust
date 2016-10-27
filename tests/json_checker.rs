@@ -165,7 +165,7 @@ mod json_checker_pass {
 
     #[test]
     fn pass_1() {
-        assert!(parse(r##"
+        parse(r##"
 
         [
             "JSON Test Pattern pass1",
@@ -226,17 +226,21 @@ mod json_checker_pass {
         1e00,2e+00,2e-00
         ,"rosebud"]
 
-        "##).is_ok());
+        "##).unwrap();
+
+        assert!(true);
     }
 
     #[test]
     fn pass_2() {
-        assert!(parse(r#"[[[[[[[[[[[[[[[[[[["Not too deep"]]]]]]]]]]]]]]]]]]]"#).is_ok());
+        parse(r#"[[[[[[[[[[[[[[[[[[["Not too deep"]]]]]]]]]]]]]]]]]]]"#).unwrap();
+
+        assert!(true);
     }
 
     #[test]
     fn pass_3() {
-        assert!(parse(r#"
+        parse(r#"
 
         {
             "JSON Test Pattern pass3": {
@@ -245,6 +249,8 @@ mod json_checker_pass {
             }
         }
 
-        "#).is_ok());
+        "#).unwrap();
+
+        assert!(true);
     }
 }
