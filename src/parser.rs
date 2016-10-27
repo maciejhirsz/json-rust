@@ -17,7 +17,7 @@
 // This makes for some ugly code, but it is faster. Hopefully in the future
 // with MIR support the compiler will get smarter about this.
 
-use std::{ str, slice, char };
+use std::{ str, slice };
 use object::Object;
 use number::Number;
 use { JsonValue, Error, Result };
@@ -29,16 +29,6 @@ const MAX_PRECISION: u64 = 576460752303423500;
 
 // How many nested Objects/Arrays are allowed to be parsed
 const DEPTH_LIMIT: usize = 512;
-
-
-// Position is only used when we stumble upon an unexpected character. We don't
-// track lines during parsing, as that would mean doing unnecessary work.
-// Instead, if an error occurs, we figure out the line and column from the
-// current index position of the parser.
-struct Position {
-    pub line: usize,
-    pub column: usize,
-}
 
 
 // The `Parser` struct keeps track of indexing over our buffer. All niceness
@@ -91,7 +81,7 @@ macro_rules! expect_sequence {
         $(
             match expect_byte!($parser) {
                 $ch => {},
-                ch  => return $parser.unexpected_character(ch),
+                _   => return $parser.unexpected_character(),
             }
         )*
     }
@@ -131,9 +121,9 @@ macro_rules! expect_eof {
         while !$parser.is_eof() {
             match $parser.read_byte() {
                 9 ... 13 | 32 => $parser.bump(),
-                ch            => {
+                _             => {
                     $parser.bump();
-                    return $parser.unexpected_character(ch);
+                    return $parser.unexpected_character();
                 }
             }
         }
@@ -147,7 +137,7 @@ macro_rules! expect {
         let ch = expect_byte_ignore_whitespace!($parser);
 
         if ch != $byte {
-            return $parser.unexpected_character(ch)
+            return $parser.unexpected_character()
         }
     });
 
@@ -158,7 +148,7 @@ macro_rules! expect {
             $(
                 $byte => $then,
             )*
-            _ => return $parser.unexpected_character(ch)
+            _ => return $parser.unexpected_character()
         }
 
     })
@@ -222,7 +212,7 @@ macro_rules! expect_string {
                 break;
             }
 
-            return $parser.unexpected_character(ch);
+            return $parser.unexpected_character();
         }
 
         result
@@ -324,7 +314,7 @@ macro_rules! expect_fraction {
                     }
                 }
             },
-            _ => return $parser.unexpected_character(ch)
+            _ => return $parser.unexpected_character()
         }
 
         loop {
@@ -403,66 +393,28 @@ impl<'a> Parser<'a> {
         self.index = self.index.wrapping_add(1);
     }
 
-    // Figure out the `Position` in the source. This doesn't look like it's
-    // very fast - it probably isn't, and it doesn't really have to be.
-    // This method is only called when an unexpected character error occurs.
-    fn source_position_from_index(&self, index: usize) -> Position {
-        let (bytes, _) = self.source.split_at(index-1);
-
-        Position {
-            line: bytes.lines().count(),
-            column: bytes.lines().last().map_or(1, |line| {
-                line.chars().count() + 1
-            })
-        }
-    }
-
     // So we got an unexpected character, now what? Well, figure out where
     // it is, and throw an error!
-    fn unexpected_character<T: Sized>(&mut self, byte: u8) -> Result<T> {
-        let pos = self.source_position_from_index(self.index);
+    fn unexpected_character<T: Sized>(&mut self) -> Result<T> {
+        let at = self.index - 1;
 
-        // If the first byte is non ASCII (> 127), attempt to read the
-        // codepoint from the following UTF-8 sequence. This can lead
-        // to a fun scenario where an unexpected character error can
-        // produce an end of json or UTF-8 failure error first :).
-        let ch = if byte & 0x80 != 0 {
-            let mut buf = [byte,0,0,0];
-            let mut len = 0usize;
+        let ch = self.source[at..]
+                     .chars()
+                     .next()
+                     .expect("Must have a character");
 
-            if byte & 0xE0 == 0xCE {
-                // 2 bytes, 11 bits
-                len = 2;
-                buf[1] = expect_byte!(self);
-            } else if byte & 0xF0 == 0xE0 {
-                // 3 bytes, 16 bits
-                len = 3;
-                buf[1] = expect_byte!(self);
-                buf[2] = expect_byte!(self);
-            } else if byte & 0xF8 == 0xF0 {
-                // 4 bytes, 21 bits
-                len = 4;
-                buf[1] = expect_byte!(self);
-                buf[2] = expect_byte!(self);
-                buf[3] = expect_byte!(self);
-            }
+        let (lineno, col) = self.source[..at]
+                                .lines()
+                                .enumerate()
+                                .last()
+                                .unwrap_or((0, ""));
 
-            let slice = try!(
-                str::from_utf8(&buf[0..len])
-                .map_err(|_| Error::FailedUtf8Parsing)
-            );
-
-            slice.chars().next().unwrap()
-        } else {
-
-            // codepoints < 128 are safe ASCII compatibles
-            unsafe { char::from_u32_unchecked(byte as u32) }
-        };
+        let colno = col.chars().count();
 
         Err(Error::UnexpectedCharacter {
             ch: ch,
-            line: pos.line,
-            column: pos.column,
+            line: lineno + 1,
+            column: colno + 1,
         })
     }
 
@@ -473,7 +425,7 @@ impl<'a> Parser<'a> {
             b'0' ... b'9' => (ch - b'0'),
             b'a' ... b'f' => (ch + 10 - b'a'),
             b'A' ... b'F' => (ch + 10 - b'A'),
-            ch            => return self.unexpected_character(ch),
+            _             => return self.unexpected_character(),
         } as u32)
     }
 
@@ -575,11 +527,11 @@ impl<'a> Parser<'a> {
                         b't'  => b'\t',
                         b'r'  => b'\r',
                         b'n'  => b'\n',
-                        _     => return self.unexpected_character(escaped)
+                        _     => return self.unexpected_character()
                     };
                     self.buffer.push(escaped);
                 },
-                _ => return self.unexpected_character(ch)
+                _ => return self.unexpected_character()
             }
             ch = expect_byte!(self);
         }
@@ -656,7 +608,7 @@ impl<'a> Parser<'a> {
 
         let mut e = match ch {
             b'0' ... b'9' => (ch - b'0') as i16,
-            _ => return self.unexpected_character(ch),
+            _ => return self.unexpected_character(),
         };
 
         loop {
@@ -708,7 +660,7 @@ impl<'a> Parser<'a> {
                         let mut object = Object::with_capacity(3);
 
                         if ch != b'"' {
-                            return self.unexpected_character(ch)
+                            return self.unexpected_character()
                         }
 
                         object.insert(expect_string!(self), JsonValue::Null);
@@ -733,7 +685,7 @@ impl<'a> Parser<'a> {
                     JsonValue::Number(- match ch {
                         b'0' => allow_number_extensions!(self),
                         b'1' ... b'9' => expect_number!(self, ch),
-                        _    => return self.unexpected_character(ch)
+                        _    => return self.unexpected_character()
                     })
                 }
                 b't' => {
@@ -748,7 +700,7 @@ impl<'a> Parser<'a> {
                     expect_sequence!(self, b'u', b'l', b'l');
                     JsonValue::Null
                 },
-                _    => return self.unexpected_character(ch)
+                _    => return self.unexpected_character()
             };
 
             'popping: loop {
@@ -776,7 +728,7 @@ impl<'a> Parser<'a> {
                                 value = JsonValue::Array(array);
                                 continue 'popping;
                             },
-                            _ => return self.unexpected_character(ch)
+                            _ => return self.unexpected_character()
                         }
                     },
 
@@ -802,7 +754,7 @@ impl<'a> Parser<'a> {
 
                                 continue 'popping;
                             },
-                            _ => return self.unexpected_character(ch)
+                            _ => return self.unexpected_character()
                         }
                     },
                 }

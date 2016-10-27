@@ -318,3 +318,12 @@ fn parse_error_after_depth_limit() {
     assert_eq!(parse(&text), Err(json::Error::ExceededDepthLimit));
 }
 
+#[test]
+fn does_not_panic_on_single_unicode_char() {
+    let bytes = vec![0xC3, 0xA5];
+
+    let string = String::from_utf8(bytes).unwrap();
+
+    assert!(parse(&string).is_err());
+}
+
