@@ -8,8 +8,8 @@ documentation = "http://json.rs/doc/json/"
 license = "MIT/Apache-2.0"
 
 [dev-dependencies]
-serde = "*"
-serde_json = "*"
-serde_macros = "*"
-rustc-serialize = "*"
-num-traits = "*"
+# serde = "*"
+# serde_json = "*"
+# serde_macros = "*"
+# rustc-serialize = "*"
+# num-traits = "*"
