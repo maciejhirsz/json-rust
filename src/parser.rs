@@ -17,7 +17,7 @@
 // This makes for some ugly code, but it is faster. Hopefully in the future
 // with MIR support the compiler will get smarter about this.
 
-use std::{ ptr, mem, str, slice, char };
+use std::{ str, slice };
 use object::Object;
 use number::Number;
 use { JsonValue, Error, Result };
@@ -27,14 +27,8 @@ use { JsonValue, Error, Result };
 const MAX_PRECISION: u64 = 576460752303423500;
 
 
-// Position is only used when we stumble upon an unexpected character. We don't
-// track lines during parsing, as that would mean doing unnecessary work.
-// Instead, if an error occurs, we figure out the line and column from the
-// current index position of the parser.
-struct Position {
-    pub line: usize,
-    pub column: usize,
-}
+// How many nested Objects/Arrays are allowed to be parsed
+const DEPTH_LIMIT: usize = 512;
 
 
 // The `Parser` struct keeps track of indexing over our buffer. All niceness
@@ -87,7 +81,7 @@ macro_rules! expect_sequence {
         $(
             match expect_byte!($parser) {
                 $ch => {},
-                ch  => return $parser.unexpected_character(ch),
+                _   => return $parser.unexpected_character(),
             }
         )*
     }
@@ -121,6 +115,20 @@ macro_rules! expect_byte_ignore_whitespace {
     })
 }
 
+// Expect to find EOF or just whitespaces leading to EOF after a JSON value
+macro_rules! expect_eof {
+    ($parser:ident) => ({
+        while !$parser.is_eof() {
+            match $parser.read_byte() {
+                9 ... 13 | 32 => $parser.bump(),
+                _             => {
+                    $parser.bump();
+                    return $parser.unexpected_character();
+                }
+            }
+        }
+    })
+}
 
 // Expect a particular byte to be next. Also available with a variant
 // creates a `match` expression just to ease some pain.
@@ -129,7 +137,7 @@ macro_rules! expect {
         let ch = expect_byte_ignore_whitespace!($parser);
 
         if ch != $byte {
-            return $parser.unexpected_character(ch)
+            return $parser.unexpected_character()
         }
     });
 
@@ -140,7 +148,7 @@ macro_rules! expect {
             $(
                 $byte => $then,
             )*
-            _ => return $parser.unexpected_character(ch)
+            _ => return $parser.unexpected_character()
         }
 
     })
@@ -204,7 +212,7 @@ macro_rules! expect_string {
                 break;
             }
 
-            return $parser.unexpected_character(ch);
+            return $parser.unexpected_character();
         }
 
         result
@@ -306,7 +314,7 @@ macro_rules! expect_fraction {
                     }
                 }
             },
-            _ => return $parser.unexpected_character(ch)
+            _ => return $parser.unexpected_character()
         }
 
         loop {
@@ -350,52 +358,6 @@ macro_rules! expect_fraction {
     })
 }
 
-
-// This is where the magic happens. This macro will read from the source
-// and try to create an instance of `JsonValue`. Note that it only reads
-// bytes that _begin_ a JSON value, however it can also accept an optional
-// pattern with custom logic. This is used in arrays, which expect either
-// a value or a closing bracket `b"]"`.
-macro_rules! expect_value {
-    {$parser:ident $(, $byte:pat => $then:expr )*} => ({
-        let ch = expect_byte_ignore_whitespace!($parser);
-
-        match ch {
-            $(
-                $byte => $then,
-            )*
-            b'[' => JsonValue::Array(try!($parser.read_array())),
-            b'{' => JsonValue::Object(try!($parser.read_object())),
-            b'"' => expect_string!($parser).into(),
-            b'0' => JsonValue::Number(allow_number_extensions!($parser)),
-            b'1' ... b'9' => {
-                JsonValue::Number(expect_number!($parser, ch))
-            },
-            b'-' => {
-                let ch = expect_byte!($parser);
-                JsonValue::Number(- match ch {
-                    b'0' => allow_number_extensions!($parser),
-                    b'1' ... b'9' => expect_number!($parser, ch),
-                    _    => return $parser.unexpected_character(ch)
-                })
-            }
-            b't' => {
-                expect_sequence!($parser, b'r', b'u', b'e');
-                JsonValue::Boolean(true)
-            },
-            b'f' => {
-                expect_sequence!($parser, b'a', b'l', b's', b'e');
-                JsonValue::Boolean(false)
-            },
-            b'n' => {
-                expect_sequence!($parser, b'u', b'l', b'l');
-                JsonValue::Null
-            },
-            _ => return $parser.unexpected_character(ch)
-        }
-    })
-}
-
 impl<'a> Parser<'a> {
     pub fn new(source: &'a str) -> Self {
         Parser {
@@ -431,66 +393,28 @@ impl<'a> Parser<'a> {
         self.index = self.index.wrapping_add(1);
     }
 
-    // Figure out the `Position` in the source. This doesn't look like it's
-    // very fast - it probably isn't, and it doesn't really have to be.
-    // This method is only called when an unexpected character error occurs.
-    fn source_position_from_index(&self, index: usize) -> Position {
-        let (bytes, _) = self.source.split_at(index-1);
-
-        Position {
-            line: bytes.lines().count(),
-            column: bytes.lines().last().map_or(1, |line| {
-                line.chars().count() + 1
-            })
-        }
-    }
-
     // So we got an unexpected character, now what? Well, figure out where
     // it is, and throw an error!
-    fn unexpected_character<T: Sized>(&mut self, byte: u8) -> Result<T> {
-        let pos = self.source_position_from_index(self.index);
+    fn unexpected_character<T: Sized>(&mut self) -> Result<T> {
+        let at = self.index - 1;
 
-        // If the first byte is non ASCII (> 127), attempt to read the
-        // codepoint from the following UTF-8 sequence. This can lead
-        // to a fun scenario where an unexpected character error can
-        // produce an end of json or UTF-8 failure error first :).
-        let ch = if byte & 0x80 != 0 {
-            let mut buf = [byte,0,0,0];
-            let mut len = 0usize;
+        let ch = self.source[at..]
+                     .chars()
+                     .next()
+                     .expect("Must have a character");
 
-            if byte & 0xE0 == 0xCE {
-                // 2 bytes, 11 bits
-                len = 2;
-                buf[1] = expect_byte!(self);
-            } else if byte & 0xF0 == 0xE0 {
-                // 3 bytes, 16 bits
-                len = 3;
-                buf[1] = expect_byte!(self);
-                buf[2] = expect_byte!(self);
-            } else if byte & 0xF8 == 0xF0 {
-                // 4 bytes, 21 bits
-                len = 4;
-                buf[1] = expect_byte!(self);
-                buf[2] = expect_byte!(self);
-                buf[3] = expect_byte!(self);
-            }
+        let (lineno, col) = self.source[..at]
+                                .lines()
+                                .enumerate()
+                                .last()
+                                .unwrap_or((0, ""));
 
-            let slice = try!(
-                str::from_utf8(&buf[0..len])
-                .map_err(|_| Error::FailedUtf8Parsing)
-            );
-
-            slice.chars().next().unwrap()
-        } else {
-
-            // codepoints < 128 are safe ASCII compatibles
-            unsafe { char::from_u32_unchecked(byte as u32) }
-        };
+        let colno = col.chars().count();
 
         Err(Error::UnexpectedCharacter {
             ch: ch,
-            line: pos.line,
-            column: pos.column,
+            line: lineno + 1,
+            column: colno + 1,
         })
     }
 
@@ -501,7 +425,7 @@ impl<'a> Parser<'a> {
             b'0' ... b'9' => (ch - b'0'),
             b'a' ... b'f' => (ch + 10 - b'a'),
             b'A' ... b'F' => (ch + 10 - b'A'),
-            ch            => return self.unexpected_character(ch),
+            _             => return self.unexpected_character(),
         } as u32)
     }
 
@@ -603,11 +527,11 @@ impl<'a> Parser<'a> {
                         b't'  => b'\t',
                         b'r'  => b'\r',
                         b'n'  => b'\n',
-                        _     => return self.unexpected_character(escaped)
+                        _     => return self.unexpected_character()
                     };
                     self.buffer.push(escaped);
                 },
-                _ => return self.unexpected_character(ch)
+                _ => return self.unexpected_character()
             }
             ch = expect_byte!(self);
         }
@@ -684,7 +608,7 @@ impl<'a> Parser<'a> {
 
         let mut e = match ch {
             b'0' ... b'9' => (ch - b'0') as i16,
-            _ => return self.unexpected_character(ch),
+            _ => return self.unexpected_character(),
         };
 
         loop {
@@ -704,100 +628,144 @@ impl<'a> Parser<'a> {
         Ok(Number::from_parts(true, num, (big_e.saturating_add(e * sign))))
     }
 
-    // Given how compilcated reading numbers and strings is, reading objects
-    // is actually pretty simple.
-    fn read_object(&mut self) -> Result<Object> {
-        let key = expect!{ self,
-            b'}'  => return Ok(Object::new()),
-            b'\"' => expect_string!(self)
-        };
-
-        let mut object = Object::with_capacity(3);
-
-        expect!(self, b':');
-
-        object.insert(key, expect_value!(self));
-
-        loop {
-            let key = expect!{ self,
-                b'}' => break,
-                b',' => {
-                    expect!(self, b'"');
-                    expect_string!(self)
-                }
-            };
-
-            expect!(self, b':');
-
-            object.insert(key, expect_value!(self));
-        }
-
-        Ok(object)
-    }
-
-    // And reading arrays is simpler still!
-    fn read_array(&mut self) -> Result<Vec<JsonValue>> {
-        let first = expect_value!{ self, b']' => return Ok(Vec::new()) };
-
-        let mut array = Vec::with_capacity(2);
-
-        unsafe {
-            // First member can be written to the array without any checks!
-            ptr::copy_nonoverlapping(
-                &first as *const JsonValue,
-                array.as_mut_ptr(),
-                1
-            );
-            mem::forget(first);
-            array.set_len(1);
-        }
-
-        expect!{
-            self,
-            b']' => return Ok(array),
-            b',' => {
-                // Same for the second one!
-                let value = expect_value!(self);
-                unsafe {
-                    ptr::copy_nonoverlapping(
-                        &value as *const JsonValue,
-                        array.as_mut_ptr().offset(1),
-                        1
-                    );
-                    mem::forget(value);
-                    array.set_len(2);
-                }
-            }
-        }
-
-        loop {
-            expect!{ self,
-                b']' => break,
-                b',' => array.push(expect_value!(self))
-            };
-        }
-
-        Ok(array)
-    }
-
     // Parse away!
     fn parse(&mut self) -> Result<JsonValue> {
-        let value = expect_value!(self);
+        let mut stack = Vec::with_capacity(3);
+        let mut ch = expect_byte_ignore_whitespace!(self);
 
-        // We have read whatever value was there, but we need to make sure
-        // there is nothing left to read - if there is, that's an error.
-        while !self.is_eof() {
-            match self.read_byte() {
-                9 ... 13 | 32 => self.bump(),
-                ch            => {
-                    self.bump();
-                    return self.unexpected_character(ch);
+        'parsing: loop {
+            let mut value = match ch {
+                b'[' => {
+                    ch = expect_byte_ignore_whitespace!(self);
+
+                    if ch != b']' {
+                        if stack.len() == DEPTH_LIMIT {
+                            return Err(Error::ExceededDepthLimit);
+                        }
+
+                        stack.push(StackBlock::Array(Vec::with_capacity(2)));
+                        continue 'parsing;
+                    }
+
+                    JsonValue::Array(Vec::new())
+                },
+                b'{' => {
+                    ch = expect_byte_ignore_whitespace!(self);
+
+                    if ch != b'}' {
+                        if stack.len() == DEPTH_LIMIT {
+                            return Err(Error::ExceededDepthLimit);
+                        }
+
+                        let mut object = Object::with_capacity(3);
+
+                        if ch != b'"' {
+                            return self.unexpected_character()
+                        }
+
+                        object.insert(expect_string!(self), JsonValue::Null);
+                        expect!(self, b':');
+
+                        stack.push(StackBlock::Object(object));
+
+                        ch = expect_byte_ignore_whitespace!(self);
+
+                        continue 'parsing;
+                    }
+
+                    JsonValue::Object(Object::new())
+                },
+                b'"' => expect_string!(self).into(),
+                b'0' => JsonValue::Number(allow_number_extensions!(self)),
+                b'1' ... b'9' => {
+                    JsonValue::Number(expect_number!(self, ch))
+                },
+                b'-' => {
+                    let ch = expect_byte!(self);
+                    JsonValue::Number(- match ch {
+                        b'0' => allow_number_extensions!(self),
+                        b'1' ... b'9' => expect_number!(self, ch),
+                        _    => return self.unexpected_character()
+                    })
+                }
+                b't' => {
+                    expect_sequence!(self, b'r', b'u', b'e');
+                    JsonValue::Boolean(true)
+                },
+                b'f' => {
+                    expect_sequence!(self, b'a', b'l', b's', b'e');
+                    JsonValue::Boolean(false)
+                },
+                b'n' => {
+                    expect_sequence!(self, b'u', b'l', b'l');
+                    JsonValue::Null
+                },
+                _    => return self.unexpected_character()
+            };
+
+            'popping: loop {
+                match stack.pop() {
+                    None => {
+                        expect_eof!(self);
+
+                        return Ok(value);
+                    },
+
+                    Some(StackBlock::Array(mut array)) => {
+                        array.push(value);
+
+                        ch = expect_byte_ignore_whitespace!(self);
+
+                        match ch {
+                            b',' => {
+                                stack.push(StackBlock::Array(array));
+
+                                ch = expect_byte_ignore_whitespace!(self);
+
+                                continue 'parsing;
+                            },
+                            b']' => {
+                                value = JsonValue::Array(array);
+                                continue 'popping;
+                            },
+                            _ => return self.unexpected_character()
+                        }
+                    },
+
+                    Some(StackBlock::Object(mut object)) => {
+                        object.override_last(value);
+
+                        ch = expect_byte_ignore_whitespace!(self);
+
+                        match ch {
+                            b',' => {
+                                expect!(self, b'"');
+                                object.insert(expect_string!(self), JsonValue::Null);
+                                expect!(self, b':');
+
+                                stack.push(StackBlock::Object(object));
+
+                                ch = expect_byte_ignore_whitespace!(self);
+
+                                continue 'parsing;
+                            },
+                            b'}' => {
+                                value = JsonValue::Object(object);
+
+                                continue 'popping;
+                            },
+                            _ => return self.unexpected_character()
+                        }
+                    },
                 }
             }
         }
-
-        Ok(value)
     }
+}
+
+enum StackBlock {
+    Array(Vec<JsonValue>),
+    Object(Object),
 }
 
 // All that hard work, and in the end it's just a single function in the API.
