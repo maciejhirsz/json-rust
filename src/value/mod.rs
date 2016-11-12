@@ -476,6 +476,22 @@ impl JsonValue {
         }
     }
 
+    /// Works on `JsonValue::Array` - remove an entry and return the value it held.
+    /// If the method is called on anything but an object or if the index is out of bounds, it
+    /// will return `JsonValue::Null`.
+    pub fn array_remove(&mut self, index: usize) -> JsonValue {
+        match *self {
+            JsonValue::Array(ref mut vec) => {
+                if index < vec.len() {
+                    vec.remove(index)
+                } else {
+                    JsonValue::Null
+                }
+            },
+            _ => JsonValue::Null
+        }
+    }
+
     /// When called on an array or an object, will wipe them clean. When called
     /// on a string will clear the string. Numbers and booleans become null.
     pub fn clear(&mut self) {
