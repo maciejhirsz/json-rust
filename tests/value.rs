@@ -158,6 +158,16 @@ fn array_pop() {
 }
 
 #[test]
+fn array_remove() {
+    let mut data = array![1, 2, 3];
+
+    assert_eq!(data.array_remove(1), 2);
+    assert_eq!(data, array![1, 3]);
+    // Test with index out of bounds
+    assert_eq!(data.array_remove(2), JsonValue::Null);
+}
+
+#[test]
 fn array_members() {
     let data = array![1, "foo"];
 
