@@ -48,15 +48,10 @@ impl PartialEq for Node {
     }
 }
 
-// Because `Node` contains a raw pointer, `Sync` marker is missing. This
-// in turn disables `Sync` for `Object`, and eventually `JsonValue`. Without
-// the `Sync` marker it's impossible to create a static `JsonValue`, which
-// would break all the API that returns `&'static JsonValue::Null`.
-//
-// Since `Node` is not exposed anywhere in the API on it's own, and we manage
-// heap of long keys manually, we just need to tell the compiler we know what
-// we are doing here.
-unsafe impl Sync for Node { }
+// Implement `Sync` and `Send` for `Node` despite the use of raw pointers. The struct
+// itself should be memory safe.
+unsafe impl Sync for Node {}
+unsafe impl Send for Node {}
 
 // FNV-1a implementation
 //
