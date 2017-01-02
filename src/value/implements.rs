@@ -50,7 +50,6 @@ macro_rules! implement {
         }
 
         implement_eq!($to, $from);
-        // implement_extras!($from);
     };
     ($to:ident, $from:ty) => {
         impl From<$from> for JsonValue {
@@ -60,7 +59,6 @@ macro_rules! implement {
         }
 
         implement_eq!($to, $from);
-        // implement_extras!($from);
     }
 }
 
