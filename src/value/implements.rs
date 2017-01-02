@@ -10,39 +10,6 @@ use object::Object;
 
 use { JsonValue, Null };
 
-macro_rules! implement_extras {
-    ($from:ty) => {
-        impl From<Option<$from>> for JsonValue {
-            fn from(val: Option<$from>) -> JsonValue {
-                match val {
-                    Some(value) => value.into(),
-                    None        => Null,
-                }
-            }
-        }
-
-        impl From<Vec<$from>> for JsonValue {
-            fn from(mut val: Vec<$from>) -> JsonValue {
-                JsonValue::Array(
-                    val.drain(..)
-                       .map(|value| value.into())
-                       .collect()
-                )
-            }
-        }
-
-        impl From<Vec<Option<$from>>> for JsonValue {
-            fn from(mut val: Vec<Option<$from>>) -> JsonValue {
-                JsonValue::Array(
-                    val.drain(..)
-                       .map(|item| item.into())
-                       .collect()
-                )
-            }
-        }
-    }
-}
-
 macro_rules! implement_eq {
     ($to:ident, $from:ty) => {
         impl PartialEq<$from> for JsonValue {
@@ -83,7 +50,7 @@ macro_rules! implement {
         }
 
         implement_eq!($to, $from);
-        implement_extras!($from);
+        // implement_extras!($from);
     };
     ($to:ident, $from:ty) => {
         impl From<$from> for JsonValue {
@@ -93,7 +60,7 @@ macro_rules! implement {
         }
 
         implement_eq!($to, $from);
-        implement_extras!($from);
+        // implement_extras!($from);
     }
 }
 
@@ -107,12 +74,24 @@ impl<'a> From<&'a str> for JsonValue {
     }
 }
 
-impl<'a> From<Option<&'a str>> for JsonValue {
-    fn from(val: Option<&'a str>) -> JsonValue {
+impl<T: Into<JsonValue>> From<Option<T>> for JsonValue {
+    fn from(val: Option<T>) -> JsonValue {
         match val {
-            Some(value) => value.into(),
-            None        => Null,
+            Some(val) => val.into(),
+            None      => JsonValue::Null,
         }
+    }
+}
+
+impl<T: Into<JsonValue>> From<Vec<T>> for JsonValue {
+    fn from(val: Vec<T>) -> JsonValue {
+        let mut array = Vec::with_capacity(val.len());
+
+        for val in val {
+            array.push(val.into());
+        }
+
+        JsonValue::Array(array)
     }
 }
 
@@ -125,15 +104,6 @@ impl From<HashMap<String, JsonValue>> for JsonValue {
         }
 
         JsonValue::Object(object)
-    }
-}
-
-impl From<Option<HashMap<String, JsonValue>>> for JsonValue {
-    fn from(val: Option<HashMap<String, JsonValue>>) -> JsonValue {
-        match val {
-            Some(value) => value.into(),
-            None        => Null,
-        }
     }
 }
 
@@ -150,24 +120,6 @@ impl From<BTreeMap<String, JsonValue>> for JsonValue {
         }
 
         JsonValue::Object(object)
-    }
-}
-
-impl From<Option<BTreeMap<String, JsonValue>>> for JsonValue {
-    fn from(val: Option<BTreeMap<String, JsonValue>>) -> JsonValue {
-        match val {
-            Some(value) => value.into(),
-            None        => Null,
-        }
-    }
-}
-
-impl From<Option<JsonValue>> for JsonValue {
-    fn from(val: Option<JsonValue>) -> JsonValue {
-        match val {
-            Some(value) => value,
-            None        => Null,
-        }
     }
 }
 
@@ -226,5 +178,4 @@ implement!(Number, f32 as num);
 implement!(Number, f64 as num);
 implement!(Number, Number);
 implement!(Object, Object);
-implement!(Array, Vec<JsonValue>);
 implement!(Boolean, bool);
