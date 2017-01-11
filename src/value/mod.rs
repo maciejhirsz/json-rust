@@ -586,10 +586,7 @@ impl<'a> Index<&'a str> for JsonValue {
 
     fn index(&self, index: &str) -> &JsonValue {
         match *self {
-            JsonValue::Object(ref object) => match object.get(index) {
-                Some(value) => value,
-                _ => &NULL
-            },
+            JsonValue::Object(ref object) => &object[index],
             _ => &NULL
         }
     }
@@ -631,10 +628,7 @@ impl<'a> IndexMut<&'a str> for JsonValue {
     fn index_mut(&mut self, index: &str) -> &mut JsonValue {
         match *self {
             JsonValue::Object(ref mut object) => {
-                if object.get(index).is_none() {
-                    object.insert(index, JsonValue::Null);
-                }
-                object.get_mut(index).unwrap()
+                &mut object[index]
             },
             _ => {
                 *self = JsonValue::new_object();

@@ -1,8 +1,10 @@
 use std::{ ptr, mem, str, slice, fmt };
+use std::ops::{ Index, IndexMut, Deref };
 
 use value::JsonValue;
 
 const KEY_BUF_LEN: usize = 32;
+static NULL: JsonValue = JsonValue::Null;
 
 struct Node {
     // Internal buffer to store keys that fit within `KEY_BUF_LEN`,
@@ -573,5 +575,92 @@ impl<'a> DoubleEndedIterator for IterMut<'a> {
     #[inline(always)]
     fn next_back(&mut self) -> Option<Self::Item> {
         self.inner.next_back().map(|node| (node.key_str(), &mut node.value))
+    }
+}
+
+/// Implements indexing by `&str` to easily access object members:
+///
+/// ## Example
+///
+/// ```
+/// # #[macro_use]
+/// # extern crate json;
+/// # use json::JsonValue;
+/// #
+/// # fn main() {
+/// let value = object!{
+///     "foo" => "bar"
+/// };
+///
+/// if let JsonValue::Object(object) = value {
+///   assert!(object["foo"] == "bar");
+/// }
+/// # }
+/// ```
+// TODO: doc
+impl<'a> Index<&'a str> for Object {
+    type Output = JsonValue;
+
+    fn index(&self, index: &str) -> &JsonValue {
+            match self.get(index) {
+                Some(value) => value,
+                _ => &NULL
+            }
+    }
+}
+
+impl Index<String> for Object {
+    type Output = JsonValue;
+
+    fn index(&self, index: String) -> &JsonValue {
+        self.index(index.deref())
+    }
+}
+
+impl<'a> Index<&'a String> for Object {
+    type Output = JsonValue;
+
+    fn index(&self, index: &String) -> &JsonValue {
+        self.index(index.deref())
+    }
+}
+
+/// Implements mutable indexing by `&str` to easily modify object members:
+///
+/// ## Example
+///
+/// ```
+/// # #[macro_use]
+/// # extern crate json;
+/// # use json::JsonValue;
+/// #
+/// # fn main() {
+/// let value = object!{};
+///
+/// if let JsonValue::Object(mut object) = value {
+///   object["foo"] = 42.into();
+///
+///   assert!(object["foo"] == 42);
+/// }
+/// # }
+/// ```
+impl<'a> IndexMut<&'a str> for Object {
+    fn index_mut(&mut self, index: &str) -> &mut JsonValue {
+        if self.get(index).is_none() {
+            self.insert(index, JsonValue::Null);
+        }
+        self.get_mut(index).unwrap()
+    }
+}
+
+impl IndexMut<String> for Object {
+    fn index_mut(&mut self, index: String) -> &mut JsonValue {
+        self.index_mut(index.deref())
+    }
+}
+
+impl<'a> IndexMut<&'a String> for Object {
+    fn index_mut(&mut self, index: &String) -> &mut JsonValue {
+        self.index_mut(index.deref())
     }
 }
