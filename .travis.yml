@@ -15,5 +15,4 @@ matrix:
     - rust: nightly
 
 os:
-  - osx
   - linux

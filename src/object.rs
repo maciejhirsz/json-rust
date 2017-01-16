@@ -113,16 +113,14 @@ impl Node {
 
     #[inline(always)]
     fn new(value: JsonValue, hash: u64, len: usize) -> Node {
-        unsafe {
-            Node {
-                key_buf: mem::uninitialized(),
-                key_len: len,
-                key_ptr: mem::uninitialized(),
-                key_hash: hash,
-                value: value,
-                left: 0,
-                right: 0,
-            }
+        Node {
+            key_buf: [0; KEY_BUF_LEN],
+            key_len: len,
+            key_ptr: ptr::null_mut(),
+            key_hash: hash,
+            value: value,
+            left: 0,
+            right: 0,
         }
     }
 
@@ -602,10 +600,10 @@ impl<'a> Index<&'a str> for Object {
     type Output = JsonValue;
 
     fn index(&self, index: &str) -> &JsonValue {
-            match self.get(index) {
-                Some(value) => value,
-                _ => &NULL
-            }
+        match self.get(index) {
+            Some(value) => value,
+            _ => &NULL
+        }
     }
 }
 
