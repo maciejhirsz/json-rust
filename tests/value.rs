@@ -158,6 +158,16 @@ fn array_pop() {
 }
 
 #[test]
+fn array_remove() {
+    let mut data = array![1, 2, 3];
+
+    assert_eq!(data.array_remove(1), 2);
+    assert_eq!(data, array![1, 3]);
+    // Test with index out of bounds
+    assert_eq!(data.array_remove(2), JsonValue::Null);
+}
+
+#[test]
 fn array_members() {
     let data = array![1, "foo"];
 
@@ -417,6 +427,83 @@ fn index_mut_by_string_ref() {
     data[key_ref] = "bar".into();
 
     assert_eq!(data["foo"], "bar");
+}
+
+#[test]
+fn object_index_by_str() {
+    let val = object!{
+        "foo" => "bar"
+    };
+    if let JsonValue::Object(data) = val {
+        assert_eq!(data["foo"], "bar");
+    }
+}
+
+#[test]
+fn object_index_by_string() {
+    let val = object!{
+        "foo" => "bar"
+    };
+
+    if let JsonValue::Object(data) = val {
+        assert_eq!(data["foo".to_string()], "bar");
+    }
+}
+
+#[test]
+fn object_index_by_string_ref() {
+    let val = object!{
+        "foo" => "bar"
+    };
+
+    let key = "foo".to_string();
+    let ref key_ref = key;
+
+    if let JsonValue::Object(data) = val {
+        assert_eq!(data[key_ref], "bar");
+    }
+}
+
+#[test]
+fn object_index_mut_by_str() {
+    let val = object!{
+        "foo" => Null
+    };
+
+    if let JsonValue::Object(mut data) = val {
+        data["foo"] = "bar".into();
+
+        assert_eq!(data["foo"], "bar");
+    }
+}
+
+#[test]
+fn object_index_mut_by_string() {
+    let val = object!{
+        "foo" => Null
+    };
+
+    if let JsonValue::Object(mut data) = val {
+        data["foo".to_string()] = "bar".into();
+
+        assert_eq!(data["foo"], "bar");
+    }
+}
+
+#[test]
+fn object_index_mut_by_string_ref() {
+    let val = object!{
+        "foo" => Null
+    };
+
+    let key = "foo".to_string();
+    let ref key_ref = key;
+
+    if let JsonValue::Object(mut data) = val {
+        data[key_ref] = "bar".into();
+
+        assert_eq!(data["foo"], "bar");
+    }
 }
 
 #[test]

@@ -1,8 +1,10 @@
 use std::{ ptr, mem, str, slice, fmt };
+use std::ops::{ Index, IndexMut, Deref };
 
 use value::JsonValue;
 
 const KEY_BUF_LEN: usize = 32;
+static NULL: JsonValue = JsonValue::Null;
 
 struct Node {
     // Internal buffer to store keys that fit within `KEY_BUF_LEN`,
@@ -48,15 +50,10 @@ impl PartialEq for Node {
     }
 }
 
-// Because `Node` contains a raw pointer, `Sync` marker is missing. This
-// in turn disables `Sync` for `Object`, and eventually `JsonValue`. Without
-// the `Sync` marker it's impossible to create a static `JsonValue`, which
-// would break all the API that returns `&'static JsonValue::Null`.
-//
-// Since `Node` is not exposed anywhere in the API on it's own, and we manage
-// heap of long keys manually, we just need to tell the compiler we know what
-// we are doing here.
-unsafe impl Sync for Node { }
+// Implement `Sync` and `Send` for `Node` despite the use of raw pointers. The struct
+// itself should be memory safe.
+unsafe impl Sync for Node {}
+unsafe impl Send for Node {}
 
 // FNV-1a implementation
 //
@@ -116,16 +113,14 @@ impl Node {
 
     #[inline(always)]
     fn new(value: JsonValue, hash: u64, len: usize) -> Node {
-        unsafe {
-            Node {
-                key_buf: mem::uninitialized(),
-                key_len: len,
-                key_ptr: mem::uninitialized(),
-                key_hash: hash,
-                value: value,
-                left: 0,
-                right: 0,
-            }
+        Node {
+            key_buf: [0; KEY_BUF_LEN],
+            key_len: len,
+            key_ptr: ptr::null_mut(),
+            key_hash: hash,
+            value: value,
+            left: 0,
+            right: 0,
         }
     }
 
@@ -578,5 +573,92 @@ impl<'a> DoubleEndedIterator for IterMut<'a> {
     #[inline(always)]
     fn next_back(&mut self) -> Option<Self::Item> {
         self.inner.next_back().map(|node| (node.key_str(), &mut node.value))
+    }
+}
+
+/// Implements indexing by `&str` to easily access object members:
+///
+/// ## Example
+///
+/// ```
+/// # #[macro_use]
+/// # extern crate json;
+/// # use json::JsonValue;
+/// #
+/// # fn main() {
+/// let value = object!{
+///     "foo" => "bar"
+/// };
+///
+/// if let JsonValue::Object(object) = value {
+///   assert!(object["foo"] == "bar");
+/// }
+/// # }
+/// ```
+// TODO: doc
+impl<'a> Index<&'a str> for Object {
+    type Output = JsonValue;
+
+    fn index(&self, index: &str) -> &JsonValue {
+        match self.get(index) {
+            Some(value) => value,
+            _ => &NULL
+        }
+    }
+}
+
+impl Index<String> for Object {
+    type Output = JsonValue;
+
+    fn index(&self, index: String) -> &JsonValue {
+        self.index(index.deref())
+    }
+}
+
+impl<'a> Index<&'a String> for Object {
+    type Output = JsonValue;
+
+    fn index(&self, index: &String) -> &JsonValue {
+        self.index(index.deref())
+    }
+}
+
+/// Implements mutable indexing by `&str` to easily modify object members:
+///
+/// ## Example
+///
+/// ```
+/// # #[macro_use]
+/// # extern crate json;
+/// # use json::JsonValue;
+/// #
+/// # fn main() {
+/// let value = object!{};
+///
+/// if let JsonValue::Object(mut object) = value {
+///   object["foo"] = 42.into();
+///
+///   assert!(object["foo"] == 42);
+/// }
+/// # }
+/// ```
+impl<'a> IndexMut<&'a str> for Object {
+    fn index_mut(&mut self, index: &str) -> &mut JsonValue {
+        if self.get(index).is_none() {
+            self.insert(index, JsonValue::Null);
+        }
+        self.get_mut(index).unwrap()
+    }
+}
+
+impl IndexMut<String> for Object {
+    fn index_mut(&mut self, index: String) -> &mut JsonValue {
+        self.index_mut(index.deref())
+    }
+}
+
+impl<'a> IndexMut<&'a String> for Object {
+    fn index_mut(&mut self, index: &String) -> &mut JsonValue {
+        self.index_mut(index.deref())
     }
 }

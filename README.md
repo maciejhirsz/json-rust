@@ -2,9 +2,9 @@
 
 # json-rust
 
-![](https://travis-ci.org/maciejhirsz/json-rust.svg)
-![](https://img.shields.io/crates/v/json.svg)
-![](https://img.shields.io/crates/l/json.svg)
+[![Travis shield](https://travis-ci.org/maciejhirsz/json-rust.svg)](https://travis-ci.org/maciejhirsz/json-rust)
+[![Crates.io version shield](https://img.shields.io/crates/v/json.svg)](https://crates.io/crates/json)
+[![Crates.io license shield](https://img.shields.io/crates/l/json.svg)](https://crates.io/crates/json)
 
 Parse and serialize [JSON](http://json.org/) with ease.
 

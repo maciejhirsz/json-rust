@@ -476,6 +476,22 @@ impl JsonValue {
         }
     }
 
+    /// Works on `JsonValue::Array` - remove an entry and return the value it held.
+    /// If the method is called on anything but an object or if the index is out of bounds, it
+    /// will return `JsonValue::Null`.
+    pub fn array_remove(&mut self, index: usize) -> JsonValue {
+        match *self {
+            JsonValue::Array(ref mut vec) => {
+                if index < vec.len() {
+                    vec.remove(index)
+                } else {
+                    JsonValue::Null
+                }
+            },
+            _ => JsonValue::Null
+        }
+    }
+
     /// When called on an array or an object, will wipe them clean. When called
     /// on a string will clear the string. Numbers and booleans become null.
     pub fn clear(&mut self) {
@@ -570,10 +586,7 @@ impl<'a> Index<&'a str> for JsonValue {
 
     fn index(&self, index: &str) -> &JsonValue {
         match *self {
-            JsonValue::Object(ref object) => match object.get(index) {
-                Some(value) => value,
-                _ => &NULL
-            },
+            JsonValue::Object(ref object) => &object[index],
             _ => &NULL
         }
     }
@@ -615,10 +628,7 @@ impl<'a> IndexMut<&'a str> for JsonValue {
     fn index_mut(&mut self, index: &str) -> &mut JsonValue {
         match *self {
             JsonValue::Object(ref mut object) => {
-                if object.get(index).is_none() {
-                    object.insert(index, JsonValue::Null);
-                }
-                object.get_mut(index).unwrap()
+                &mut object[index]
             },
             _ => {
                 *self = JsonValue::new_object();
