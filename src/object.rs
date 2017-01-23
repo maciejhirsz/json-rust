@@ -6,55 +6,6 @@ use value::JsonValue;
 const KEY_BUF_LEN: usize = 32;
 static NULL: JsonValue = JsonValue::Null;
 
-struct Node {
-    // Internal buffer to store keys that fit within `KEY_BUF_LEN`,
-    // otherwise this field will contain garbage.
-    pub key_buf: [u8; KEY_BUF_LEN],
-
-    // Length of the key in bytes.
-    pub key_len: usize,
-
-    // Cached raw pointer to the key, so that we can cheaply construct
-    // a `&str` slice from the `Node` without checking if the key is
-    // allocated separately on the heap, or in the `key_buf`.
-    pub key_ptr: *mut u8,
-
-    // A hash of the key, explanation below.
-    pub key_hash: u64,
-
-    // Value stored.
-    pub value: JsonValue,
-
-    // Store vector index pointing to the `Node` for which `key_hash` is smaller
-    // than that of this `Node`.
-    // Will default to 0 as root node can't be referrenced anywhere else.
-    pub left: usize,
-
-    // Same as above but for `Node`s with hash larger than this one. If the
-    // hash is the same, but keys are different, the lookup will default
-    // to the right branch as well.
-    pub right: usize,
-}
-
-impl fmt::Debug for Node {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(&(self.key_str(), &self.value, self.left, self.right), f)
-    }
-}
-
-impl PartialEq for Node {
-    fn eq(&self, other: &Node) -> bool {
-        self.key_hash == other.key_hash &&
-        self.key()    == other.key()    &&
-        self.value    == other.value
-    }
-}
-
-// Implement `Sync` and `Send` for `Node` despite the use of raw pointers. The struct
-// itself should be memory safe.
-unsafe impl Sync for Node {}
-unsafe impl Send for Node {}
-
 // FNV-1a implementation
 //
 // While the `Object` is implemented as a binary tree, not a hash table, the
@@ -86,7 +37,7 @@ unsafe impl Send for Node {}
 // 15043800650308385697  <-- 4th
 // 15043799550796757486  <-- 3rd
 // ```
-#[inline(always)]
+#[inline]
 fn hash_key(key: &[u8]) -> u64 {
     let mut hash: u64 = 0xcbf29ce484222325;
     for byte in key {
@@ -96,79 +47,98 @@ fn hash_key(key: &[u8]) -> u64 {
     hash
 }
 
-impl Node {
-    #[inline(always)]
-    fn key<'a>(&self) -> &'a [u8] {
+struct Key {
+    // Internal buffer to store keys that fit within `KEY_BUF_LEN`,
+    // otherwise this field will contain garbage.
+    pub buf: [u8; KEY_BUF_LEN],
+
+    // Length of the key in bytes.
+    pub len: usize,
+
+    // Cached raw pointer to the key, so that we can cheaply construct
+    // a `&str` slice from the `Node` without checking if the key is
+    // allocated separately on the heap, or in the `key_buf`.
+    pub ptr: *mut u8,
+
+    // A hash of the key, explanation below.
+    pub hash: u64,
+}
+
+impl Key {
+    #[inline]
+    fn new(hash: u64, len: usize) -> Self {
+        Key {
+            buf: [0; KEY_BUF_LEN],
+            len: len,
+            ptr: ptr::null_mut(),
+            hash: hash
+        }
+    }
+
+    #[inline]
+    fn as_bytes(&self) -> &[u8] {
         unsafe {
-            slice::from_raw_parts(self.key_ptr, self.key_len)
+            slice::from_raw_parts(self.ptr, self.len)
         }
     }
 
-    #[inline(always)]
-    fn key_str<'a>(&self) -> &'a str {
+    #[inline]
+    fn as_str(&self) -> &str {
         unsafe {
-            str::from_utf8_unchecked(self.key())
+            str::from_utf8_unchecked(self.as_bytes())
         }
     }
 
-    #[inline(always)]
-    fn new(value: JsonValue, hash: u64, len: usize) -> Node {
-        Node {
-            key_buf: [0; KEY_BUF_LEN],
-            key_len: len,
-            key_ptr: ptr::null_mut(),
-            key_hash: hash,
-            value: value,
-            left: 0,
-            right: 0,
-        }
-    }
-
-    // While `new` crates a fresh `Node` instance, it cannot do much about
-    // the `key_*` fields. In the case a short key can be stored on the `Node`
-    // itself, only once the `Node` is allocated on the heap can we obtain a
-    // persisting pointer to it.
-    #[inline(always)]
-    fn attach_key(&mut self, key: &[u8]) {
-        if self.key_len <= KEY_BUF_LEN {
+    // The `buf` on the `Key` can only be filled after the struct
+    // is already on the `Vec`'s heap (along with the `Node`).
+    // For that reason it's not set in `Key::new` but only after
+    // the `Node` is created and allocated.
+    #[inline]
+    fn attach(&mut self, key: &[u8]) {
+        if self.len <= KEY_BUF_LEN {
             unsafe {
                 ptr::copy_nonoverlapping(
                     key.as_ptr(),
-                    self.key_buf.as_mut_ptr(),
-                    self.key_len
+                    self.buf.as_mut_ptr(),
+                    self.len
                 );
             }
-            self.key_ptr = self.key_buf.as_mut_ptr();
+            self.ptr = self.buf.as_mut_ptr();
         } else {
             let mut heap = key.to_vec();
-            self.key_ptr = heap.as_mut_ptr();
+            self.ptr = heap.as_mut_ptr();
             mem::forget(heap);
         }
     }
 
     // Since we store `Node`s on a vector, it will suffer from reallocation.
-    // Whenever that happens, `key_ptr` for short keys will turn into dangling
+    // Whenever that happens, `key.ptr` for short keys will turn into dangling
     // pointers and will need to be re-cached.
-    #[inline(always)]
-    fn fix_key_ptr(&mut self) {
-        if self.key_len <= KEY_BUF_LEN {
-            self.key_ptr = self.key_buf.as_mut_ptr();
+    #[inline]
+    fn fix_ptr(&mut self) {
+        if self.len <= KEY_BUF_LEN {
+            self.ptr = self.buf.as_mut_ptr();
         }
     }
 }
 
-// Because long keys _can_ be stored separately from the `Node` on heap,
-// it's essential to clean up the heap allocation when the `Node` is dropped.
-impl Drop for Node {
+// Implement `Sync` and `Send` for `Key` despite the use of raw pointers. The struct
+// itself should be memory safe.
+unsafe impl Sync for Key {}
+unsafe impl Send for Key {}
+
+// Because long keys _can_ be stored separately from the `Key` on heap,
+// it's essential to clean up the heap allocation when the `Key` is dropped.
+impl Drop for Key {
     fn drop(&mut self) {
         unsafe {
-            if self.key_len > KEY_BUF_LEN {
+            if self.len > KEY_BUF_LEN {
                 // Construct a `Vec` out of the `key_ptr`. Since the key is
                 // always allocated from a slice, the capacity is equal to length.
                 let heap = Vec::from_raw_parts(
-                    self.key_ptr,
-                    self.key_len,
-                    self.key_len
+                    self.ptr,
+                    self.len,
+                    self.len
                 );
 
                 // Now that we have an owned `Vec<u8>`, drop it.
@@ -180,34 +150,71 @@ impl Drop for Node {
 
 // Just like with `Drop`, `Clone` needs a custom implementation that accounts
 // for the fact that key _can_ be separately heap allcated.
-impl Clone for Node {
+impl Clone for Key {
     fn clone(&self) -> Self {
-        unsafe {
-            if self.key_len > KEY_BUF_LEN {
-                let mut heap = self.key().to_vec();
-                let ptr = heap.as_mut_ptr();
-                mem::forget(heap);
+        if self.len > KEY_BUF_LEN {
+            let mut heap = self.as_bytes().to_vec();
+            let ptr = heap.as_mut_ptr();
+            mem::forget(heap);
 
-                Node {
-                    key_buf: mem::uninitialized(),
-                    key_len: self.key_len,
-                    key_ptr: ptr,
-                    key_hash: self.key_hash,
-                    value: self.value.clone(),
-                    left: self.left,
-                    right: self.right,
-                }
-            } else {
-                Node {
-                    key_buf: self.key_buf,
-                    key_len: self.key_len,
-                    key_ptr: mem::uninitialized(),
-                    key_hash: self.key_hash,
-                    value: self.value.clone(),
-                    left: self.left,
-                    right: self.right,
-                }
+            Key {
+                buf: [0; KEY_BUF_LEN],
+                len: self.len,
+                ptr: ptr,
+                hash: self.hash,
             }
+        } else {
+            Key {
+                buf: self.buf,
+                len: self.len,
+                ptr: ptr::null_mut(), // requires a `fix_ptr` call after `Node` is on the heap
+                hash: self.hash,
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
+struct Node {
+    // String-esque key abstraction
+    pub key: Key,
+
+    // Value stored.
+    pub value: JsonValue,
+
+    // Store vector index pointing to the `Node` for which `key_hash` is smaller
+    // than that of this `Node`.
+    // Will default to 0 as root node can't be referenced anywhere else.
+    pub left: usize,
+
+    // Same as above but for `Node`s with hash larger than this one. If the
+    // hash is the same, but keys are different, the lookup will default
+    // to the right branch as well.
+    pub right: usize,
+}
+
+impl fmt::Debug for Node {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(&(self.key.as_str(), &self.value, self.left, self.right), f)
+    }
+}
+
+impl PartialEq for Node {
+    fn eq(&self, other: &Node) -> bool {
+        self.key.hash       == other.key.hash       &&
+        self.key.as_bytes() == other.key.as_bytes() &&
+        self.value          == other.value
+    }
+}
+
+impl Node {
+    #[inline]
+    fn new(value: JsonValue, hash: u64, len: usize) -> Node {
+        Node {
+            key: Key::new(hash, len),
+            value: value,
+            left: 0,
+            right: 0,
         }
     }
 }
@@ -239,18 +246,9 @@ impl Object {
         }
     }
 
-    #[inline(always)]
-    fn node_at_index<'a>(&self, index: usize) -> &'a Node {
-        unsafe {
-            &*self.store.as_ptr().offset(index as isize)
-        }
-    }
-
-    #[inline(always)]
-    fn node_at_index_mut<'a>(&mut self, index: usize) -> &'a mut Node {
-        unsafe {
-            &mut *self.store.as_mut_ptr().offset(index as isize)
-        }
+    #[inline]
+    fn node_at_index_mut(&mut self, index: usize) -> *mut Node {
+        unsafe { self.store.as_mut_ptr().offset(index as isize) }
     }
 
     #[inline(always)]
@@ -278,15 +276,17 @@ impl Object {
                 // the owned value, else we may run into use after free.
                 mem::forget(node);
             }
-            self.node_at_index_mut(index).attach_key(key);
+
+            unsafe { self.store.get_unchecked_mut(index).key.attach(key) };
         } else {
             self.store.push(Node::new(value, hash, key.len()));
-            self.node_at_index_mut(index).attach_key(key);
+
+            unsafe { self.store.get_unchecked_mut(index).key.attach(key) };
 
             // Index up to the index (old length), we don't need to fix
             // anything on the Node that just got pushed.
-            for i in 0 .. index {
-                self.node_at_index_mut(i).fix_key_ptr();
+            for node in self.store.iter_mut().take(index) {
+                node.key.fix_ptr();
             }
         }
 
@@ -303,21 +303,21 @@ impl Object {
 
         if self.store.len() == 0 {
             self.store.push(Node::new(value, hash, key.len()));
-            self.store[0].attach_key(key);
+            self.store[0].key.attach(key);
             return;
         }
 
-        let mut node = self.node_at_index_mut(0);
+        let mut node = unsafe { &mut *self.node_at_index_mut(0) };
         let mut parent = 0;
 
         loop {
-            if hash == node.key_hash && key == node.key() {
+            if hash == node.key.hash && key == node.key.as_bytes() {
                 node.value = value;
                 return;
-            } else if hash < node.key_hash {
+            } else if hash < node.key.hash {
                 if node.left != 0 {
                     parent = node.left;
-                    node = self.node_at_index_mut(node.left);
+                    node = unsafe { &mut *self.node_at_index_mut(node.left) };
                     continue;
                 }
                 self.store[parent].left = self.add_node(key, value, hash);
@@ -325,7 +325,7 @@ impl Object {
             } else {
                 if node.right != 0 {
                     parent = node.right;
-                    node = self.node_at_index_mut(node.right);
+                    node = unsafe { &mut *self.node_at_index_mut(node.right) };
                     continue;
                 }
                 self.store[parent].right = self.add_node(key, value, hash);
@@ -349,21 +349,21 @@ impl Object {
         let key = key.as_bytes();
         let hash = hash_key(key);
 
-        let mut node = self.node_at_index(0);
+        let mut node = unsafe { self.store.get_unchecked(0) };
 
         loop {
-            if hash == node.key_hash && key == node.key() {
+            if hash == node.key.hash && key == node.key.as_bytes() {
                 return Some(&node.value);
-            } else if hash < node.key_hash {
+            } else if hash < node.key.hash {
                 if node.left == 0 {
                     return None;
                 }
-                node = self.node_at_index(node.left);
+                node = unsafe { self.store.get_unchecked(node.left) };
             } else {
                 if node.right == 0 {
                     return None;
                 }
-                node = self.node_at_index(node.right);
+                node = unsafe { self.store.get_unchecked(node.right) };
             }
         }
     }
@@ -376,23 +376,32 @@ impl Object {
         let key = key.as_bytes();
         let hash = hash_key(key);
 
-        let mut node = self.node_at_index_mut(0);
+        let mut index = 0;
+        {
+            let mut node = unsafe { self.store.get_unchecked(0) };
 
-        loop {
-            if hash == node.key_hash && key == node.key() {
-                return Some(&mut node.value);
-            } else if hash < node.key_hash {
-                if node.left == 0 {
-                    return None;
+            loop {
+                if hash == node.key.hash && key == node.key.as_bytes() {
+                    break;
+                } else if hash < node.key.hash {
+                    if node.left == 0 {
+                        return None;
+                    }
+                    index = node.left;
+                    node = unsafe { self.store.get_unchecked(node.left) };
+                } else {
+                    if node.right == 0 {
+                        return None;
+                    }
+                    index = node.right;
+                    node = unsafe { self.store.get_unchecked(node.right) };
                 }
-                node = self.node_at_index_mut(node.left);
-            } else {
-                if node.right == 0 {
-                    return None;
-                }
-                node = self.node_at_index_mut(node.right);
             }
         }
+
+        let node = unsafe { self.store.get_unchecked_mut(index) };
+
+        Some(&mut node.value)
     }
 
     /// Attempts to remove the value behind `key`, if successful
@@ -404,26 +413,28 @@ impl Object {
 
         let key = key.as_bytes();
         let hash = hash_key(key);
-
-        let mut node = self.node_at_index_mut(0);
         let mut index = 0;
 
-        // Try to find the node
-        loop {
-            if hash == node.key_hash && key == node.key() {
-                break;
-            } else if hash < node.key_hash {
-                if node.left == 0 {
-                    return None;
+        {
+            let mut node = unsafe { self.store.get_unchecked(0) };
+
+            // Try to find the node
+            loop {
+                if hash == node.key.hash && key == node.key.as_bytes() {
+                    break;
+                } else if hash < node.key.hash {
+                    if node.left == 0 {
+                        return None;
+                    }
+                    index = node.left;
+                    node = unsafe { self.store.get_unchecked(node.left) };
+                } else {
+                    if node.right == 0 {
+                        return None;
+                    }
+                    index = node.right;
+                    node = unsafe { self.store.get_unchecked(node.right) };
                 }
-                index = node.left;
-                node = self.node_at_index_mut(node.left);
-            } else {
-                if node.right == 0 {
-                    return None;
-                }
-                index = node.right;
-                node = self.node_at_index_mut(node.right);
             }
         }
 
@@ -432,24 +443,23 @@ impl Object {
         // in JSON shouldn't happen very often if at all. Optimizing this
         // can wait for better times.
         let mut new_object = Object::with_capacity(self.store.len() - 1);
-        let mut removed: JsonValue = unsafe { mem::uninitialized() };
+        let mut removed = None;
 
         for (i, node) in self.store.iter_mut().enumerate() {
             if i == index {
                 // Rust doesn't like us moving things from `node`, even if
                 // it is owned. Replace fixes that.
-                removed = mem::replace(&mut node.value, JsonValue::Null);
+                removed = Some(mem::replace(&mut node.value, JsonValue::Null));
             } else {
-                new_object.insert(
-                    node.key_str(),
-                    mem::replace(&mut node.value, JsonValue::Null)
-                );
+                let value = mem::replace(&mut node.value, JsonValue::Null);
+
+                new_object.insert(node.key.as_str(), value);
             }
         }
 
         mem::swap(self, &mut new_object);
 
-        Some(removed)
+        removed
     }
 
     #[inline(always)]
@@ -489,7 +499,7 @@ impl Clone for Object {
         let mut store = self.store.clone();
 
         for node in store.iter_mut() {
-            node.fix_key_ptr();
+            node.key.fix_ptr();
         }
 
         Object {
@@ -536,14 +546,14 @@ impl<'a> Iterator for Iter<'a> {
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|node| (node.key_str(), &node.value))
+        self.inner.next().map(|node| (node.key.as_str(), &node.value))
     }
 }
 
 impl<'a> DoubleEndedIterator for Iter<'a> {
     #[inline(always)]
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner.next_back().map(|node| (node.key_str(), &node.value))
+        self.inner.next_back().map(|node| (node.key.as_str(), &node.value))
     }
 }
 
@@ -565,14 +575,14 @@ impl<'a> Iterator for IterMut<'a> {
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|node| (node.key_str(), &mut node.value))
+        self.inner.next().map(|node| (node.key.as_str(), &mut node.value))
     }
 }
 
 impl<'a> DoubleEndedIterator for IterMut<'a> {
     #[inline(always)]
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner.next_back().map(|node| (node.key_str(), &mut node.value))
+        self.inner.next_back().map(|node| (node.key.as_str(), &mut node.value))
     }
 }
 
