@@ -327,3 +327,9 @@ fn does_not_panic_on_single_unicode_char() {
     assert!(parse(&string).is_err());
 }
 
+#[test]
+fn does_not_panic_on_single_zero() {
+    let source = "0";
+
+    parse(source).unwrap();
+}
