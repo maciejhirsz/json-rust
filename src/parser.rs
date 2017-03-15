@@ -281,10 +281,14 @@ macro_rules! allow_number_extensions {
     // quite handy as the only number that can begin with zero, has to have
     // a zero mantissa. Leading zeroes are illegal in JSON!
     ($parser:ident) => ({
-        let mut num = 0;
-        let mut e = 0;
-        let ch = $parser.read_byte();
-        allow_number_extensions!($parser, num, e, ch)
+        if $parser.is_eof() {
+            0.into()
+        } else {
+            let mut num = 0;
+            let mut e = 0;
+            let ch = $parser.read_byte();
+            allow_number_extensions!($parser, num, e, ch)
+        }
     })
 }
 
@@ -383,6 +387,8 @@ impl<'a> Parser<'a> {
     // is virtually irrelevant.
     #[inline(always)]
     fn read_byte(&mut self) -> u8 {
+        debug_assert!(self.index < self.length, "Reading out of bounds");
+
         unsafe { *self.byte_ptr.offset(self.index as isize) }
     }
 
