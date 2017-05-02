@@ -118,7 +118,7 @@ There used to be a statement here saying that performance is not the main goal o
 crate. It is definitely one of them now.
 
 While this crate doesn't provide a way to parse JSON to native Rust structs, it does a
-lot to optimize it's performance for DOM parsing, stringifying and manipulation. It does
+lot to optimize its performance for DOM parsing, stringifying and manipulation. It does
 [very well in benchmarks](http://json.rs/), in some cases it
 can even outperform parsing to structs.
 
@@ -131,6 +131,6 @@ mantissa with 16 bit decimal exponent for floating point representation.
 ## License
 
 This crate is distributed under the terms of both the MIT license
-and the Apache License (Version 2.0), choose whatever works for you.
+and the Apache License (Version 2.0). Choose whichever one works best for you.
 
 See [LICENSE-APACHE](LICENSE-APACHE) and [LICENSE-MIT](LICENSE-MIT) for details.
