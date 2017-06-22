@@ -74,7 +74,10 @@ pub unsafe fn write<W: io::Write>(wr: &mut W, positive: bool, mut n: u64, expone
             )
         );
     } else if exponent < 0 {
-        let mut e = -exponent as u16;
+        let mut e = match exponent.checked_neg() {
+            Some(neg) => neg as u16,
+            None => i16::max_value() as u16 + 1u16
+        };
 
         // Decimal number with a fraction that's fully printable
         if e < 18 {
