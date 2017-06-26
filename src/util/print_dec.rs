@@ -74,7 +74,7 @@ pub unsafe fn write<W: io::Write>(wr: &mut W, positive: bool, mut n: u64, expone
             )
         );
     } else if exponent < 0 {
-        let mut e = -exponent as u16;
+        let mut e = safe_abs(exponent);
 
         // Decimal number with a fraction that's fully printable
         if e < 18 {
@@ -214,4 +214,12 @@ pub unsafe fn write<W: io::Write>(wr: &mut W, positive: bool, mut n: u64, expone
     ));
     try!(wr.write_all(b"e"));
     write(wr, true, e, 0)
+}
+
+fn safe_abs(x : i16) -> u16 {
+    if let Some(y) = x.checked_abs() {
+        y as u16
+    } else {
+        i16::max_value() as u16 + 1u16
+    }
 }
