@@ -126,9 +126,3 @@ fn as_fixed_point_i64() {
 fn convert_f64_precision() {
     assert_eq!(Number::from_parts(true, 4750000000000001, -18), 0.004750000000000001);
 }
-
-#[test]
-fn issue_107() {
-    let n = Number::from_parts(true, 1, -32768);
-    assert_eq!(format!("{}", n), "1e-32768");
-}
