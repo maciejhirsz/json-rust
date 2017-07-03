@@ -117,6 +117,11 @@ pub unsafe fn write<W: io::Write>(wr: &mut W, positive: bool, mut n: u64, expone
         }
 
         // Not easily printable, write down fraction, then full number, then exponent
+
+        // Since we move the decimal point right after the first digit, we have to adjust the
+        // exponent part. If the number is long enough, this may result in the exponent switching
+        // sign from negative to positive - we have to handle this case separately.
+        let mut exponent_positive = false;
         if n < 10 {
             // Single digit, no fraction
             curr -= 1;
@@ -154,16 +159,24 @@ pub unsafe fn write<W: io::Write>(wr: &mut W, positive: bool, mut n: u64, expone
                 ptr::copy_nonoverlapping(lut_ptr.offset(d1), buf_ptr.offset(curr), 2);
             }
 
-            // Substract the amount of digits printed in the fraction
-            // from the exponent that we still need to print using
-            // the `e` notation
-            e -= buf.len() as u16 - curr as u16;
+            let printed_so_far = buf.len() as u16 - curr as u16;
+
+
+            if printed_so_far <= e {
+                // Subtract the amount of digits printed in the fraction
+                // from the exponent that we still need to print using
+                // the `e` notation
+                e -= printed_so_far;
+            } else {
+                // Same as e = |e - printed_so_far|.
+                e = printed_so_far - e;
+                exponent_positive = true;
+            }
 
             curr -= 1;
             *buf_ptr.offset(curr) = b'.';
 
             write_num(&mut n, &mut curr, buf_ptr, lut_ptr);
-
         }
 
         // Write out the number with a fraction
@@ -174,8 +187,16 @@ pub unsafe fn write<W: io::Write>(wr: &mut W, positive: bool, mut n: u64, expone
             )
         ));
 
-        // Write the remaining `e` notation
-        try!(wr.write_all(b"e-"));
+        // Omit the 'e' notation for e == 0
+        if e == 0 {
+            return Ok(());
+        }
+        // Write the remaining `e` notation, with proper sign
+        if exponent_positive {
+            wr.write_all(b"e+")?;
+        } else {
+            wr.write_all(b"e-")?;
+        }
         return write(wr, true, e as u64, 0);
 
     }
