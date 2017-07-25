@@ -16,7 +16,7 @@ static NULL: JsonValue = JsonValue::Null;
 //
 // Additionally this "randomizes" the keys a bit. Should the keys in an object
 // be inserted in alphabetical order (an example of such a use case would be
-// using an object as a store for entires by ids, where ids are sorted), this
+// using an object as a store for entries by ids, where ids are sorted), this
 // will prevent the tree from being constructed in a way where the same branch
 // of each node is always used, effectively producing linear lookup times. Bad!
 //
@@ -149,7 +149,7 @@ impl Drop for Key {
 }
 
 // Just like with `Drop`, `Clone` needs a custom implementation that accounts
-// for the fact that key _can_ be separately heap allcated.
+// for the fact that key _can_ be separately heap allocated.
 impl Clone for Key {
     fn clone(&self) -> Self {
         if self.len > KEY_BUF_LEN {

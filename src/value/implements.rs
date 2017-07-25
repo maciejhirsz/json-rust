@@ -1,4 +1,4 @@
-// This is a private module that contans `PartialEq` and `From` trait
+// This is a private module that contains `PartialEq` and `From` trait
 // implementations for `JsonValue`.
 
 use std::collections::{ BTreeMap, HashMap };
@@ -112,7 +112,7 @@ impl From<BTreeMap<String, JsonValue>> for JsonValue {
         for (key, value) in val.iter_mut() {
             // Since BTreeMap has no `drain` available, we can use
             // the mutable iterator and replace all values by nulls,
-            // taking ownership and transfering it to the new `Object`.
+            // taking ownership and transferring it to the new `Object`.
             let value = mem::replace(value, Null);
             object.insert(key, value);
         }

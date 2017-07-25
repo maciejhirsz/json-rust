@@ -215,7 +215,7 @@ pub use value::JsonValue::Null;
 /// Result type used by this crate.
 ///
 ///
-/// *Note:* Since 0.9.0 the old `JsonResult` type is depreacted. Always use
+/// *Note:* Since 0.9.0 the old `JsonResult` type is deprecated. Always use
 /// `json::Result` instead.
 pub type Result<T> = result::Result<T, Error>;
 
