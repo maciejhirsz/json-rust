@@ -32,7 +32,7 @@ const DEPTH_LIMIT: usize = 512;
 
 
 // The `Parser` struct keeps track of indexing over our buffer. All niceness
-// has been abandonned in favor of raw pointer magic. Does that make you feel
+// has been abandoned in favor of raw pointer magic. Does that make you feel
 // dirty? _Good._
 struct Parser<'a> {
     // Helper buffer for parsing strings that can't be just memcopied from
@@ -48,7 +48,7 @@ struct Parser<'a> {
     // Current index
     index: usize,
 
-    // Lenght of the source
+    // Length of the source
     length: usize,
 }
 
@@ -183,7 +183,7 @@ static ALLOWED: [bool; 256] = [
 ];
 
 
-// Expect a string. This is called after encontering, and consuming, a
+// Expect a string. This is called after encountering, and consuming, a
 // double quote character. This macro has a happy path variant where it
 // does almost nothing as long as all characters are allowed (as described
 // in the look up table above). If it encounters a closing quote without

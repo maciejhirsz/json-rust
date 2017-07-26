@@ -34,7 +34,7 @@ pub struct Number {
     // A byte describing the sign and NaN-ness of the number.
     //
     // category == 0 (NEGATIVE constant)         -> negative sign
-    // category == 1 (POSITIVE constnat)         -> positive sign
+    // category == 1 (POSITIVE constant)         -> positive sign
     // category >  1 (matches NAN_MASK constant) -> NaN
     category: u8,
 
