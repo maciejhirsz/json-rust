@@ -327,11 +327,11 @@ impl From<f64> for Number {
         if !float.is_sign_positive() {
             let (mantissa, exponent) = grisu2::convert(-float);
 
-            Number::from_parts_unchecked(false, mantissa, exponent)
+            Number::from_parts(false, mantissa, exponent)
         } else {
             let (mantissa, exponent) = grisu2::convert(float);
 
-            Number::from_parts_unchecked(true, mantissa, exponent)
+            Number::from_parts(true, mantissa, exponent)
         }
     }
 }
@@ -346,11 +346,11 @@ impl From<f32> for Number {
         if !float.is_sign_positive() {
             let (mantissa, exponent) = grisu2::convert(-float as f64);
 
-            Number::from_parts_unchecked(false, mantissa, exponent)
+            Number::from_parts(false, mantissa, exponent)
         } else {
             let (mantissa, exponent) = grisu2::convert(float as f64);
 
-            Number::from_parts_unchecked(true, mantissa, exponent)
+            Number::from_parts(true, mantissa, exponent)
         }
     }
 }
