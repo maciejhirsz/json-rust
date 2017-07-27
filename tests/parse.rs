@@ -47,14 +47,14 @@ fn parse_very_long_float() {
     assert_eq!(parsed.as_f64().unwrap(), 2.225073858507201e-308);
 
     // Exhausts u64
-    assert_eq!(parsed, Number::from_parts(true, 2225073858507201136, -326));
+    assert_eq!(parsed, Number::from_parts_unchecked(true, 2225073858507201136, -326));
 }
 
 #[test]
 fn parse_very_long_exponent() {
     let parsed = parse("1e999999999999999999999999999999999999999999999999999999999999").unwrap();
 
-    assert_eq!(parsed, Number::from_parts(true, 1, 32767));
+    assert_eq!(parsed, Number::from_parts_unchecked(true, 1, 32767));
 }
 
 #[test]
