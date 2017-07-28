@@ -323,7 +323,7 @@ macro_rules! expect_fraction {
 
         loop {
             if $parser.is_eof() {
-                result = Number::from_parts(true, $num, $e);
+                result = unsafe { Number::from_parts_unchecked(true, $num, $e) };
                 break;
             }
             let ch = $parser.read_byte();
@@ -352,7 +352,7 @@ macro_rules! expect_fraction {
                     break;
                 }
                 _ => {
-                    result = Number::from_parts(true, $num, $e);
+                    result = unsafe { Number::from_parts_unchecked(true, $num, $e) };
                     break;
                 }
             }
@@ -568,7 +568,7 @@ impl<'a> Parser<'a> {
         let mut e = 0i16;
         loop {
             if self.is_eof() {
-                return Ok(Number::from_parts(true, num, e));
+                return Ok(unsafe { Number::from_parts_unchecked(true, num, e) });
             }
             let ch = self.read_byte();
             match ch {
@@ -593,7 +593,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Ok(Number::from_parts(true, num, e))
+        Ok(unsafe { Number::from_parts_unchecked(true, num, e) })
     }
 
     // Called in the rare case that a number with `e` notation has been
@@ -631,7 +631,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Ok(Number::from_parts(true, num, (big_e.saturating_add(e * sign))))
+        Ok(unsafe { Number::from_parts_unchecked(true, num, (big_e.saturating_add(e * sign))) })
     }
 
     // Parse away!

@@ -50,17 +50,42 @@ impl Number {
     ///
     /// ```
     /// # use json::number::Number;
-    /// let pi = Number::from_parts(true, 3141592653589793, -15);
+    /// let pi = unsafe { Number::from_parts_unchecked(true, 3141592653589793, -15) };
     ///
     /// assert_eq!(pi, 3.141592653589793);
     /// ```
+    ///
+    /// While this method is marked unsafe, it doesn't actually perform any unsafe operations.
+    /// THe goal of the 'unsafe' is to deter from using this method in favor of its safe equivalent
+    /// `from_parts`, at least in context when the associated performance cost is negligible.
     #[inline]
-    pub fn from_parts(positive: bool, mantissa: u64, exponent: i16) -> Self {
+    pub unsafe fn from_parts_unchecked(positive: bool, mantissa: u64, exponent: i16) -> Self {
         Number {
             category: positive as u8,
             exponent: exponent,
             mantissa: mantissa,
         }
+    }
+
+    /// Construct a new `Number` from parts, stripping unnecessary trailing zeroes.
+    /// This can't create a NaN value.
+    ///
+    /// ```
+    /// # use json::number::Number;
+    /// let one = Number::from_parts(true, 1000, -3);
+    /// let (positive, mantissa, exponent) = one.as_parts();
+    ///
+    /// assert_eq!(true, positive);
+    /// assert_eq!(1, mantissa);
+    /// assert_eq!(0, exponent);
+    /// ```
+    #[inline]
+    pub fn from_parts(positive: bool, mut mantissa: u64, mut exponent: i16) -> Self {
+        while exponent < 0 && mantissa % 10 == 0 {
+            exponent += 1;
+            mantissa /= 10;
+        }
+        unsafe { Number::from_parts_unchecked(positive, mantissa, exponent) }
     }
 
     /// Reverse to `from_parts` - obtain parts from an existing `Number`.
