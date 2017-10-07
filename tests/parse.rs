@@ -118,6 +118,10 @@ fn parse_array() {
         true,
         Null
     ]);
+
+    assert_eq!(parse("[]").unwrap(), array![]);
+
+    assert_eq!(parse("[[]]").unwrap(), array![array![]]);
 }
 
 #[test]
