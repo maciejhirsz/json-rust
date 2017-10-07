@@ -122,6 +122,7 @@ fn parse_array() {
 
 #[test]
 fn parse_object() {
+    // Without trailing comma
     assert_eq!(parse(r#"
 
     {
@@ -132,6 +133,19 @@ fn parse_object() {
     "#).unwrap(), object!{
         "foo" => "bar",
         "num" => 10
+    });
+
+    // Trailing comma in macro
+    assert_eq!(parse(r#"
+
+    {
+        "foo": "bar",
+        "num": 10
+    }
+
+    "#).unwrap(), object!{
+        "foo" => "bar",
+        "num" => 10,
     });
 }
 
