@@ -621,3 +621,41 @@ fn pretty_writer_generator() {
 
     assert_eq!(String::from_utf8(buf).unwrap(), "{\n    \"foo\": [\n        \"bar\",\n        100,\n        true\n    ]\n}");
 }
+
+#[test]
+fn equality() {
+    let left = object!{
+        "foo" => array!["bar", 100, true]
+    };
+
+    let left_copy = object!{
+        "foo" => array!["bar", 100, true]
+    };
+
+    let left_string = object!{
+        "foo" => array![JsonValue::String("bar".to_string()), 100, true]
+    };
+
+    let left_short = object!{
+        "foo" => array![JsonValue::Short(unsafe { json::short::Short::from_slice("bar") }), 100, true]
+    };
+
+    let change_bool = object!{
+        "foo" => array!["bar", 100, false]
+    };
+
+    let change_string = object!{
+        "foo" => array![JsonValue::String("sna".to_string()), 100, true]
+    };
+
+    let change_short = object!{
+        "foo" => array![JsonValue::Short(unsafe { json::short::Short::from_slice("sna") }), 100, true]
+    };
+
+    assert_eq!(left, left_copy);
+    assert_eq!(left, left_string);
+    assert_eq!(left, left_short);
+    assert_ne!(left, change_bool);
+    assert_ne!(left, change_string);
+    assert_ne!(left, change_short);
+}
