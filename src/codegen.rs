@@ -114,6 +114,7 @@ pub trait Generator {
         }
     }
 
+    #[inline(always)]
     fn write_object(&mut self, object: &Object) -> io::Result<()> {
         try!(self.write_char(b'{'));
         let mut iter = object.iter();

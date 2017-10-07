@@ -314,17 +314,11 @@ macro_rules! object {
     // Non-empty object, no trailing comma.
     //
     // In this implementation, key/value pairs separated by commas.
-    { $( $key:expr => $value:expr ),* } => ({
-        use $crate::object::Object;
-
-        let mut object = Object::new();
-
-        $(
-            object.insert($key, $value.into());
-        )*
-
-        $crate::JsonValue::Object(object)
-    });
+    { $( $key:expr => $value:expr ),* } => {
+        object!( $(
+            $key => $value,
+        )* )
+    };
 
     // Non-empty object, trailing comma.
     //
