@@ -34,7 +34,7 @@ macro_rules! number_to_signed {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub enum JsonValue {
     Null,
     Short(Short),
@@ -45,6 +45,25 @@ pub enum JsonValue {
     Array(Vec<JsonValue>),
 }
 
+impl PartialEq for JsonValue {
+    fn eq(&self, other: &Self) -> bool {
+        use self::JsonValue::*;
+        match (self, other) {
+            (&Null, &Null) => true,
+            (&Short(ref a), &Short(ref b)) => a == b,
+            (&String(ref a), &String(ref b)) => a == b,
+            (&Short(ref a), &String(ref b))
+            | (&String(ref b), &Short(ref a)) => a.as_str() == b.as_str(),
+            (&Number(ref a), &Number(ref b)) => a == b,
+            (&Boolean(ref a), &Boolean(ref b)) => a == b,
+            (&Object(ref a), &Object(ref b)) => a == b,
+            (&Array(ref a), &Array(ref b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for JsonValue {}
 
 /// Implements formatting
 ///
