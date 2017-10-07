@@ -1,6 +1,7 @@
 use std::{ ptr, mem, str, slice, fmt };
 use std::ops::{ Index, IndexMut, Deref };
 
+use codegen::{ DumpGenerator, Generator, PrettyGenerator };
 use value::JsonValue;
 
 const KEY_BUF_LEN: usize = 32;
@@ -489,6 +490,21 @@ impl Object {
         IterMut {
             inner: self.store.iter_mut()
         }
+    }
+
+    /// Prints out the value as JSON string.
+    pub fn dump(&self) -> String {
+        let mut gen = DumpGenerator::new();
+        gen.write_object(self).expect("Can't fail");
+        gen.consume()
+    }
+
+    /// Pretty prints out the value as JSON string. Takes an argument that's
+    /// number of spaces to indent new blocks with.
+    pub fn pretty(&self, spaces: u16) -> String {
+        let mut gen = PrettyGenerator::new(spaces);
+        gen.write_object(self).expect("Can't fail");
+        gen.consume()
     }
 }
 

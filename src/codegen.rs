@@ -2,6 +2,7 @@ use std::ptr;
 use std::io::Write;
 use JsonValue;
 use number::Number;
+use object::Object;
 use std::io;
 
 use util::print_dec;
@@ -113,6 +114,34 @@ pub trait Generator {
         }
     }
 
+    fn write_object(&mut self, object: &Object) -> io::Result<()> {
+        try!(self.write_char(b'{'));
+        let mut iter = object.iter();
+
+        if let Some((key, value)) = iter.next() {
+            self.indent();
+            try!(self.new_line());
+            try!(self.write_string(key));
+            try!(self.write_min(b": ", b':'));
+            try!(self.write_json(value));
+        } else {
+            try!(self.write_char(b'}'));
+            return Ok(());
+        }
+
+        for (key, value) in iter {
+            try!(self.write_char(b','));
+            try!(self.new_line());
+            try!(self.write_string(key));
+            try!(self.write_min(b": ", b':'));
+            try!(self.write_json(value));
+        }
+
+        self.dedent();
+        try!(self.new_line());
+        self.write_char(b'}')
+    }
+
     fn write_json(&mut self, json: &JsonValue) -> io::Result<()> {
         match *json {
             JsonValue::Null               => self.write(b"null"),
@@ -145,31 +174,7 @@ pub trait Generator {
                 self.write_char(b']')
             },
             JsonValue::Object(ref object) => {
-                try!(self.write_char(b'{'));
-                let mut iter = object.iter();
-
-                if let Some((key, value)) = iter.next() {
-                    self.indent();
-                    try!(self.new_line());
-                    try!(self.write_string(key));
-                    try!(self.write_min(b": ", b':'));
-                    try!(self.write_json(value));
-                } else {
-                    try!(self.write_char(b'}'));
-                    return Ok(());
-                }
-
-                for (key, value) in iter {
-                    try!(self.write_char(b','));
-                    try!(self.new_line());
-                    try!(self.write_string(key));
-                    try!(self.write_min(b": ", b':'));
-                    try!(self.write_json(value));
-                }
-
-                self.dedent();
-                try!(self.new_line());
-                self.write_char(b'}')
+                self.write_object(object)
             }
         }
     }

@@ -144,6 +144,7 @@ fn stringify_object() {
         "age" => 30
     };
 
+    assert_eq!(object.dump(), r#"{"name":"Maciej","age":30}"#);
     assert_eq!(stringify(object), r#"{"name":"Maciej","age":30}"#);
 }
 
@@ -154,6 +155,7 @@ fn stringify_raw_object() {
     object.insert("name", "Maciej".into());
     object.insert("age", 30.into());
 
+    assert_eq!(object.dump(), r#"{"name":"Maciej","age":30}"#);
     assert_eq!(stringify(object), r#"{"name":"Maciej","age":30}"#);
 }
 
@@ -193,6 +195,7 @@ fn stringify_object_with_put() {
     object["a"] = 100.into();
     object["b"] = false.into();
 
+    assert_eq!(object.dump(), r#"{"a":100,"b":false}"#);
     assert_eq!(stringify(object), r#"{"a":100,"b":false}"#);
 }
 
@@ -240,6 +243,7 @@ fn stringify_pretty_object() {
         "cars" => array![ "Golf", "Mercedes", "Porsche" ]
     };
 
-    assert_eq!(stringify_pretty(object, 2),
-               "{\n  \"name\": \"Urlich\",\n  \"age\": 50,\n  \"parents\": {\n    \"mother\": \"Helga\",\n    \"father\": \"Brutus\"\n  },\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \"Porsche\"\n  ]\n}");
+    let expected = "{\n  \"name\": \"Urlich\",\n  \"age\": 50,\n  \"parents\": {\n    \"mother\": \"Helga\",\n    \"father\": \"Brutus\"\n  },\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \"Porsche\"\n  ]\n}";
+    assert_eq!(object.pretty(2), expected);
+    assert_eq!(stringify_pretty(object, 2), expected);
 }
