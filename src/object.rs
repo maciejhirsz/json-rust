@@ -627,9 +627,9 @@ impl<'a> DoubleEndedIterator for IterMut<'a> {
 /// # use json::JsonValue;
 /// #
 /// # fn main() {
-/// let value = object!{
-///     "foo" => "bar"
-/// };
+/// let value = json!({
+///     foo: "bar"
+/// });
 ///
 /// if let JsonValue::Object(object) = value {
 ///   assert!(object["foo"] == "bar");
@@ -674,7 +674,7 @@ impl<'a> Index<&'a String> for Object {
 /// # use json::JsonValue;
 /// #
 /// # fn main() {
-/// let value = object!{};
+/// let value = json!({});
 ///
 /// if let JsonValue::Object(mut object) = value {
 ///   object["foo"] = 42.into();

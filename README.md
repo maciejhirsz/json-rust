@@ -40,17 +40,17 @@ let parsed = json::parse(r#"
 
 "#).unwrap();
 
-let instantiated = object!{
-    "code" => 200,
-    "success" => true,
-    "payload" => object!{
-        "features" => array![
+let instantiated = json!({
+    code: 200,
+    success: true,
+    payload: {
+        features: [
             "awesome",
             "easyAPI",
             "lowLearningCurve"
         ]
     }
-};
+});
 
 assert_eq!(parsed, instantiated);
 ```

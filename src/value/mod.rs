@@ -330,7 +330,7 @@ impl JsonValue {
     /// ```
     /// # #[macro_use] extern crate json;
     /// # fn main() {
-    /// let mut data = array!["Foo", 42];
+    /// let mut data = json!(["Foo", 42]);
     ///
     /// let first = data[0].take();
     /// let second = data[1].take();
@@ -360,7 +360,7 @@ impl JsonValue {
     /// ```
     /// # #[macro_use] extern crate json;
     /// # fn main() {
-    /// let mut data = array!["Hello", "World"];
+    /// let mut data = json!(["Hello", "World"]);
     ///
     /// let owned = data[0].take_string().expect("Should be a string");
     ///
@@ -554,7 +554,7 @@ impl Index<usize> for JsonValue {
 /// # extern crate json;
 /// #
 /// # fn main() {
-/// let mut array = array!["foo", 3.14];
+/// let mut array = json!(["foo", 3.14]);
 ///
 /// array[1] = "bar".into();
 ///
@@ -592,9 +592,9 @@ impl IndexMut<usize> for JsonValue {
 /// # extern crate json;
 /// #
 /// # fn main() {
-/// let object = object!{
-///     "foo" => "bar"
-/// };
+/// let object = json!({
+///     foo: "bar"
+/// });
 ///
 /// assert!(object["foo"] == "bar");
 /// # }
@@ -635,7 +635,7 @@ impl<'a> Index<&'a String> for JsonValue {
 /// # extern crate json;
 /// #
 /// # fn main() {
-/// let mut object = object!{};
+/// let mut object = json!({});
 ///
 /// object["foo"] = 42.into();
 ///

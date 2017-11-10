@@ -112,16 +112,16 @@ fn parse_large_number() {
 
 #[test]
 fn parse_array() {
-    assert_eq!(parse(r#"[10, "foo", true, null]"#).unwrap(), array![
+    assert_eq!(parse(r#"[10, "foo", true, null]"#).unwrap(), json!([
         10,
         "foo",
         true,
-        Null
-    ]);
+        null
+    ]));
 
-    assert_eq!(parse("[]").unwrap(), array![]);
+    assert_eq!(parse("[]").unwrap(), json!([]));
 
-    assert_eq!(parse("[[]]").unwrap(), array![array![]]);
+    assert_eq!(parse("[[]]").unwrap(), json!([[]]));
 }
 
 #[test]
@@ -134,10 +134,10 @@ fn parse_object() {
         "num": 10
     }
 
-    "#).unwrap(), object!{
-        "foo" => "bar",
-        "num" => 10
-    });
+    "#).unwrap(), json!({
+        foo: "bar",
+        num: 10
+    }));
 
     // Trailing comma in macro
     assert_eq!(parse(r#"
@@ -147,10 +147,10 @@ fn parse_object() {
         "num": 10
     }
 
-    "#).unwrap(), object!{
-        "foo" => "bar",
-        "num" => 10,
-    });
+    "#).unwrap(), json!({
+        foo: "bar",
+        num: 10
+    }));
 }
 
 #[test]
@@ -163,10 +163,10 @@ fn parse_object_duplicate_fields() {
         "foo": 2
     }
 
-    "#).unwrap(), object!{
-        "foo" => 2,
-        "bar" => 1
-    });
+    "#).unwrap(), json!({
+        foo: 2,
+        bar: 1
+    }));
 }
 
 #[test]
@@ -177,9 +177,9 @@ fn parse_object_with_array(){
         "foo": [1, 2, 3]
     }
 
-    "#).unwrap(), object!{
-        "foo" => array![1, 2, 3]
-    });
+    "#).unwrap(), json!({
+        foo: [1, 2, 3]
+    }));
 }
 
 #[test]
@@ -196,15 +196,15 @@ fn parse_nested_object() {
         } ]
     }
 
-    "#).unwrap(), object!{
-        "l10n" => array![ object!{
-            "product" => object!{
-                "inStock" => object!{
-                    "DE" => "Lieferung innerhalb von 1-3 Werktagen"
+    "#).unwrap(), json!({
+        l10n: [ {
+            product: {
+                inStock: {
+                    DE: "Lieferung innerhalb von 1-3 Werktagen"
                 }
             }
         } ]
-    });
+    }));
 }
 
 #[test]

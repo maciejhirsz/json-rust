@@ -110,7 +110,7 @@ fn stringify_false() {
 
 #[test]
 fn stringify_array() {
-    assert_eq!(stringify(array![10, false, Null]), "[10,false,null]");
+    assert_eq!(stringify(json!([10, false, null])), "[10,false,null]");
 }
 
 #[test]
@@ -139,13 +139,13 @@ fn stringify_typed_opt_vec() {
 
 #[test]
 fn stringify_object() {
-    let object = object!{
-        "name" => "Maciej",
-        "age" => 30
-    };
+    let object = json!({
+        name: "Maciej",
+        age: 32
+    });
 
-    assert_eq!(object.dump(), r#"{"name":"Maciej","age":30}"#);
-    assert_eq!(stringify(object), r#"{"name":"Maciej","age":30}"#);
+    assert_eq!(object.dump(), r#"{"name":"Maciej","age":32}"#);
+    assert_eq!(stringify(object), r#"{"name":"Maciej","age":32}"#);
 }
 
 #[test]
@@ -175,17 +175,17 @@ fn stringify_hash_map() {
     let mut map = HashMap::new();
 
     map.insert("name".into(), "Maciej".into());
-    map.insert("age".into(), 30.into());
+    map.insert("age".into(), 32.into());
 
     // HashMap does not sort keys, but depending on hashing used the
     // order can be different. Safe bet is to parse the result and
     // compare parsed objects.
     let parsed = parse(&stringify(map)).unwrap();
 
-    assert_eq!(parsed, object!{
-        "name" => "Maciej",
-        "age" => 30
-    });
+    assert_eq!(parsed, json!({
+        name: "Maciej",
+        age: 32
+    }));
 }
 
 #[test]
@@ -233,15 +233,15 @@ fn stringify_control_escaped() {
 
 #[test]
 fn stringify_pretty_object() {
-    let object = object!{
-        "name" => "Urlich",
-        "age" => 50,
-        "parents" => object!{
-            "mother" => "Helga",
-            "father" => "Brutus"
+    let object = json!({
+        name: "Urlich",
+        age: 50,
+        parents: {
+            mother: "Helga",
+            father: "Brutus"
         },
-        "cars" => array![ "Golf", "Mercedes", "Porsche" ]
-    };
+        cars: ["Golf", "Mercedes", "Porsche"]
+    });
 
     let expected = "{\n  \"name\": \"Urlich\",\n  \"age\": 50,\n  \"parents\": {\n    \"mother\": \"Helga\",\n    \"father\": \"Brutus\"\n  },\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \"Porsche\"\n  ]\n}";
     assert_eq!(object.pretty(2), expected);

@@ -109,26 +109,26 @@ fn is_empty() {
     assert!(json::from(0).is_empty());
     assert!(json::from("").is_empty());
     assert!(json::from(false).is_empty());
-    assert!(array![].is_empty());
-    assert!(object!{}.is_empty());
+    assert!(json!([]).is_empty());
+    assert!(json!({}).is_empty());
 
     assert!(!json::from(1).is_empty());
     assert!(!json::from("foo").is_empty());
     assert!(!json::from(true).is_empty());
-    assert!(!array![0].is_empty());
-    assert!(!object!{ "foo" => false }.is_empty());
+    assert!(!json!([0]).is_empty());
+    assert!(!json!({ foo: false }).is_empty());
 }
 
 #[test]
 fn array_len() {
-    let data = array![0, 1, 2, 3];
+    let data = json!([0, 1, 2, 3]);
 
     assert_eq!(data.len(), 4);
 }
 
 #[test]
 fn array_contains() {
-    let data = array![true, Null, 3.14, "foo"];
+    let data = json!([true, null, 3.14, "foo"]);
 
     assert!(data.contains(true));
     assert!(data.contains(Null));
@@ -142,34 +142,34 @@ fn array_contains() {
 
 #[test]
 fn array_push() {
-    let mut data = array![1, 2];
+    let mut data = json!([1, 2]);
 
     data.push(3).unwrap();
 
-    assert_eq!(data, array![1, 2, 3]);
+    assert_eq!(data, json!([1, 2, 3]));
 }
 
 #[test]
 fn array_pop() {
-    let mut data = array![1, 2, 3];
+    let mut data = json!([1, 2, 3]);
 
     assert_eq!(data.pop(), 3);
-    assert_eq!(data, array![1, 2]);
+    assert_eq!(data, json!([1, 2]));
 }
 
 #[test]
 fn array_remove() {
-    let mut data = array![1, 2, 3];
+    let mut data = json!([1, 2, 3]);
 
     assert_eq!(data.array_remove(1), 2);
-    assert_eq!(data, array![1, 3]);
+    assert_eq!(data, json!([1, 3]));
     // Test with index out of bounds
     assert_eq!(data.array_remove(2), JsonValue::Null);
 }
 
 #[test]
 fn array_members() {
-    let data = array![1, "foo"];
+    let data = json!([1, "foo"]);
 
     for member in data.members() {
         assert!(!member.is_null());
@@ -184,7 +184,7 @@ fn array_members() {
 
 #[test]
 fn array_members_rev() {
-    let data = array![1, "foo"];
+    let data = json!([1, "foo"]);
 
     for member in data.members() {
         assert!(!member.is_null());
@@ -199,19 +199,19 @@ fn array_members_rev() {
 
 #[test]
 fn array_members_mut() {
-    let mut data = array![Null, Null];
+    let mut data = json!([null, null]);
 
     for member in data.members_mut() {
         assert!(member.is_null());
         *member = 100.into();
     }
 
-    assert_eq!(data, array![100, 100]);
+    assert_eq!(data, json!([100, 100]));
 }
 
 #[test]
 fn array_members_mut_rev() {
-    let mut data = array![Null, Null];
+    let mut data = json!([null, null]);
     let mut item = 100;
 
     for member in data.members_mut().rev() {
@@ -220,36 +220,36 @@ fn array_members_mut_rev() {
         item += 1;
     }
 
-    assert_eq!(data, array![item - 1, item - 2]);
+    assert_eq!(data, json!([(item - 1), (item - 2)]));
 }
 
 #[test]
 fn object_len() {
-    let data = object!{
-        "a" => true,
-        "b" => false
-    };
+    let data = json!({
+        a: true,
+        b: false
+    });
 
     assert_eq!(data.len(), 2);
 }
 
 #[test]
 fn object_remove() {
-    let mut data = object!{
-        "foo" => "bar",
-        "answer" => 42
-    };
+    let mut data = json!({
+        foo: "bar",
+        answer: 42
+    });
 
     assert_eq!(data.remove("foo"), "bar");
-    assert_eq!(data, object!{ "answer" => 42 });
+    assert_eq!(data, json!({ answer: 42 }));
 }
 
 #[test]
 fn object_entries() {
-    let data = object!{
-        "a" => 1,
-        "b" => "foo"
-    };
+    let data = json!({
+        a: 1,
+        b: "foo"
+    });
 
     for (_, value) in data.entries() {
         assert!(!value.is_null());
@@ -270,10 +270,10 @@ fn object_entries() {
 
 #[test]
 fn object_entries_rev() {
-    let data = object!{
-        "a" => 1,
-        "b" => "foo"
-    };
+    let data = json!({
+        a: 1,
+        b: "foo"
+    });
 
     for (_, value) in data.entries().rev() {
         assert!(!value.is_null());
@@ -294,28 +294,28 @@ fn object_entries_rev() {
 
 #[test]
 fn object_entries_mut() {
-    let mut data = object!{
-        "a" => Null,
-        "b" => Null
-    };
+    let mut data = json!({
+        a: null,
+        b: null
+    });
 
     for (_, value) in data.entries_mut() {
         assert!(value.is_null());
         *value = 100.into();
     }
 
-    assert_eq!(data, object!{
-        "a" => 100,
-        "b" => 100
-    });
+    assert_eq!(data, json!({
+        a: 100,
+        b: 100
+    }));
 }
 
 #[test]
 fn object_entries_mut_rev() {
-    let mut data = object!{
-        "a" => Null,
-        "b" => Null
-    };
+    let mut data = json!({
+        a: null,
+        b: null
+    });
     let mut item = 100;
 
     for (_, value) in data.entries_mut().rev() {
@@ -324,33 +324,33 @@ fn object_entries_mut_rev() {
         item += 1;
     }
 
-    assert_eq!(data, object!{
-        "a" => item - 1,
-        "b" => item - 2
-    });
+    assert_eq!(data, json!({
+        a: (item - 1),
+        b: (item - 2)
+    }));
 }
 
 #[test]
 fn object_dump_minified() {
-    let object = object!{
-        "name" => "Maciej",
-        "age" => 30
-    };
+    let object = json!({
+        name: "Maciej",
+        age: 32
+    });
 
-    assert_eq!(object.dump(), "{\"name\":\"Maciej\",\"age\":30}");
+    assert_eq!(object.dump(), "{\"name\":\"Maciej\",\"age\":32}");
 }
 
 #[test]
 fn object_dump_pretty() {
-    let object = object!{
-        "name" => "Urlich",
-        "age" => 50,
-        "parents" => object!{
-            "mother" => "Helga",
-            "father" => "Brutus"
+    let object = json!({
+        name: "Urlich",
+        age: 50,
+        parents: {
+            mother: "Helga",
+            father: "Brutus"
         },
-        "cars" => array![ "Golf", "Mercedes", "Porsche" ]
-    };
+        cars: ["Golf", "Mercedes", "Porsche"]
+    });
 
     assert_eq!(object.pretty(2),
                "{\n  \"name\": \"Urlich\",\n  \"age\": 50,\n  \"parents\": {\n    \"mother\": \"Helga\",\n    \"father\": \"Brutus\"\n  },\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \"Porsche\"\n  ]\n}");
@@ -365,27 +365,21 @@ fn null_len() {
 
 #[test]
 fn index_by_str() {
-    let data = object!{
-        "foo" => "bar"
-    };
+    let data = json!({ foo: "bar" });
 
     assert_eq!(data["foo"], "bar");
 }
 
 #[test]
 fn index_by_string() {
-    let data = object!{
-        "foo" => "bar"
-    };
+    let data = json!({ foo: "bar" });
 
     assert_eq!(data["foo".to_string()], "bar");
 }
 
 #[test]
 fn index_by_string_ref() {
-    let data = object!{
-        "foo" => "bar"
-    };
+    let data = json!({ foo: "bar" });
 
     let key = "foo".to_string();
     let ref key_ref = key;
@@ -395,9 +389,7 @@ fn index_by_string_ref() {
 
 #[test]
 fn index_mut_by_str() {
-    let mut data = object!{
-        "foo" => Null
-    };
+    let mut data = json!({ foo: null });
 
     data["foo"] = "bar".into();
 
@@ -406,9 +398,7 @@ fn index_mut_by_str() {
 
 #[test]
 fn index_mut_by_string() {
-    let mut data = object!{
-        "foo" => Null
-    };
+    let mut data = json!({ foo: null });
 
     data["foo".to_string()] = "bar".into();
 
@@ -417,9 +407,7 @@ fn index_mut_by_string() {
 
 #[test]
 fn index_mut_by_string_ref() {
-    let mut data = object!{
-        "foo" => Null
-    };
+    let mut data = json!({ foo: null });
 
     let key = "foo".to_string();
     let ref key_ref = key;
@@ -431,9 +419,8 @@ fn index_mut_by_string_ref() {
 
 #[test]
 fn object_index_by_str() {
-    let val = object!{
-        "foo" => "bar"
-    };
+    let val = json!({ foo: "bar" });
+
     if let JsonValue::Object(data) = val {
         assert_eq!(data["foo"], "bar");
     }
@@ -441,9 +428,7 @@ fn object_index_by_str() {
 
 #[test]
 fn object_index_by_string() {
-    let val = object!{
-        "foo" => "bar"
-    };
+    let val = json!({ foo: "bar" });
 
     if let JsonValue::Object(data) = val {
         assert_eq!(data["foo".to_string()], "bar");
@@ -452,9 +437,7 @@ fn object_index_by_string() {
 
 #[test]
 fn object_index_by_string_ref() {
-    let val = object!{
-        "foo" => "bar"
-    };
+    let val = json!({ foo: "bar" });
 
     let key = "foo".to_string();
     let ref key_ref = key;
@@ -466,9 +449,7 @@ fn object_index_by_string_ref() {
 
 #[test]
 fn object_index_mut_by_str() {
-    let val = object!{
-        "foo" => Null
-    };
+    let val = json!({ foo: null });
 
     if let JsonValue::Object(mut data) = val {
         data["foo"] = "bar".into();
@@ -479,9 +460,7 @@ fn object_index_mut_by_str() {
 
 #[test]
 fn object_index_mut_by_string() {
-    let val = object!{
-        "foo" => Null
-    };
+    let val = json!({ foo: null });
 
     if let JsonValue::Object(mut data) = val {
         data["foo".to_string()] = "bar".into();
@@ -492,9 +471,7 @@ fn object_index_mut_by_string() {
 
 #[test]
 fn object_index_mut_by_string_ref() {
-    let val = object!{
-        "foo" => Null
-    };
+    let val = json!({ foo: null });
 
     let key = "foo".to_string();
     let ref key_ref = key;
@@ -540,7 +517,7 @@ fn fmt_null() {
 
 #[test]
 fn fmt_array() {
-    let data = array![1, true, "three"];
+    let data = json!([1, true, "three"]);
 
     assert_eq!(format!("{}", data), r#"[1,true,"three"]"#);
     assert_eq!(format!("{:#}", data), "[\n    1,\n    true,\n    \"three\"\n]");
@@ -548,10 +525,10 @@ fn fmt_array() {
 
 #[test]
 fn fmt_object() {
-    let data = object!{
-        "foo" => "bar",
-        "answer" => 42
-    };
+    let data = json!({
+        foo: "bar",
+        answer: 42
+    });
 
     assert_eq!(format!("{}", data), r#"{"foo":"bar","answer":42}"#);
     assert_eq!(format!("{:#}", data), "{\n    \"foo\": \"bar\",\n    \"answer\": 42\n}");
@@ -598,9 +575,9 @@ fn error_unexpected_token() {
 
 #[test]
 fn writer_generator() {
-    let data = object!{
-        "foo" => array!["bar", 100, true]
-    };
+    let data = json!({
+        foo: ["bar", 100, true]
+    });
 
     let mut buf = Vec::new();
 
@@ -611,9 +588,9 @@ fn writer_generator() {
 
 #[test]
 fn pretty_writer_generator() {
-    let data = object!{
-        "foo" => array!["bar", 100, true]
-    };
+    let data = json!({
+        foo: ["bar", 100, true]
+    });
 
     let mut buf = Vec::new();
 
@@ -624,33 +601,33 @@ fn pretty_writer_generator() {
 
 #[test]
 fn equality() {
-    let left = object!{
-        "foo" => array!["bar", 100, true]
-    };
+    let left = json!({
+        foo: ["bar", 100, true]
+    });
 
-    let left_copy = object!{
-        "foo" => array!["bar", 100, true]
-    };
+    let left_copy = json!({
+        foo: ["bar", 100, true]
+    });
 
-    let left_string = object!{
-        "foo" => array![JsonValue::String("bar".to_string()), 100, true]
-    };
+    let left_string = json!({
+        foo: [(JsonValue::String("bar".to_string())), 100, true]
+    });
 
-    let left_short = object!{
-        "foo" => array![JsonValue::Short(unsafe { json::short::Short::from_slice("bar") }), 100, true]
-    };
+    let left_short = json!({
+        foo: [(JsonValue::Short(unsafe { json::short::Short::from_slice("bar") })), 100, true]
+    });
 
-    let change_bool = object!{
-        "foo" => array!["bar", 100, false]
-    };
+    let change_bool = json!({
+        foo: ["bar", 100, false]
+    });
 
-    let change_string = object!{
-        "foo" => array![JsonValue::String("sna".to_string()), 100, true]
-    };
+    let change_string = json!({
+        foo: [(JsonValue::String("sna".to_string())), 100, true]
+    });
 
-    let change_short = object!{
-        "foo" => array![JsonValue::Short(unsafe { json::short::Short::from_slice("sna") }), 100, true]
-    };
+    let change_short = json!({
+        foo: [(JsonValue::Short(unsafe { json::short::Short::from_slice("sna") })), 100, true]
+    });
 
     assert_eq!(left, left_copy);
     assert_eq!(left, left_string);

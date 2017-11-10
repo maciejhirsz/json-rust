@@ -37,17 +37,17 @@
 //!
 //! "#).unwrap();
 //!
-//! let instantiated = object!{
-//!     "code" => 200,
-//!     "success" => true,
-//!     "payload" => object!{
-//!         "features" => array![
+//! let instantiated = json!({
+//!     code: 200,
+//!     success: true,
+//!     payload: {
+//!         features: [
 //!             "awesome",
 //!             "easyAPI",
 //!             "lowLearningCurve"
 //!         ]
 //!     }
-//! };
+//! });
 //!
 //! assert_eq!(parsed, instantiated);
 //! # }
@@ -60,12 +60,12 @@
 //! ```rust
 //! # #[macro_use] extern crate json;
 //! # fn main() {
-//! let mut data = object!{
-//!     "foo" => false,
-//!     "bar" => json::Null,
-//!     "answer" => 42,
-//!     "list" => array![json::Null, "world", true]
-//! };
+//! let mut data = json!({
+//!     foo: false,
+//!     bar: null,
+//!     answer: 42,
+//!     list: [null, "world", true]
+//! });
 //!
 //! // Partial equality is implemented for most raw types:
 //! assert!(data["foo"] == false);
@@ -169,26 +169,26 @@
 //! assert_eq!(data.dump(), r#"{"answer":42,"foo":"bar"}"#);
 //! ```
 //!
-//! `array!` macro:
+//! Creating arrays with `json!` macro:
 //!
 //! ```
 //! # #[macro_use] extern crate json;
 //! # fn main() {
-//! let data = array!["foo", "bar", 100, true, json::Null];
+//! let data = json!(["foo", "bar", 100, true, null]);
 //! assert_eq!(data.dump(), r#"["foo","bar",100,true,null]"#);
 //! # }
 //! ```
 //!
-//! `object!` macro:
+//! Creating objects with `json!` macro:
 //!
 //! ```
 //! # #[macro_use] extern crate json;
 //! # fn main() {
-//! let data = object!{
-//!     "name"    => "John Doe",
-//!     "age"     => 30,
-//!     "canJSON" => true
-//! };
+//! let data = json!({
+//!     name: "John Doe",
+//!     age: 30,
+//!     canJSON: true
+//! });
 //! assert_eq!(
 //!     data.dump(),
 //!     r#"{"name":"John Doe","age":30,"canJSON":true}"#
@@ -261,78 +261,30 @@ pub fn stringify_pretty<T>(root: T, spaces: u16) -> String where T: Into<JsonVal
     root.pretty(spaces)
 }
 
-/// Helper macro for creating instances of `JsonValue::Array`.
-///
-/// ```
-/// # #[macro_use] extern crate json;
-/// # fn main() {
-/// let data = array!["foo", 42, false];
-///
-/// assert_eq!(data[0], "foo");
-/// assert_eq!(data[1], 42);
-/// assert_eq!(data[2], false);
-///
-/// assert_eq!(data.dump(), r#"["foo",42,false]"#);
-/// # }
-/// ```
 #[macro_export]
-macro_rules! array {
-    [] => ($crate::JsonValue::new_array());
-
-    [ $( $item:expr ),* ] => ({
-        let mut array = Vec::new();
-
-        $(
-            array.push($item.into());
-        )*
-
-        $crate::JsonValue::Array(array)
-    })
-}
-
-/// Helper macro for creating instances of `JsonValue::Object`.
-///
-/// ```
-/// # #[macro_use] extern crate json;
-/// # fn main() {
-/// let data = object!{
-///     "foo" => 42,
-///     "bar" => false
-/// };
-///
-/// assert_eq!(data["foo"], 42);
-/// assert_eq!(data["bar"], false);
-///
-/// assert_eq!(data.dump(), r#"{"foo":42,"bar":false}"#);
-/// # }
-/// ```
-#[macro_export]
-macro_rules! object {
-    // Empty object.
-    {} => ($crate::JsonValue::new_object());
-
-    // Non-empty object, no trailing comma.
-    //
-    // In this implementation, key/value pairs separated by commas.
-    { $( $key:expr => $value:expr ),* } => {
-        object!( $(
-            $key => $value,
-        )* )
-    };
-
-    // Non-empty object, trailing comma.
-    //
-    // In this implementation, the comma is part of the value.
-    { $( $key:expr => $value:expr, )* } => ({
+macro_rules! json {
+    ({}) => ($crate::JsonValue::new_object());
+    ([]) => ($crate::JsonValue::new_array());
+    ({ $( $key:ident: $value:tt ),* }) => ({
         use $crate::object::Object;
 
         let mut object = Object::new();
 
         $(
-            object.insert($key, $value.into());
+            object.insert(stringify!($key), json!($value));
         )*
 
         $crate::JsonValue::Object(object)
-    })
-}
+    });
+    ([ $( $item:tt ),* ]) => ({
+        let mut array = Vec::new();
 
+        $(
+            array.push(json!($item));
+        )*
+
+        $crate::JsonValue::Array(array)
+    });
+    (null) => { $crate::JsonValue::Null };
+    ($item:expr) => { $crate::JsonValue::from($item) }
+}
