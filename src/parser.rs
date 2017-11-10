@@ -649,7 +649,7 @@ impl<'a> Parser<'a> {
                             return Err(Error::ExceededDepthLimit);
                         }
 
-                        stack.push(StackBlock::Array(Vec::with_capacity(2)));
+                        stack.push(StackBlock(JsonValue::Array(Vec::with_capacity(2)), 0));
                         continue 'parsing;
                     }
 
@@ -672,7 +672,7 @@ impl<'a> Parser<'a> {
                         let index = object.insert_index(expect_string!(self), JsonValue::Null);
                         expect!(self, b':');
 
-                        stack.push(StackBlock::Object(object, index));
+                        stack.push(StackBlock(JsonValue::Object(object), index));
 
                         ch = expect_byte_ignore_whitespace!(self);
 
@@ -710,69 +710,62 @@ impl<'a> Parser<'a> {
             };
 
             'popping: loop {
-                match stack.pop() {
+                match stack.last_mut() {
                     None => {
                         expect_eof!(self);
 
                         return Ok(value);
                     },
 
-                    Some(StackBlock::Array(mut array)) => {
+                    Some(&mut StackBlock(JsonValue::Array(ref mut array), _)) => {
                         array.push(value);
 
                         ch = expect_byte_ignore_whitespace!(self);
 
                         match ch {
                             b',' => {
-                                stack.push(StackBlock::Array(array));
-
                                 ch = expect_byte_ignore_whitespace!(self);
 
                                 continue 'parsing;
                             },
-                            b']' => {
-                                value = JsonValue::Array(array);
-                                continue 'popping;
-                            },
-                            _ => return self.unexpected_character()
+                            b']' => {},
+                            _    => return self.unexpected_character()
                         }
                     },
 
-                    Some(StackBlock::Object(mut object, index)) => {
-                        object.override_at(index, value);
+                    Some(&mut StackBlock(JsonValue::Object(ref mut object), ref mut index )) => {
+                        object.override_at(*index, value);
 
                         ch = expect_byte_ignore_whitespace!(self);
 
                         match ch {
                             b',' => {
                                 expect!(self, b'"');
-                                let index = object.insert_index(expect_string!(self), JsonValue::Null);
+                                *index = object.insert_index(expect_string!(self), JsonValue::Null);
                                 expect!(self, b':');
-
-                                stack.push(StackBlock::Object(object, index));
 
                                 ch = expect_byte_ignore_whitespace!(self);
 
                                 continue 'parsing;
                             },
-                            b'}' => {
-                                value = JsonValue::Object(object);
-
-                                continue 'popping;
-                            },
-                            _ => return self.unexpected_character()
+                            b'}' => {},
+                            _    => return self.unexpected_character()
                         }
                     },
+
+                    _ => unreachable!(),
+                }
+
+                value = match stack.pop() {
+                    Some(StackBlock(value, _)) => value,
+                    None                       => break 'popping
                 }
             }
         }
     }
 }
 
-enum StackBlock {
-    Array(Vec<JsonValue>),
-    Object(Object, usize),
-}
+struct StackBlock(JsonValue, usize);
 
 // All that hard work, and in the end it's just a single function in the API.
 #[inline]
