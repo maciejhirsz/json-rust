@@ -154,6 +154,22 @@ fn parse_object() {
 }
 
 #[test]
+fn parse_object_duplicate_fields() {
+    assert_eq!(parse(r#"
+
+    {
+        "foo": 0,
+        "bar": 1,
+        "foo": 2
+    }
+
+    "#).unwrap(), object!{
+        "foo" => 2,
+        "bar" => 1
+    });
+}
+
+#[test]
 fn parse_object_with_array(){
     assert_eq!(parse(r#"
 

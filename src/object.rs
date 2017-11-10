@@ -298,14 +298,19 @@ impl Object {
     /// to be a `&str` slice and not an owned `String`. The internals of
     /// `Object` will handle the heap allocation of the key if needed for
     /// better performance.
+    #[inline]
     pub fn insert(&mut self, key: &str, value: JsonValue) {
+        self.insert_index(key, value);
+    }
+
+    pub(crate) fn insert_index(&mut self, key: &str, value: JsonValue) -> usize {
         let key = key.as_bytes();
         let hash = hash_key(key);
 
         if self.store.len() == 0 {
             self.store.push(Node::new(value, hash, key.len()));
             self.store[0].key.attach(key);
-            return;
+            return 0;
         }
 
         let mut node = unsafe { &mut *self.node_at_index_mut(0) };
@@ -314,28 +319,38 @@ impl Object {
         loop {
             if hash == node.key.hash && key == node.key.as_bytes() {
                 node.value = value;
-                return;
+                return parent;
             } else if hash < node.key.hash {
                 if node.left != 0 {
                     parent = node.left;
                     node = unsafe { &mut *self.node_at_index_mut(node.left) };
                     continue;
                 }
-                self.store[parent].left = self.add_node(key, value, hash);
-                return;
+                let index = self.add_node(key, value, hash);
+                self.store[parent].left = index;
+
+                return index;
             } else {
                 if node.right != 0 {
                     parent = node.right;
                     node = unsafe { &mut *self.node_at_index_mut(node.right) };
                     continue;
                 }
-                self.store[parent].right = self.add_node(key, value, hash);
-                return;
+                let index = self.add_node(key, value, hash);
+                self.store[parent].right = index;
+
+                return index;
             }
         }
     }
 
     #[inline]
+    pub(crate) fn override_at(&mut self, index: usize, value: JsonValue) {
+        self.store[index].value = value;
+    }
+
+    #[inline]
+    #[deprecated(since="0.11.11", note="Was only meant for internal use")]
     pub fn override_last(&mut self, value: JsonValue) {
         if let Some(node) = self.store.last_mut() {
             node.value = value;

@@ -669,10 +669,10 @@ impl<'a> Parser<'a> {
                             return self.unexpected_character()
                         }
 
-                        object.insert(expect_string!(self), JsonValue::Null);
+                        let index = object.insert_index(expect_string!(self), JsonValue::Null);
                         expect!(self, b':');
 
-                        stack.push(StackBlock::Object(object));
+                        stack.push(StackBlock::Object(object, index));
 
                         ch = expect_byte_ignore_whitespace!(self);
 
@@ -738,18 +738,18 @@ impl<'a> Parser<'a> {
                         }
                     },
 
-                    Some(StackBlock::Object(mut object)) => {
-                        object.override_last(value);
+                    Some(StackBlock::Object(mut object, index)) => {
+                        object.override_at(index, value);
 
                         ch = expect_byte_ignore_whitespace!(self);
 
                         match ch {
                             b',' => {
                                 expect!(self, b'"');
-                                object.insert(expect_string!(self), JsonValue::Null);
+                                let index = object.insert_index(expect_string!(self), JsonValue::Null);
                                 expect!(self, b':');
 
-                                stack.push(StackBlock::Object(object));
+                                stack.push(StackBlock::Object(object, index));
 
                                 ch = expect_byte_ignore_whitespace!(self);
 
@@ -771,7 +771,7 @@ impl<'a> Parser<'a> {
 
 enum StackBlock {
     Array(Vec<JsonValue>),
-    Object(Object),
+    Object(Object, usize),
 }
 
 // All that hard work, and in the end it's just a single function in the API.

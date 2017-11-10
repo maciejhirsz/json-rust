@@ -385,7 +385,6 @@ impl JsonValue {
     }
 
     /// Works on `JsonValue::Array` - pushes a new value to the array.
-    #[must_use]
     pub fn push<T>(&mut self, value: T) -> Result<()>
     where T: Into<JsonValue> {
         match *self {
