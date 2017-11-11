@@ -246,50 +246,50 @@ fn json_rust_parse_floats(b: &mut Bencher) {
     });
 }
 
-#[bench]
-fn json_rust_stringify(b: &mut Bencher) {
-    let data = json::parse(JSON_STR).unwrap();
+// #[bench]
+// fn json_rust_stringify(b: &mut Bencher) {
+//     let data = json::parse(JSON_STR).unwrap();
 
-    b.bytes = data.dump().len() as u64;
+//     b.bytes = data.dump().len() as u64;
 
-    b.iter(|| {
-        data.dump();
-    })
-}
+//     b.iter(|| {
+//         data.dump();
+//     })
+// }
 
-#[bench]
-fn json_rust_stringify_io_write(b: &mut Bencher) {
-    let data = json::parse(JSON_STR).unwrap();
+// #[bench]
+// fn json_rust_stringify_io_write(b: &mut Bencher) {
+//     let data = json::parse(JSON_STR).unwrap();
 
-    b.bytes = data.dump().len() as u64;
+//     b.bytes = data.dump().len() as u64;
 
-    let mut target = Vec::new();
+//     let mut target = Vec::new();
 
-    b.iter(|| {
-        data.to_writer(&mut target);
-    })
-}
+//     b.iter(|| {
+//         data.to_writer(&mut target);
+//     })
+// }
 
-#[bench]
-fn json_rust_stringify_floats(b: &mut Bencher) {
-    let data = json::parse(JSON_FLOAT_STR).unwrap();
+// #[bench]
+// fn json_rust_stringify_floats(b: &mut Bencher) {
+//     let data = json::parse(JSON_FLOAT_STR).unwrap();
 
-    b.bytes = data.dump().len() as u64;
+//     b.bytes = data.dump().len() as u64;
 
-    b.iter(|| {
-        data.dump();
-    })
-}
+//     b.iter(|| {
+//         data.dump();
+//     })
+// }
 
-#[bench]
-fn json_rust_stringify_floats_io_write(b: &mut Bencher) {
-    let data = json::parse(JSON_FLOAT_STR).unwrap();
+// #[bench]
+// fn json_rust_stringify_floats_io_write(b: &mut Bencher) {
+//     let data = json::parse(JSON_FLOAT_STR).unwrap();
 
-    b.bytes = data.dump().len() as u64;
+//     b.bytes = data.dump().len() as u64;
 
-    let mut target = Vec::new();
+//     let mut target = Vec::new();
 
-    b.iter(|| {
-        data.to_writer(&mut target);
-    })
-}
+//     b.iter(|| {
+//         data.to_writer(&mut target);
+//     })
+// }

@@ -17,10 +17,12 @@
 // This makes for some ugly code, but it is faster. Hopefully in the future
 // with MIR support the compiler will get smarter about this.
 
-use std::{ str, slice };
+use std::str;
+use arena::Arena;
+use list::{List, ListBuilder};
 use object::Object;
 use number::Number;
-use { JsonValue, Error, Result };
+use { Json, JsonValue, Error, Result };
 
 // This is not actual max precision, but a threshold at which number parsing
 // kicks into checked math.
@@ -30,17 +32,87 @@ const MAX_PRECISION: u64 = 576460752303423500;
 // How many nested Objects/Arrays are allowed to be parsed
 const DEPTH_LIMIT: usize = 512;
 
+trait ToError {
+    fn to_error(&mut Parser) -> Self;
+}
+
+impl<T> ToError for Result<T> {
+    fn to_error(parser: &mut Parser) -> Result<T> {
+        Err(parser.error.take().unwrap_or_else(|| Error::UnexpectedEndOfJson))
+    }
+}
+
+impl<'a> ToError for &'a JsonValue<'a> {
+    fn to_error(_: &mut Parser) -> &'a JsonValue<'a> {
+        &JsonValue::Null
+    }
+}
+
+impl ToError for () {
+    #[inline(always)]
+    fn to_error(_: &mut Parser) -> () {
+        ()
+    }
+}
+
+impl ToError for u8 {
+    #[inline(always)]
+    fn to_error(_: &mut Parser) -> u8 {
+        0
+    }
+}
+
+impl ToError for u32 {
+    #[inline(always)]
+    fn to_error(_: &mut Parser) -> u32 {
+        0
+    }
+}
+
+impl ToError for Number {
+    fn to_error(_: &mut Parser) -> Number {
+        0u64.into()
+    }
+}
+
+impl<'a> ToError for &'a str {
+    fn to_error(_: &mut Parser) -> &'a str {
+        ""
+    }
+}
+
+macro_rules! unwind_loop {
+    ($iteration:expr) => ({
+        $iteration
+        $iteration
+        $iteration
+        $iteration
+
+        loop {
+            $iteration
+            $iteration
+            $iteration
+            $iteration
+        }
+    })
+}
 
 // The `Parser` struct keeps track of indexing over our buffer. All niceness
 // has been abandoned in favor of raw pointer magic. Does that make you feel
 // dirty? _Good._
-struct Parser<'a> {
+struct Parser<'arena> {
+    // Parsing error to be returned
+    error: Option<Error>,
+
+    // Allocation arena
+    arena: &'arena Arena,
+
+    // String slice to parse
+    source: &'arena str,
+
     // Helper buffer for parsing strings that can't be just memcopied from
     // the original source (escaped characters)
     buffer: Vec<u8>,
-
-    // String slice to parse
-    source: &'a str,
 
     // Byte pointer to the slice above
     byte_ptr: *const u8,
@@ -50,21 +122,6 @@ struct Parser<'a> {
 
     // Length of the source
     length: usize,
-}
-
-
-// Read a byte from the source.
-// Will return an error if there are no more bytes.
-macro_rules! expect_byte {
-    ($parser:ident) => ({
-        if $parser.is_eof() {
-            return Err(Error::UnexpectedEndOfJson);
-        }
-
-        let ch = $parser.read_byte();
-        $parser.bump();
-        ch
-    })
 }
 
 
@@ -79,40 +136,12 @@ macro_rules! expect_byte {
 macro_rules! expect_sequence {
     ($parser:ident, $( $ch:pat ),*) => {
         $(
-            match expect_byte!($parser) {
-                $ch => {},
-                _   => return $parser.unexpected_character(),
+            match $parser.read_byte() {
+                $ch => $parser.bump(),
+                _   => unexpected_character!($parser),
             }
         )*
     }
-}
-
-
-// A drop in macro for when we expect to read a byte, but we don't care
-// about any whitespace characters that might occur before it.
-macro_rules! expect_byte_ignore_whitespace {
-    ($parser:ident) => ({
-        let mut ch = expect_byte!($parser);
-
-        // Don't go straight for the loop, assume we are in the clear first.
-        match ch {
-            // whitespace
-            9 ... 13 | 32 => {
-                loop {
-                    match expect_byte!($parser) {
-                        9 ... 13 | 32 => {},
-                        next          => {
-                            ch = next;
-                            break;
-                        }
-                    }
-                }
-            },
-            _ => {}
-        }
-
-        ch
-    })
 }
 
 // Expect to find EOF or just whitespaces leading to EOF after a JSON value
@@ -121,10 +150,7 @@ macro_rules! expect_eof {
         while !$parser.is_eof() {
             match $parser.read_byte() {
                 9 ... 13 | 32 => $parser.bump(),
-                _             => {
-                    $parser.bump();
-                    return $parser.unexpected_character();
-                }
+                _             => unexpected_character!($parser)
             }
         }
     })
@@ -133,25 +159,12 @@ macro_rules! expect_eof {
 // Expect a particular byte to be next. Also available with a variant
 // creates a `match` expression just to ease some pain.
 macro_rules! expect {
-    ($parser:ident, $byte:expr) => ({
-        let ch = expect_byte_ignore_whitespace!($parser);
-
-        if ch != $byte {
-            return $parser.unexpected_character()
+    ($parser:ident, $byte:pat) => {
+        match $parser.ignore_whitespace() {
+            $byte => $parser.bump(),
+            _     => unexpected_character!($parser)
         }
-    });
-
-    {$parser:ident $(, $byte:pat => $then:expr )*} => ({
-        let ch = expect_byte_ignore_whitespace!($parser);
-
-        match ch {
-            $(
-                $byte => $then,
-            )*
-            _ => return $parser.unexpected_character()
-        }
-
-    })
+    }
 }
 
 
@@ -183,82 +196,12 @@ static ALLOWED: [bool; 256] = [
 ];
 
 
-// Expect a string. This is called after encountering, and consuming, a
-// double quote character. This macro has a happy path variant where it
-// does almost nothing as long as all characters are allowed (as described
-// in the look up table above). If it encounters a closing quote without
-// any escapes, it will use a slice straight from the source, avoiding
-// unnecessary buffering.
-macro_rules! expect_string {
+macro_rules! unexpected_character {
     ($parser:ident) => ({
-        let result: &str;
-        let start = $parser.index;
-
-        loop {
-            let ch = expect_byte!($parser);
-            if ALLOWED[ch as usize] {
-                continue;
-            }
-            if ch == b'"' {
-                unsafe {
-                    let ptr = $parser.byte_ptr.offset(start as isize);
-                    let len = $parser.index - 1 - start;
-                    result = str::from_utf8_unchecked(slice::from_raw_parts(ptr, len));
-                }
-                break;
-            }
-            if ch == b'\\' {
-                result = try!($parser.read_complex_string(start));
-                break;
-            }
-
-            return $parser.unexpected_character();
-        }
-
-        result
+        $parser.err_unexpected_character();
+        return ToError::to_error($parser);
     })
 }
-
-
-// Expect a number. Of some kind.
-macro_rules! expect_number {
-    ($parser:ident, $first:ident) => ({
-        let mut num = ($first - b'0') as u64;
-
-        let result: Number;
-
-        // Cap on how many iterations we do while reading to u64
-        // in order to avoid an overflow.
-        loop {
-            if num >= MAX_PRECISION {
-                result = try!($parser.read_big_number(num));
-                break;
-            }
-
-            if $parser.is_eof() {
-                result = num.into();
-                break;
-            }
-
-            let ch = $parser.read_byte();
-
-            match ch {
-                b'0' ... b'9' => {
-                    $parser.bump();
-                    num = num * 10 + (ch - b'0') as u64;
-                },
-                _             => {
-                    let mut e = 0;
-                    result = allow_number_extensions!($parser, num, e, ch);
-                    break;
-                }
-            }
-        }
-
-        result
-    })
-}
-
 
 // Invoked after parsing an integer, this will account for fractions and/or
 // `e` notation.
@@ -271,7 +214,7 @@ macro_rules! allow_number_extensions {
             },
             b'e' | b'E' => {
                 $parser.bump();
-                try!($parser.expect_exponent($num, $e))
+                $parser.read_exponent($num, $e)
             },
             _  => $num.into()
         }
@@ -299,7 +242,7 @@ macro_rules! expect_fraction {
     ($parser:ident, $num:ident, $e:ident) => ({
         let result: Number;
 
-        let ch = expect_byte!($parser);
+        let ch = $parser.expect_byte();
 
         match ch {
             b'0' ... b'9' => {
@@ -318,7 +261,7 @@ macro_rules! expect_fraction {
                     }
                 }
             },
-            _ => return $parser.unexpected_character()
+            _ => unexpected_character!($parser)
         }
 
         loop {
@@ -348,7 +291,7 @@ macro_rules! expect_fraction {
                 },
                 b'e' | b'E' => {
                     $parser.bump();
-                    result = try!($parser.expect_exponent($num, $e));
+                    result = $parser.read_exponent($num, $e);
                     break;
                 }
                 _ => {
@@ -362,11 +305,13 @@ macro_rules! expect_fraction {
     })
 }
 
-impl<'a> Parser<'a> {
-    pub fn new(source: &'a str) -> Self {
+impl<'arena> Parser<'arena> {
+    pub fn new(arena: &'arena Arena, source: &'arena str) -> Self {
         Parser {
+            error: None,
+            source,
+            arena,
             buffer: Vec::with_capacity(30),
-            source: source,
             byte_ptr: source.as_ptr(),
             index: 0,
             length: source.len(),
@@ -377,6 +322,11 @@ impl<'a> Parser<'a> {
     #[inline(always)]
     fn is_eof(&mut self) -> bool {
         self.index == self.length
+    }
+
+    #[inline(always)]
+    fn alloc<T: Copy>(&mut self, val: T) -> &'arena T {
+        self.arena.alloc(val)
     }
 
     // Read a byte from the source. Note that this does not increment
@@ -392,6 +342,28 @@ impl<'a> Parser<'a> {
         unsafe { *self.byte_ptr.offset(self.index as isize) }
     }
 
+    #[inline(always)]
+    fn expect_byte(&mut self) -> u8 {
+        if self.is_eof() {
+            self.err(|| Error::UnexpectedEndOfJson);
+            return 0;
+        }
+
+        let ch = self.read_byte();
+        self.bump();
+        ch
+    }
+
+    #[inline(always)]
+    fn ignore_whitespace(&mut self) -> u8 {
+        unwind_loop!({
+            match self.read_byte() {
+                9 ... 13 | 32 => self.bump(),
+                ch            => return ch
+            }
+        })
+    }
+
     // Manually increment the index. Calling `read_byte` and then `bump`
     // is equivalent to consuming a byte on an iterator.
     #[inline(always)]
@@ -399,9 +371,19 @@ impl<'a> Parser<'a> {
         self.index = self.index.wrapping_add(1);
     }
 
+    fn err<F>(&mut self, f: F)
+        where F: FnOnce() -> Error
+    {
+        if self.error.is_some() {
+            return;
+        }
+
+        self.error = Some(f())
+    }
+
     // So we got an unexpected character, now what? Well, figure out where
     // it is, and throw an error!
-    fn unexpected_character<T: Sized>(&mut self) -> Result<T> {
+    fn err_unexpected_character(&mut self) {
         let at = self.index - 1;
 
         let ch = self.source[at..]
@@ -417,39 +399,38 @@ impl<'a> Parser<'a> {
 
         let colno = col.chars().count();
 
-        Err(Error::UnexpectedCharacter {
-            ch: ch,
-            line: lineno + 1,
-            column: colno + 1,
-        })
+        self.err(move || {
+            Error::UnexpectedCharacter {
+                ch,
+                line: lineno + 1,
+                column: colno + 1,
+            }
+        });
     }
 
     // Boring
-    fn read_hexdec_digit(&mut self) -> Result<u32> {
-        let ch = expect_byte!(self);
-        Ok(match ch {
-            b'0' ... b'9' => (ch - b'0'),
-            b'a' ... b'f' => (ch + 10 - b'a'),
-            b'A' ... b'F' => (ch + 10 - b'A'),
-            _             => return self.unexpected_character(),
-        } as u32)
+    fn read_hexdec_digit(&mut self) -> u32 {
+        match self.expect_byte() {
+            ch @ b'0' ... b'9' => (ch - b'0') as u32,
+            ch @ b'a' ... b'f' => (ch + 10 - b'a') as u32,
+            ch @ b'A' ... b'F' => (ch + 10 - b'A') as u32,
+            _                  => unexpected_character!(self),
+        }
     }
 
-    // Boring
-    fn read_hexdec_codepoint(&mut self) -> Result<u32> {
-        Ok(
-            try!(self.read_hexdec_digit()) << 12 |
-            try!(self.read_hexdec_digit()) << 8  |
-            try!(self.read_hexdec_digit()) << 4  |
-            try!(self.read_hexdec_digit())
-        )
+    #[inline(always)]
+    fn read_hexdec_codepoint(&mut self) -> u32 {
+        self.read_hexdec_digit() << 12 |
+        self.read_hexdec_digit() << 8  |
+        self.read_hexdec_digit() << 4  |
+        self.read_hexdec_digit()
     }
 
     // Oh look, some action. This method reads an escaped unicode
     // sequence such as `\uDEAD` from the string. Except `DEAD` is
     // not a valid codepoint, so it also needs to handle errors...
-    fn read_codepoint(&mut self) -> Result<()> {
-        let mut codepoint = try!(self.read_hexdec_codepoint());
+    fn read_codepoint(&mut self) {
+        let mut codepoint = self.read_hexdec_codepoint();
 
         match codepoint {
             0x0000 ... 0xD7FF => {},
@@ -459,16 +440,16 @@ impl<'a> Parser<'a> {
 
                 expect_sequence!(self, b'\\', b'u');
 
-                let lower = try!(self.read_hexdec_codepoint());
+                let lower = self.read_hexdec_codepoint();
 
                 if let 0xDC00 ... 0xDFFF = lower {
                     codepoint = (codepoint | lower - 0xDC00) + 0x010000;
                 } else {
-                    return Err(Error::FailedUtf8Parsing)
+                    return self.err(|| Error::FailedUtf8Parsing);
                 }
             },
             0xE000 ... 0xFFFF => {},
-            _ => return Err(Error::FailedUtf8Parsing)
+            _ => return self.err(|| Error::FailedUtf8Parsing)
         }
 
         match codepoint {
@@ -488,87 +469,130 @@ impl<'a> Parser<'a> {
                 (((codepoint >> 6)  as u8) & 0x3F) | 0x80,
                 ((codepoint         as u8) & 0x3F) | 0x80
             ]),
-            _ => return Err(Error::FailedUtf8Parsing)
+            _ => return self.err(|| Error::FailedUtf8Parsing)
         }
+    }
 
-        Ok(())
+    #[inline(always)]
+    fn read_string(&mut self) -> &'arena str {
+        let start = self.index;
+
+        loop {
+            match self.read_byte() {
+                ch if ALLOWED[ch as usize] => self.bump(),
+
+                b'"'  => {
+                    let end = self.index;
+                    self.bump();
+                    return &self.source[start..end];
+                },
+                b'\\' => return self.read_complex_string(start),
+                _     => unexpected_character!(self),
+            }
+        }
     }
 
     // What's so complex about strings you may ask? Not that much really.
-    // This method is called if the `expect_string!` macro encounters an
+    // This method is called if the `read_string` function encounters an
     // escape. The added complexity is that it will have to use an internal
     // buffer to read all the escaped characters into, before finally
     // producing a usable slice. What it means it that parsing "foo\bar"
     // is whole lot slower than parsing "foobar", as the former suffers from
     // having to be read from source to a buffer and then from a buffer to
     // our target string. Nothing to be done about this, really.
-    fn read_complex_string<'b>(&mut self, start: usize) -> Result<&'b str> {
+    fn read_complex_string(&mut self, start: usize) -> &'arena str {
         self.buffer.clear();
-        let mut ch = b'\\';
 
         // TODO: Use fastwrite here as well
-        self.buffer.extend_from_slice(self.source[start .. self.index - 1].as_bytes());
+        self.buffer.extend_from_slice(self.source[start .. self.index].as_bytes());
+
+        // let mut ch = b'\\';
+        self.bump();
 
         loop {
-            if ALLOWED[ch as usize] {
-                self.buffer.push(ch);
-                ch = expect_byte!(self);
-                continue;
-            }
-            match ch {
-                b'"'  => break,
+            match self.read_byte() {
+                ch if ALLOWED[ch as usize] => {
+                    // TODO: keep pushing slices
+                    self.buffer.push(ch);
+                    self.bump();
+                }
+
+                b'"'  => {
+                    self.bump();
+                    break;
+                },
                 b'\\' => {
-                    let escaped = expect_byte!(self);
-                    let escaped = match escaped {
+                    self.bump();
+
+                    let escaped = match self.expect_byte() {
                         b'u'  => {
-                            try!(self.read_codepoint());
-                            ch = expect_byte!(self);
+                            self.read_codepoint();
                             continue;
                         },
-                        b'"'  |
-                        b'\\' |
-                        b'/'  => escaped,
+                        escaped @ b'"'  |
+                        escaped @ b'\\' |
+                        escaped @ b'/'  => escaped,
                         b'b'  => 0x8,
                         b'f'  => 0xC,
                         b't'  => b'\t',
                         b'r'  => b'\r',
                         b'n'  => b'\n',
-                        _     => return self.unexpected_character()
+                        _     => unexpected_character!(self)
                     };
                     self.buffer.push(escaped);
                 },
-                _ => return self.unexpected_character()
+                _ => unexpected_character!(self)
             }
-            ch = expect_byte!(self);
         }
 
         // Since the original source is already valid UTF-8, and `\`
         // cannot occur in front of a codepoint > 127, this is safe.
-        Ok(unsafe {
+        let string = unsafe {
             str::from_utf8_unchecked(
-                // Because the buffer is stored on the parser, returning it
-                // as a slice here freaks out the borrow checker. The compiler
-                // can't know that the buffer isn't used till the result
-                // of this function is long used and irrelevant. To avoid
-                // issues here, we construct a new slice from raw parts, which
-                // then has lifetime bound to the outer function scope instead
-                // of the parser itself.
-                slice::from_raw_parts(self.buffer.as_ptr(), self.buffer.len())
+                self.buffer.as_slice()
             )
-        })
+        };
+
+        self.arena.alloc_str(string)
     }
 
-    // Big numbers! If the `expect_number!` reaches a point where the decimal
+    #[inline(always)]
+    fn read_number(&mut self, mut num: u64) -> Number {
+        // Cap on how many iterations we do while reading to u64
+        // in order to avoid an overflow.
+        loop {
+            if self.is_eof() {
+                return num.into();
+            }
+
+            match self.read_byte() {
+                ch @ b'0' ... b'9' => {
+                    self.bump();
+                    num = num * 10 + (ch - b'0') as u64;
+
+                    if num >= MAX_PRECISION {
+                        return self.read_big_number(num);
+                    }
+                },
+                ch => {
+                    let mut e = 0;
+                    return allow_number_extensions!(self, num, e, ch);
+                }
+            }
+        }
+    }
+
+    // Big numbers! If the `read_number` reaches a point where the decimal
     // mantissa could have overflown the size of u64, it will switch to this
     // control path instead. This method will pick up where the macro started,
     // but instead of continuing to read into the mantissa, it will increment
     // the exponent. Note that no digits are actually read here, as we already
     // exceeded the precision range of f64 anyway.
-    fn read_big_number(&mut self, mut num: u64) -> Result<Number> {
+    fn read_big_number(&mut self, mut num: u64) -> Number {
         let mut e = 0i16;
         loop {
             if self.is_eof() {
-                return Ok(unsafe { Number::from_parts_unchecked(true, num, e) });
+                return unsafe { Number::from_parts_unchecked(true, num, e) };
             }
             let ch = self.read_byte();
             match ch {
@@ -583,30 +607,30 @@ impl<'a> Parser<'a> {
                 },
                 b'.' => {
                     self.bump();
-                    return Ok(expect_fraction!(self, num, e));
+                    return expect_fraction!(self, num, e);
                 },
                 b'e' | b'E' => {
                     self.bump();
-                    return self.expect_exponent(num, e);
+                    return self.read_exponent(num, e);
                 }
                 _  => break
             }
         }
 
-        Ok(unsafe { Number::from_parts_unchecked(true, num, e) })
+        unsafe { Number::from_parts_unchecked(true, num, e) }
     }
 
     // Called in the rare case that a number with `e` notation has been
     // encountered. This is pretty straight forward, I guess.
-    fn expect_exponent(&mut self, num: u64, big_e: i16) -> Result<Number> {
-        let mut ch = expect_byte!(self);
+    fn read_exponent(&mut self, num: u64, big_e: i16) -> Number {
+        let mut ch = self.expect_byte();
         let sign = match ch {
             b'-' => {
-                ch = expect_byte!(self);
+                ch = self.expect_byte();
                 -1
             },
             b'+' => {
-                ch = expect_byte!(self);
+                ch = self.expect_byte();
                 1
             },
             _    => 1
@@ -614,7 +638,7 @@ impl<'a> Parser<'a> {
 
         let mut e = match ch {
             b'0' ... b'9' => (ch - b'0') as i16,
-            _ => return self.unexpected_character(),
+            _ => unexpected_character!(self),
         };
 
         loop {
@@ -631,144 +655,212 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Ok(unsafe { Number::from_parts_unchecked(true, num, (big_e.saturating_add(e * sign))) })
+        unsafe { Number::from_parts_unchecked(true, num, (big_e.saturating_add(e * sign))) }
     }
 
-    // Parse away!
-    fn parse(&mut self) -> Result<JsonValue> {
-        let mut stack = Vec::with_capacity(3);
-        let mut ch = expect_byte_ignore_whitespace!(self);
-
-        'parsing: loop {
-            let mut value = match ch {
-                b'[' => {
-                    ch = expect_byte_ignore_whitespace!(self);
-
-                    if ch != b']' {
-                        if stack.len() == DEPTH_LIMIT {
-                            return Err(Error::ExceededDepthLimit);
-                        }
-
-                        stack.push(StackBlock(JsonValue::Array(Vec::with_capacity(2)), 0));
-                        continue 'parsing;
-                    }
-
-                    JsonValue::Array(Vec::new())
+    #[inline(always)]
+    fn byte_to_val(&mut self, byte: u8) -> &'arena JsonValue<'arena> {
+        fn ar<'arena>(parser: &mut Parser<'arena>) -> &'arena JsonValue<'arena> {
+            let mut builder = match parser.ignore_whitespace() {
+                b']' => {
+                    parser.bump();
+                    return parser.alloc(JsonValue::Array(List::empty()));
                 },
-                b'{' => {
-                    ch = expect_byte_ignore_whitespace!(self);
-
-                    if ch != b'}' {
-                        if stack.len() == DEPTH_LIMIT {
-                            return Err(Error::ExceededDepthLimit);
-                        }
-
-                        let mut object = Object::with_capacity(3);
-
-                        if ch != b'"' {
-                            return self.unexpected_character()
-                        }
-
-                        let index = object.insert_index(expect_string!(self), JsonValue::Null);
-                        expect!(self, b':');
-
-                        stack.push(StackBlock(JsonValue::Object(object), index));
-
-                        ch = expect_byte_ignore_whitespace!(self);
-
-                        continue 'parsing;
-                    }
-
-                    JsonValue::Object(Object::new())
-                },
-                b'"' => expect_string!(self).into(),
-                b'0' => JsonValue::Number(allow_number_extensions!(self)),
-                b'1' ... b'9' => {
-                    JsonValue::Number(expect_number!(self, ch))
-                },
-                b'-' => {
-                    let ch = expect_byte!(self);
-                    JsonValue::Number(- match ch {
-                        b'0' => allow_number_extensions!(self),
-                        b'1' ... b'9' => expect_number!(self, ch),
-                        _    => return self.unexpected_character()
-                    })
+                ch   => {
+                    parser.bump();
+                    ListBuilder::new(&parser.arena, parser.byte_to_val(ch))
                 }
-                b't' => {
-                    expect_sequence!(self, b'r', b'u', b'e');
-                    JsonValue::Boolean(true)
-                },
-                b'f' => {
-                    expect_sequence!(self, b'a', b'l', b's', b'e');
-                    JsonValue::Boolean(false)
-                },
-                b'n' => {
-                    expect_sequence!(self, b'u', b'l', b'l');
-                    JsonValue::Null
-                },
-                _    => return self.unexpected_character()
             };
 
-            'popping: loop {
-                match stack.last_mut() {
-                    None => {
-                        expect_eof!(self);
-
-                        return Ok(value);
+            loop {
+                match parser.ignore_whitespace() {
+                    b']' => {
+                        parser.bump();
+                        return parser.alloc(JsonValue::Array(builder.into_list()));
                     },
-
-                    Some(&mut StackBlock(JsonValue::Array(ref mut array), _)) => {
-                        array.push(value);
-
-                        ch = expect_byte_ignore_whitespace!(self);
-
-                        match ch {
-                            b',' => {
-                                ch = expect_byte_ignore_whitespace!(self);
-
-                                continue 'parsing;
-                            },
-                            b']' => {},
-                            _    => return self.unexpected_character()
-                        }
+                    b',' => {
+                        parser.bump();
+                        builder.push(parser.read_value())
                     },
-
-                    Some(&mut StackBlock(JsonValue::Object(ref mut object), ref mut index )) => {
-                        object.override_at(*index, value);
-
-                        ch = expect_byte_ignore_whitespace!(self);
-
-                        match ch {
-                            b',' => {
-                                expect!(self, b'"');
-                                *index = object.insert_index(expect_string!(self), JsonValue::Null);
-                                expect!(self, b':');
-
-                                ch = expect_byte_ignore_whitespace!(self);
-
-                                continue 'parsing;
-                            },
-                            b'}' => {},
-                            _    => return self.unexpected_character()
-                        }
-                    },
-
-                    _ => unreachable!(),
-                }
-
-                value = match stack.pop() {
-                    Some(StackBlock(value, _)) => value,
-                    None                       => break 'popping
+                    _ => unexpected_character!(parser)
                 }
             }
         }
+
+        fn oj<'arena>(parser: &mut Parser<'arena>) -> &'arena JsonValue<'arena> {
+            let object = Object::new();
+            let result = parser.alloc(JsonValue::Object(object));
+
+            match parser.ignore_whitespace() {
+                b'}' => {
+                    parser.bump();
+                    return result;
+                },
+                b'"' => {
+                    parser.bump();
+
+                    let key = parser.read_string();
+                    expect!(parser, b':');
+
+                    object.insert_allocated(&parser.arena, key, parser.read_value())
+                },
+                _ => unexpected_character!(parser)
+            }
+
+            loop {
+                match parser.ignore_whitespace() {
+                    b'}' => {
+                        parser.bump();
+                        return result;
+                    },
+                    b',' => {
+                        parser.bump();
+                        expect!(parser, b'"');
+                        let key = parser.read_string();
+                        expect!(parser, b':');
+
+                        object.insert_allocated(&parser.arena, key, parser.read_value())
+                    },
+                    _ => unexpected_character!(parser)
+                }
+            }
+        }
+
+        fn st<'arena>(parser: &mut Parser<'arena>) -> &'arena JsonValue<'arena> {
+            let val = JsonValue::String(parser.read_string());
+            parser.alloc(val)
+        }
+
+        fn n0<'arena>(parser: &mut Parser<'arena>) -> &'arena JsonValue<'arena> {
+            let val = JsonValue::Number(allow_number_extensions!(parser));
+            parser.alloc(val)
+        }
+
+        fn n1<'arena>(parser: &mut Parser<'arena>) -> &'arena JsonValue<'arena> {
+            let val = JsonValue::Number(parser.read_number(1));
+            parser.alloc(val)
+        }
+
+        fn n2<'arena>(parser: &mut Parser<'arena>) -> &'arena JsonValue<'arena> {
+            let val = JsonValue::Number(parser.read_number(2));
+            parser.alloc(val)
+        }
+
+        fn n3<'arena>(parser: &mut Parser<'arena>) -> &'arena JsonValue<'arena> {
+            let val = JsonValue::Number(parser.read_number(3));
+            parser.alloc(val)
+        }
+
+        fn n4<'arena>(parser: &mut Parser<'arena>) -> &'arena JsonValue<'arena> {
+            let val = JsonValue::Number(parser.read_number(4));
+            parser.alloc(val)
+        }
+
+        fn n5<'arena>(parser: &mut Parser<'arena>) -> &'arena JsonValue<'arena> {
+            let val = JsonValue::Number(parser.read_number(5));
+            parser.alloc(val)
+        }
+
+        fn n6<'arena>(parser: &mut Parser<'arena>) -> &'arena JsonValue<'arena> {
+            let val = JsonValue::Number(parser.read_number(6));
+            parser.alloc(val)
+        }
+
+        fn n7<'arena>(parser: &mut Parser<'arena>) -> &'arena JsonValue<'arena> {
+            let val = JsonValue::Number(parser.read_number(7));
+            parser.alloc(val)
+        }
+
+        fn n8<'arena>(parser: &mut Parser<'arena>) -> &'arena JsonValue<'arena> {
+            let val = JsonValue::Number(parser.read_number(8));
+            parser.alloc(val)
+        }
+
+        fn n9<'arena>(parser: &mut Parser<'arena>) -> &'arena JsonValue<'arena> {
+            let val = JsonValue::Number(parser.read_number(9));
+            parser.alloc(val)
+        }
+
+        fn nn<'arena>(parser: &mut Parser<'arena>) -> &'arena JsonValue<'arena> {
+            let ch = parser.expect_byte();
+            let val = JsonValue::Number(- match ch {
+                b'0' => allow_number_extensions!(parser),
+                b'1' ... b'9' => parser.read_number((ch - b'0') as u64),
+                _    => unexpected_character!(parser)
+            });
+            parser.alloc(val)
+        }
+
+        fn tr<'arena>(parser: &mut Parser<'arena>) -> &'arena JsonValue<'arena> {
+            expect_sequence!(parser, b'r', b'u', b'e');
+            &JsonValue::Boolean(true)
+        }
+
+        fn fl<'arena>(parser: &mut Parser<'arena>) -> &'arena JsonValue<'arena> {
+            expect_sequence!(parser, b'a', b'l', b's', b'e');
+            &JsonValue::Boolean(false)
+        }
+
+        fn nl<'arena>(parser: &mut Parser<'arena>) -> &'arena JsonValue<'arena> {
+            expect_sequence!(parser, b'u', b'l', b'l');
+            &JsonValue::Null
+        }
+
+        fn __<'arena>(parser: &mut Parser<'arena>) -> &'arena JsonValue<'arena> {
+            unexpected_character!(parser)
+        }
+
+        static BYTE_TO_VAL: [for<'arena> fn(&mut Parser<'arena>) -> &'arena JsonValue<'arena>; 256] = [
+        // 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
+          __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 0
+          __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 1
+          __, __, st, __, __, __, __, __, __, __, __, __, __, nn, __, __, // 2
+          n0, n1, n2, n3, n4, n5, n6, n7, n8, n9, __, __, __, __, __, __, // 3
+          __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 4
+          __, __, __, __, __, __, __, __, __, __, __, ar, __, __, __, __, // 5
+          __, __, __, __, __, __, fl, __, __, __, __, __, __, __, nl, __, // 6
+          __, __, __, __, tr, __, __, __, __, __, __, oj, __, __, __, __, // 7
+          __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 8
+          __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 9
+          __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // A
+          __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // B
+          __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // C
+          __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // D
+          __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // E
+          __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // F
+        ];
+
+        BYTE_TO_VAL[byte as usize](self)
+    }
+
+    #[inline(always)]
+    fn read_value(&mut self) -> &'arena JsonValue<'arena> {
+        let ch = self.ignore_whitespace();
+        self.bump();
+        self.byte_to_val(ch)
+    }
+
+    // Parse away!
+    #[inline(always)]
+    fn parse(&mut self) -> Result<&'arena JsonValue<'arena>> {
+        let value = self.read_value();
+
+        expect_eof!(self);
+
+        Ok(value)
     }
 }
 
-struct StackBlock(JsonValue, usize);
-
 // All that hard work, and in the end it's just a single function in the API.
-#[inline]
-pub fn parse(source: &str) -> Result<JsonValue> {
-    Parser::new(source).parse()
+pub fn parse(source: &str) -> Result<Json> {
+    let arena = Arena::new();
+    let root = {
+        let source = arena.alloc_str(source);
+        Parser::new(&arena, source).parse().map(|value| value as *const JsonValue as usize)
+    };
+
+    root.map(move |root| Json {
+        arena,
+        root
+    })
 }

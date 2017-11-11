@@ -1,11 +1,8 @@
-use std::{ ptr, mem, str, slice, fmt };
-use std::ops::{ Index, IndexMut, Deref };
+use std::fmt;
 
-use codegen::{ DumpGenerator, Generator, PrettyGenerator };
-use value::JsonValue;
-
-const KEY_BUF_LEN: usize = 32;
-static NULL: JsonValue = JsonValue::Null;
+use json::JsonValue;
+use cell::CopyCell;
+use arena::Arena;
 
 // FNV-1a implementation
 //
@@ -48,658 +45,205 @@ fn hash_key(key: &[u8]) -> u64 {
     hash
 }
 
-struct Key {
-    // Internal buffer to store keys that fit within `KEY_BUF_LEN`,
-    // otherwise this field will contain garbage.
-    pub buf: [u8; KEY_BUF_LEN],
-
-    // Length of the key in bytes.
-    pub len: usize,
-
-    // Cached raw pointer to the key, so that we can cheaply construct
-    // a `&str` slice from the `Node` without checking if the key is
-    // allocated separately on the heap, or in the `key_buf`.
-    pub ptr: *mut u8,
-
-    // A hash of the key, explanation below.
+#[derive(Clone, Copy)]
+struct Node<'arena> {
+    pub key: &'arena str,
     pub hash: u64,
+    pub value: CopyCell<&'arena JsonValue<'arena>>,
+    pub left: CopyCell<Option<&'arena Node<'arena>>>,
+    pub right: CopyCell<Option<&'arena Node<'arena>>>,
 }
 
-impl Key {
-    #[inline]
-    fn new(hash: u64, len: usize) -> Self {
-        Key {
-            buf: [0; KEY_BUF_LEN],
-            len: len,
-            ptr: ptr::null_mut(),
-            hash: hash
-        }
-    }
-
-    #[inline]
-    fn as_bytes(&self) -> &[u8] {
-        unsafe {
-            slice::from_raw_parts(self.ptr, self.len)
-        }
-    }
-
-    #[inline]
-    fn as_str(&self) -> &str {
-        unsafe {
-            str::from_utf8_unchecked(self.as_bytes())
-        }
-    }
-
-    // The `buf` on the `Key` can only be filled after the struct
-    // is already on the `Vec`'s heap (along with the `Node`).
-    // For that reason it's not set in `Key::new` but only after
-    // the `Node` is created and allocated.
-    #[inline]
-    fn attach(&mut self, key: &[u8]) {
-        if self.len <= KEY_BUF_LEN {
-            unsafe {
-                ptr::copy_nonoverlapping(
-                    key.as_ptr(),
-                    self.buf.as_mut_ptr(),
-                    self.len
-                );
-            }
-            self.ptr = self.buf.as_mut_ptr();
-        } else {
-            let mut heap = key.to_vec();
-            self.ptr = heap.as_mut_ptr();
-            mem::forget(heap);
-        }
-    }
-
-    // Since we store `Node`s on a vector, it will suffer from reallocation.
-    // Whenever that happens, `key.ptr` for short keys will turn into dangling
-    // pointers and will need to be re-cached.
-    #[inline]
-    fn fix_ptr(&mut self) {
-        if self.len <= KEY_BUF_LEN {
-            self.ptr = self.buf.as_mut_ptr();
-        }
-    }
-}
-
-// Implement `Sync` and `Send` for `Key` despite the use of raw pointers. The struct
-// itself should be memory safe.
-unsafe impl Sync for Key {}
-unsafe impl Send for Key {}
-
-// Because long keys _can_ be stored separately from the `Key` on heap,
-// it's essential to clean up the heap allocation when the `Key` is dropped.
-impl Drop for Key {
-    fn drop(&mut self) {
-        unsafe {
-            if self.len > KEY_BUF_LEN {
-                // Construct a `Vec` out of the `key_ptr`. Since the key is
-                // always allocated from a slice, the capacity is equal to length.
-                let heap = Vec::from_raw_parts(
-                    self.ptr,
-                    self.len,
-                    self.len
-                );
-
-                // Now that we have an owned `Vec<u8>`, drop it.
-                drop(heap);
-            }
-        }
-    }
-}
-
-// Just like with `Drop`, `Clone` needs a custom implementation that accounts
-// for the fact that key _can_ be separately heap allocated.
-impl Clone for Key {
-    fn clone(&self) -> Self {
-        if self.len > KEY_BUF_LEN {
-            let mut heap = self.as_bytes().to_vec();
-            let ptr = heap.as_mut_ptr();
-            mem::forget(heap);
-
-            Key {
-                buf: [0; KEY_BUF_LEN],
-                len: self.len,
-                ptr: ptr,
-                hash: self.hash,
-            }
-        } else {
-            Key {
-                buf: self.buf,
-                len: self.len,
-                ptr: ptr::null_mut(), // requires a `fix_ptr` call after `Node` is on the heap
-                hash: self.hash,
-            }
-        }
-    }
-}
-
-#[derive(Clone)]
-struct Node {
-    // String-esque key abstraction
-    pub key: Key,
-
-    // Value stored.
-    pub value: JsonValue,
-
-    // Store vector index pointing to the `Node` for which `key_hash` is smaller
-    // than that of this `Node`.
-    // Will default to 0 as root node can't be referenced anywhere else.
-    pub left: usize,
-
-    // Same as above but for `Node`s with hash larger than this one. If the
-    // hash is the same, but keys are different, the lookup will default
-    // to the right branch as well.
-    pub right: usize,
-}
-
-impl fmt::Debug for Node {
+impl<'arena> fmt::Debug for Node<'arena> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(&(self.key.as_str(), &self.value, self.left, self.right), f)
+        fmt::Debug::fmt(&(self.key, &self.value), f)
     }
 }
 
-impl PartialEq for Node {
-    fn eq(&self, other: &Node) -> bool {
-        self.key.hash       == other.key.hash       &&
-        self.key.as_bytes() == other.key.as_bytes() &&
-        self.value          == other.value
+impl<'arena> PartialEq for Node<'arena> {
+    fn eq(&self, other: &Node<'arena>) -> bool {
+        self.hash  == other.hash &&
+        self.key   == other.key  &&
+        self.value == other.value
     }
 }
 
-impl Node {
+impl<'arena> Node<'arena> {
     #[inline]
-    fn new(value: JsonValue, hash: u64, len: usize) -> Node {
+    pub fn new(key: &'arena str, hash: u64, value: &'arena JsonValue<'arena>) -> Self {
         Node {
-            key: Key::new(hash, len),
-            value: value,
-            left: 0,
-            right: 0,
+            key,
+            hash,
+            value: CopyCell::new(value),
+            left: CopyCell::new(None),
+            right: CopyCell::new(None),
         }
     }
 }
 
-/// A binary tree implementation of a string -> `JsonValue` map. You normally don't
-/// have to interact with instances of `Object`, much more likely you will be
-/// using the `JsonValue::Object` variant, which wraps around this struct.
-#[derive(Debug)]
-pub struct Object {
-    store: Vec<Node>
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct Object<'arena> {
+    root: CopyCell<Option<&'arena Node<'arena>>>,
 }
 
-impl Object {
-    /// Create a new, empty instance of `Object`. Empty `Object` performs no
-    /// allocation until a value is inserted into it.
-    #[inline(always)]
+impl<'arena> Object<'arena> {
+    /// Create a new, empty instance of `Object`.
+    #[inline]
     pub fn new() -> Self {
         Object {
-            store: Vec::new()
-        }
-    }
-
-    /// Create a new `Object` with memory preallocated for `capacity` number
-    /// of entries.
-    #[inline(always)]
-    pub fn with_capacity(capacity: usize) -> Self {
-        Object {
-            store: Vec::with_capacity(capacity)
+            root: CopyCell::new(None),
         }
     }
 
     #[inline]
-    fn node_at_index_mut(&mut self, index: usize) -> *mut Node {
-        unsafe { self.store.as_mut_ptr().offset(index as isize) }
-    }
-
-    #[inline(always)]
-    fn add_node(&mut self, key: &[u8], value: JsonValue, hash: u64) -> usize {
-        let index = self.store.len();
-
-        if index < self.store.capacity() {
-            // Because we've just checked the capacity, we can avoid
-            // using `push`, and instead do unsafe magic to memcpy
-            // the new node at the correct index without additional
-            // capacity or bound checks.
-            unsafe {
-                let node = Node::new(value, hash, key.len());
-                self.store.set_len(index + 1);
-
-                // To whomever gets concerned: I got better results with
-                // copy than write. Difference in benchmarks wasn't big though.
-                ptr::copy_nonoverlapping(
-                    &node as *const Node,
-                    self.store.as_mut_ptr().offset(index as isize),
-                    1,
-                );
-
-                // Since the Node has been copied, we need to forget about
-                // the owned value, else we may run into use after free.
-                mem::forget(node);
-            }
-
-            unsafe { self.store.get_unchecked_mut(index).key.attach(key) };
-        } else {
-            self.store.push(Node::new(value, hash, key.len()));
-
-            unsafe { self.store.get_unchecked_mut(index).key.attach(key) };
-
-            // Index up to the index (old length), we don't need to fix
-            // anything on the Node that just got pushed.
-            for node in self.store.iter_mut().take(index) {
-                node.key.fix_ptr();
-            }
-        }
-
-        index
-    }
-
-    /// Insert a new entry, or override an existing one. Note that `key` has
-    /// to be a `&str` slice and not an owned `String`. The internals of
-    /// `Object` will handle the heap allocation of the key if needed for
-    /// better performance.
-    #[inline]
-    pub fn insert(&mut self, key: &str, value: JsonValue) {
-        self.insert_index(key, value);
-    }
-
-    pub(crate) fn insert_index(&mut self, key: &str, value: JsonValue) -> usize {
-        let key = key.as_bytes();
-        let hash = hash_key(key);
-
-        if self.store.len() == 0 {
-            self.store.push(Node::new(value, hash, key.len()));
-            self.store[0].key.attach(key);
-            return 0;
-        }
-
-        let mut node = unsafe { &mut *self.node_at_index_mut(0) };
-        let mut parent = 0;
+    fn find_slot(&self, key: &str, hash: u64) -> &CopyCell<Option<&'arena Node<'arena>>> {
+        let mut node = &self.root;
 
         loop {
-            if hash == node.key.hash && key == node.key.as_bytes() {
-                node.value = value;
-                return parent;
-            } else if hash < node.key.hash {
-                if node.left != 0 {
-                    parent = node.left;
-                    node = unsafe { &mut *self.node_at_index_mut(node.left) };
-                    continue;
+            match node.get() {
+                None         => return node,
+                Some(parent) => {
+                    if hash == parent.hash && key == parent.key {
+                        return node;
+                    } else if hash < parent.hash {
+                        node = &parent.left;
+                    } else {
+                        node = &parent.right;
+                    }
                 }
-                let index = self.add_node(key, value, hash);
-                self.store[parent].left = index;
-
-                return index;
-            } else {
-                if node.right != 0 {
-                    parent = node.right;
-                    node = unsafe { &mut *self.node_at_index_mut(node.right) };
-                    continue;
-                }
-                let index = self.add_node(key, value, hash);
-                self.store[parent].right = index;
-
-                return index;
             }
         }
     }
 
     #[inline]
-    pub(crate) fn override_at(&mut self, index: usize, value: JsonValue) {
-        self.store[index].value = value;
+    pub fn insert(&self, arena: &'arena Arena, key: &str, value: JsonValue<'arena>) {
+        let key = arena.alloc_str(key);
+        let value = arena.alloc(value);
+
+        self.insert_allocated(arena, key, value);
     }
 
     #[inline]
-    #[deprecated(since="0.11.11", note="Was only meant for internal use")]
-    pub fn override_last(&mut self, value: JsonValue) {
-        if let Some(node) = self.store.last_mut() {
-            node.value = value;
-        }
-    }
+    pub fn insert_allocated(&self, arena: &'arena Arena, key: &'arena str, value: &'arena JsonValue<'arena>) {
+        let hash = hash_key(key.as_bytes());
+        let node = self.find_slot(key, hash);
 
-    pub fn get(&self, key: &str) -> Option<&JsonValue> {
-        if self.store.len() == 0 {
-            return None;
-        }
-
-        let key = key.as_bytes();
-        let hash = hash_key(key);
-
-        let mut node = unsafe { self.store.get_unchecked(0) };
-
-        loop {
-            if hash == node.key.hash && key == node.key.as_bytes() {
-                return Some(&node.value);
-            } else if hash < node.key.hash {
-                if node.left == 0 {
-                    return None;
-                }
-                node = unsafe { self.store.get_unchecked(node.left) };
-            } else {
-                if node.right == 0 {
-                    return None;
-                }
-                node = unsafe { self.store.get_unchecked(node.right) };
+        match node.get() {
+            Some(node) => node.value.set(value),
+            None => {
+                let new = arena.alloc(Node::new(key, hash, value));
+                node.set(Some(new));
             }
         }
     }
 
-    pub fn get_mut(&mut self, key: &str) -> Option<&mut JsonValue> {
-        if self.store.len() == 0 {
-            return None;
-        }
+    pub fn get(&self, key: &str) -> Option<&'arena JsonValue<'arena>> {
+        let hash = hash_key(key.as_bytes());
+        let node = self.find_slot(key, hash);
 
-        let key = key.as_bytes();
-        let hash = hash_key(key);
-
-        let mut index = 0;
-        {
-            let mut node = unsafe { self.store.get_unchecked(0) };
-
-            loop {
-                if hash == node.key.hash && key == node.key.as_bytes() {
-                    break;
-                } else if hash < node.key.hash {
-                    if node.left == 0 {
-                        return None;
-                    }
-                    index = node.left;
-                    node = unsafe { self.store.get_unchecked(node.left) };
-                } else {
-                    if node.right == 0 {
-                        return None;
-                    }
-                    index = node.right;
-                    node = unsafe { self.store.get_unchecked(node.right) };
-                }
-            }
-        }
-
-        let node = unsafe { self.store.get_unchecked_mut(index) };
-
-        Some(&mut node.value)
+        node.get().map(|node| node.value.get())
     }
 
-    /// Attempts to remove the value behind `key`, if successful
-    /// will return the `JsonValue` stored behind the `key`.
-    pub fn remove(&mut self, key: &str) -> Option<JsonValue> {
-        if self.store.len() == 0 {
-            return None;
-        }
 
-        let key = key.as_bytes();
-        let hash = hash_key(key);
-        let mut index = 0;
+    // /// Attempts to remove the value behind `key`, if successful
+    // /// will return the `JsonValue` stored behind the `key`.
+    // pub fn remove(&mut self, key: &str) -> Option<JsonValue> {
+    //     if self.store.len() == 0 {
+    //         return None;
+    //     }
 
-        {
-            let mut node = unsafe { self.store.get_unchecked(0) };
+    //     let key = key.as_bytes();
+    //     let hash = hash_key(key);
+    //     let mut index = 0;
 
-            // Try to find the node
-            loop {
-                if hash == node.key.hash && key == node.key.as_bytes() {
-                    break;
-                } else if hash < node.key.hash {
-                    if node.left == 0 {
-                        return None;
-                    }
-                    index = node.left;
-                    node = unsafe { self.store.get_unchecked(node.left) };
-                } else {
-                    if node.right == 0 {
-                        return None;
-                    }
-                    index = node.right;
-                    node = unsafe { self.store.get_unchecked(node.right) };
-                }
-            }
-        }
+    //     {
+    //         let mut node = unsafe { self.store.get_unchecked(0) };
 
-        // Removing a node would screw the tree badly, it's easier to just
-        // recreate it. This is a very costly operation, but removing nodes
-        // in JSON shouldn't happen very often if at all. Optimizing this
-        // can wait for better times.
-        let mut new_object = Object::with_capacity(self.store.len() - 1);
-        let mut removed = None;
+    //         // Try to find the node
+    //         loop {
+    //             if hash == node.key.hash && key == node.key.as_bytes() {
+    //                 break;
+    //             } else if hash < node.key.hash {
+    //                 if node.left == 0 {
+    //                     return None;
+    //                 }
+    //                 index = node.left;
+    //                 node = unsafe { self.store.get_unchecked(node.left) };
+    //             } else {
+    //                 if node.right == 0 {
+    //                     return None;
+    //                 }
+    //                 index = node.right;
+    //                 node = unsafe { self.store.get_unchecked(node.right) };
+    //             }
+    //         }
+    //     }
 
-        for (i, node) in self.store.iter_mut().enumerate() {
-            if i == index {
-                // Rust doesn't like us moving things from `node`, even if
-                // it is owned. Replace fixes that.
-                removed = Some(mem::replace(&mut node.value, JsonValue::Null));
-            } else {
-                let value = mem::replace(&mut node.value, JsonValue::Null);
+    //     // Removing a node would screw the tree badly, it's easier to just
+    //     // recreate it. This is a very costly operation, but removing nodes
+    //     // in JSON shouldn't happen very often if at all. Optimizing this
+    //     // can wait for better times.
+    //     let mut new_object = Object::with_capacity(self.store.len() - 1);
+    //     let mut removed = None;
 
-                new_object.insert(node.key.as_str(), value);
-            }
-        }
+    //     for (i, node) in self.store.iter_mut().enumerate() {
+    //         if i == index {
+    //             // Rust doesn't like us moving things from `node`, even if
+    //             // it is owned. Replace fixes that.
+    //             removed = Some(mem::replace(&mut node.value, JsonValue::Null));
+    //         } else {
+    //             let value = mem::replace(&mut node.value, JsonValue::Null);
 
-        mem::swap(self, &mut new_object);
+    //             new_object.insert(node.key.as_str(), value);
+    //         }
+    //     }
 
-        removed
-    }
+    //     mem::swap(self, &mut new_object);
 
-    #[inline(always)]
-    pub fn len(&self) -> usize {
-        self.store.len()
-    }
+    //     removed
+    // }
+
+    // #[inline(always)]
+    // pub fn len(&self) -> usize {
+    //     self.store.len()
+    // }
 
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
-        self.store.is_empty()
+        self.root.get().is_none()
     }
 
     /// Wipe the `Object` clear. The capacity will remain untouched.
-    pub fn clear(&mut self) {
-        self.store.clear();
+    pub fn clear(&self) {
+        self.root.set(None);
     }
 
-    #[inline(always)]
-    pub fn iter(&self) -> Iter {
-        Iter {
-            inner: self.store.iter()
-        }
-    }
+    // #[inline(always)]
+    // pub fn iter(&self) -> Iter {
+    //     Iter {
+    //         inner: self.store.iter()
+    //     }
+    // }
 
-    #[inline(always)]
-    pub fn iter_mut(&mut self) -> IterMut {
-        IterMut {
-            inner: self.store.iter_mut()
-        }
-    }
+    // #[inline(always)]
+    // pub fn iter_mut(&mut self) -> IterMut {
+    //     IterMut {
+    //         inner: self.store.iter_mut()
+    //     }
+    // }
 
-    /// Prints out the value as JSON string.
-    pub fn dump(&self) -> String {
-        let mut gen = DumpGenerator::new();
-        gen.write_object(self).expect("Can't fail");
-        gen.consume()
-    }
+    // /// Prints out the value as JSON string.
+    // pub fn dump(&self) -> String {
+    //     let mut gen = DumpGenerator::new();
+    //     gen.write_object(self).expect("Can't fail");
+    //     gen.consume()
+    // }
 
-    /// Pretty prints out the value as JSON string. Takes an argument that's
-    /// number of spaces to indent new blocks with.
-    pub fn pretty(&self, spaces: u16) -> String {
-        let mut gen = PrettyGenerator::new(spaces);
-        gen.write_object(self).expect("Can't fail");
-        gen.consume()
-    }
-}
-
-// Custom implementation of `Clone`, as new heap allocation means
-// we have to fix key pointers everywhere!
-impl Clone for Object {
-    fn clone(&self) -> Self {
-        let mut store = self.store.clone();
-
-        for node in store.iter_mut() {
-            node.key.fix_ptr();
-        }
-
-        Object {
-            store: store
-        }
-    }
-}
-
-// Because keys can inserted in different order, the safe way to
-// compare `Object`s is to iterate over one and check if the other
-// has all the same keys.
-impl PartialEq for Object {
-    fn eq(&self, other: &Object) -> bool {
-        if self.len() != other.len() {
-            return false;
-        }
-
-        for (key, value) in self.iter() {
-            match other.get(key) {
-                Some(ref other_val) => if *other_val != value { return false; },
-                None                => return false
-            }
-        }
-
-        true
-    }
-}
-
-pub struct Iter<'a> {
-    inner: slice::Iter<'a, Node>
-}
-
-impl<'a> Iter<'a> {
-    /// Create an empty iterator that always returns `None`
-    pub fn empty() -> Self {
-        Iter {
-            inner: [].iter()
-        }
-    }
-}
-
-impl<'a> Iterator for Iter<'a> {
-    type Item = (&'a str, &'a JsonValue);
-
-    #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|node| (node.key.as_str(), &node.value))
-    }
-}
-
-impl<'a> DoubleEndedIterator for Iter<'a> {
-    #[inline(always)]
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner.next_back().map(|node| (node.key.as_str(), &node.value))
-    }
-}
-
-pub struct IterMut<'a> {
-    inner: slice::IterMut<'a, Node>
-}
-
-impl<'a> IterMut<'a> {
-    /// Create an empty iterator that always returns `None`
-    pub fn empty() -> Self {
-        IterMut {
-            inner: [].iter_mut()
-        }
-    }
-}
-
-impl<'a> Iterator for IterMut<'a> {
-    type Item = (&'a str, &'a mut JsonValue);
-
-    #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|node| (node.key.as_str(), &mut node.value))
-    }
-}
-
-impl<'a> DoubleEndedIterator for IterMut<'a> {
-    #[inline(always)]
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner.next_back().map(|node| (node.key.as_str(), &mut node.value))
-    }
-}
-
-/// Implements indexing by `&str` to easily access object members:
-///
-/// ## Example
-///
-/// ```
-/// # #[macro_use]
-/// # extern crate json;
-/// # use json::JsonValue;
-/// #
-/// # fn main() {
-/// let value = json!({
-///     foo: "bar"
-/// });
-///
-/// if let JsonValue::Object(object) = value {
-///   assert!(object["foo"] == "bar");
-/// }
-/// # }
-/// ```
-// TODO: doc
-impl<'a> Index<&'a str> for Object {
-    type Output = JsonValue;
-
-    fn index(&self, index: &str) -> &JsonValue {
-        match self.get(index) {
-            Some(value) => value,
-            _ => &NULL
-        }
-    }
-}
-
-impl Index<String> for Object {
-    type Output = JsonValue;
-
-    fn index(&self, index: String) -> &JsonValue {
-        self.index(index.deref())
-    }
-}
-
-impl<'a> Index<&'a String> for Object {
-    type Output = JsonValue;
-
-    fn index(&self, index: &String) -> &JsonValue {
-        self.index(index.deref())
-    }
-}
-
-/// Implements mutable indexing by `&str` to easily modify object members:
-///
-/// ## Example
-///
-/// ```
-/// # #[macro_use]
-/// # extern crate json;
-/// # use json::JsonValue;
-/// #
-/// # fn main() {
-/// let value = json!({});
-///
-/// if let JsonValue::Object(mut object) = value {
-///   object["foo"] = 42.into();
-///
-///   assert!(object["foo"] == 42);
-/// }
-/// # }
-/// ```
-impl<'a> IndexMut<&'a str> for Object {
-    fn index_mut(&mut self, index: &str) -> &mut JsonValue {
-        if self.get(index).is_none() {
-            self.insert(index, JsonValue::Null);
-        }
-        self.get_mut(index).unwrap()
-    }
-}
-
-impl IndexMut<String> for Object {
-    fn index_mut(&mut self, index: String) -> &mut JsonValue {
-        self.index_mut(index.deref())
-    }
-}
-
-impl<'a> IndexMut<&'a String> for Object {
-    fn index_mut(&mut self, index: &String) -> &mut JsonValue {
-        self.index_mut(index.deref())
-    }
+    // /// Pretty prints out the value as JSON string. Takes an argument that's
+    // /// number of spaces to indent new blocks with.
+    // pub fn pretty(&self, spaces: u16) -> String {
+    //     let mut gen = PrettyGenerator::new(spaces);
+    //     gen.write_object(self).expect("Can't fail");
+    //     gen.consume()
+    // }
 }

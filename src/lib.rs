@@ -195,22 +195,22 @@
 //! );
 //! # }
 //! ```
-
 use std::result;
 
-mod codegen;
+mod arena;
+mod cell;
+// mod codegen;
 mod parser;
-mod value;
+mod json;
 mod error;
 mod util;
 
-pub mod short;
+pub mod list;
 pub mod object;
 pub mod number;
 
 pub use error::Error;
-pub use value::JsonValue;
-pub use value::JsonValue::Null;
+pub use json::{Json, JsonValue, IntoJson, Array};
 
 /// Result type used by this crate.
 ///
@@ -219,72 +219,105 @@ pub use value::JsonValue::Null;
 /// `json::Result` instead.
 pub type Result<T> = result::Result<T, Error>;
 
-pub mod iterators {
-    /// Iterator over members of `JsonValue::Array`.
-    pub type Members<'a> = ::std::slice::Iter<'a, super::JsonValue>;
+// pub mod iterators {
+//     /// Iterator over members of `JsonValue::Array`.
+//     pub type Members<'a> = ::std::slice::Iter<'a, super::JsonValue>;
 
-    /// Mutable iterator over members of `JsonValue::Array`.
-    pub type MembersMut<'a> = ::std::slice::IterMut<'a, super::JsonValue>;
+//     /// Mutable iterator over members of `JsonValue::Array`.
+//     pub type MembersMut<'a> = ::std::slice::IterMut<'a, super::JsonValue>;
 
-    /// Iterator over key value pairs of `JsonValue::Object`.
-    pub type Entries<'a> = super::object::Iter<'a>;
+//     /// Iterator over key value pairs of `JsonValue::Object`.
+//     pub type Entries<'a> = super::object::Iter<'a>;
 
-    /// Mutable iterator over key value pairs of `JsonValue::Object`.
-    pub type EntriesMut<'a> = super::object::IterMut<'a>;
-}
-
-#[deprecated(since="0.9.0", note="use `json::Error` instead")]
-pub use Error as JsonError;
-
-#[deprecated(since="0.9.0", note="use `json::Result` instead")]
-pub use Result as JsonResult;
+//     /// Mutable iterator over key value pairs of `JsonValue::Object`.
+//     pub type EntriesMut<'a> = super::object::IterMut<'a>;
+// }
 
 pub use parser::parse;
 
-pub type Array = Vec<JsonValue>;
+// pub type Array = Vec<JsonValue>;
 
-/// Convenience for `JsonValue::from(value)`
-pub fn from<T>(value: T) -> JsonValue where T: Into<JsonValue> {
-    value.into()
-}
+// /// Convenience for `JsonValue::from(value)`
+// pub fn from<T>(value: T) -> JsonValue where T: Into<JsonValue> {
+//     value.into()
+// }
 
-/// Pretty prints out the value as JSON string.
-pub fn stringify<T>(root: T) -> String where T: Into<JsonValue> {
-    let root: JsonValue = root.into();
-    root.dump()
-}
+// /// Pretty prints out the value as JSON string.
+// pub fn stringify<T>(root: T) -> String where T: Into<JsonValue> {
+//     let root: JsonValue = root.into();
+//     root.dump()
+// }
 
-/// Pretty prints out the value as JSON string. Second argument is a
-/// number of spaces to indent new blocks with.
-pub fn stringify_pretty<T>(root: T, spaces: u16) -> String where T: Into<JsonValue> {
-    let root: JsonValue = root.into();
-    root.pretty(spaces)
-}
+// /// Pretty prints out the value as JSON string. Second argument is a
+// /// number of spaces to indent new blocks with.
+// pub fn stringify_pretty<T>(root: T, spaces: u16) -> String where T: Into<JsonValue> {
+//     let root: JsonValue = root.into();
+//     root.pretty(spaces)
+// }
 
 #[macro_export]
 macro_rules! json {
-    ({}) => ($crate::JsonValue::new_object());
-    ([]) => ($crate::JsonValue::new_array());
-    ({ $( $key:ident: $value:tt ),* }) => ({
-        use $crate::object::Object;
-
-        let mut object = Object::new();
+    (@ $arena:expr => { $( $key:ident: $value:tt, )* }) => ({
+        let object = $crate::object::Object::new();
 
         $(
-            object.insert(stringify!($key), json!($value));
+            object.insert_allocated($arena, stringify!($key), json!(@ $arena => $value));
         )*
 
-        $crate::JsonValue::Object(object)
+        $arena.alloc($crate::JsonValue::Object(object))
     });
-    ([ $( $item:tt ),* ]) => ({
-        let mut array = Vec::new();
+    (@ $arena:expr => [ $first:tt, $( $item:tt, )* ]) => ({
+        let mut builder = $crate::list::ListBuilder::new($arena, json!(@ $arena => $first));
 
         $(
-            array.push(json!($item));
+            builder.push(json!(@ $arena => $item));
         )*
 
-        $crate::JsonValue::Array(array)
+        $arena.alloc($crate::JsonValue::Array(builder.into_list()))
     });
-    (null) => { $crate::JsonValue::Null };
-    ($item:expr) => { $crate::JsonValue::from($item) }
+    (@ $arena:expr => []) => ({
+        $arena.alloc($crate::JsonValue::Array($crate::list::List::empty()))
+    });
+    (@ $arena:expr => [ $( $item:tt ),* ]) => { json!(@ $arena => [ $( $item, )* ]) };
+    (@ $arena:expr => { $( $key:ident: $value:tt ),* }) => { json!(@ $arena => { $( $key: $value, )* }) };
+    (@ $arena:expr => null) => { &$crate::JsonValue::Null };
+    (@ $arena:expr => $item:expr) => { $crate::IntoJson::into_json($item, $arena) };
+    ({ $( $key:ident: $value:tt ),* }) => {
+        $crate::Json::new(|arena| json!(@ arena => { $( $key: $value, )* }))
+    };
+    ([ $( $item:tt ),* ]) => {
+        $crate::Json::new(|arena| json!(@ arena => [ $( $item, )* ]))
+    };
+    ($item:expr) => {
+        $crate::Json::new(|arena| json!(@ arena => $item))
+    };
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn create_simple_object() {
+        json!({
+            foo: "foo",
+            bar: "bar"
+        });
+    }
+
+    #[test]
+    fn crete_simple_array() {
+        json!([ "foo", "bar" ]);
+    }
+
+    #[test]
+    fn create_nested_object() {
+        json!({
+            name: "json-rust",
+            stuff: ["foobar", 20, null]
+        });
+    }
+
+    #[test]
+    fn create_nested_array() {
+        json!([ { id: 1 }, { id: 2 } ]);
+    }
 }
