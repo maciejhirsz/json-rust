@@ -578,7 +578,7 @@ impl<'a> Parser<'a> {
                         num.checked_add((ch - b'0') as u64)
                     }) {
                         Some(result) => num = result,
-                        None         => e += 1 ,
+                        None         => e = e.checked_add(1).ok_or_else(|| Error::ExceededDepthLimit)?,
                     }
                 },
                 b'.' => {

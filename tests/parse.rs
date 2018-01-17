@@ -367,3 +367,14 @@ fn does_not_panic_on_single_zero() {
 
     parse(source).unwrap();
 }
+
+#[test]
+fn does_not_panic_on_huge_numbers() {
+    let mut string = String::from("8");
+
+    for _ in 1..32787 {
+        string.push('0');
+    }
+
+    let _ = json::parse(&string);
+}
