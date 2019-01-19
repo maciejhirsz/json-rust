@@ -49,6 +49,14 @@ fn is_as_number() {
     assert_eq!(number.as_i8(), None);
     assert_eq!(number.as_i16(), None);
     assert_eq!(number.as_i32(), Some(40_000));
+    
+    let number = JsonValue::from(-5.5);
+    assert_eq!(number.as_i8(), None);
+    assert_eq!(number.as_i16(), None);
+    assert_eq!(number.as_i32(), None);
+    assert_eq!(number.as_u8(), None);
+    assert_eq!(number.as_u16(), None);
+    assert_eq!(number.as_u32(), None);
 }
 
 #[test]
