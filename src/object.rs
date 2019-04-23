@@ -588,6 +588,12 @@ impl<'a> DoubleEndedIterator for Iter<'a> {
     }
 }
 
+impl<'a> ExactSizeIterator for Iter<'a> {
+    fn len(&self) -> usize {
+        self.inner.len()
+    }
+}
+
 pub struct IterMut<'a> {
     inner: slice::IterMut<'a, Node>
 }
