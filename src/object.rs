@@ -623,6 +623,12 @@ impl<'a> DoubleEndedIterator for IterMut<'a> {
     }
 }
 
+impl<'a> ExactSizeIterator for IterMut<'a> {
+    fn len(&self) -> usize {
+        self.inner.len()
+    }
+}
+
 /// Implements indexing by `&str` to easily access object members:
 ///
 /// ## Example
