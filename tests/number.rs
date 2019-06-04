@@ -1,4 +1,3 @@
-#[macro_use]
 extern crate json;
 
 use json::number::Number;

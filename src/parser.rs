@@ -631,7 +631,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Ok(unsafe { Number::from_parts_unchecked(true, num, (big_e.saturating_add(e * sign))) })
+        Ok(unsafe { Number::from_parts_unchecked(true, num, big_e.saturating_add(e * sign)) })
     }
 
     // Parse away!

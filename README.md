@@ -1,5 +1,3 @@
-![](http://terhix.com/doc/json-rust-logo-small.png)
-
 # json-rust
 
 [![Travis shield](https://travis-ci.org/maciejhirsz/json-rust.svg)](https://travis-ci.org/maciejhirsz/json-rust)

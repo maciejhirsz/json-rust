@@ -1,4 +1,3 @@
-#[macro_use]
 extern crate json;
 
 mod json_checker_fail {
