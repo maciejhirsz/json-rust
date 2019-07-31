@@ -482,6 +482,21 @@ impl JsonValue {
         }
     }
 
+    /// Works on `JsonValue::Object` - inserts a new entry, or override an existing
+    /// one into the object. Note that `key` has to be a `&str` slice and not an owned 
+    /// `String`. The internals of `Object` will handle the heap allocation of the key 
+    /// if needed for better performance.
+    pub fn insert<T>(&mut self, key: &str, value: T) -> Result<()>
+    where T: Into<JsonValue> {
+        match *self {
+            JsonValue::Object(ref mut object) => {
+                object.insert(key, value.into());
+                Ok(())
+            },
+            _ => Err(Error::wrong_type("Object"))
+        }
+    }
+
     /// Works on `JsonValue::Object` - remove a key and return the value it held.
     /// If the key was not present, the method is called on anything but an
     /// object, it will return a null.
