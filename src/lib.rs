@@ -315,7 +315,7 @@ macro_rules! object {
     //
     // In this implementation, key/value pairs separated by commas.
     { $( $key:expr => $value:expr ),* } => {
-        object!( $(
+        $crate::object!( $(
             $key => $value,
         )* )
     };
