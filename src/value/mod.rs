@@ -1,14 +1,13 @@
-use { Result, Error };
+use std::ops::{Index, IndexMut, Deref};
+use std::{fmt, mem, usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32};
+use std::io::{self, Write};
 
-use std::ops::{ Index, IndexMut, Deref };
-use std::{ fmt, mem, usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32 };
-use std::io::{ self, Write };
-
-use short::Short;
-use number::Number;
-use object::Object;
-use iterators::{ Members, MembersMut, Entries, EntriesMut };
-use codegen::{ Generator, PrettyGenerator, DumpGenerator, WriterGenerator, PrettyWriterGenerator };
+use crate::{Result, Error};
+use crate::short::Short;
+use crate::number::Number;
+use crate::object::Object;
+use crate::iterators::{ Members, MembersMut, Entries, EntriesMut };
+use crate::codegen::{ Generator, PrettyGenerator, DumpGenerator, WriterGenerator, PrettyWriterGenerator };
 
 mod implements;
 
@@ -483,8 +482,8 @@ impl JsonValue {
     }
 
     /// Works on `JsonValue::Object` - inserts a new entry, or override an existing
-    /// one into the object. Note that `key` has to be a `&str` slice and not an owned 
-    /// `String`. The internals of `Object` will handle the heap allocation of the key 
+    /// one into the object. Note that `key` has to be a `&str` slice and not an owned
+    /// `String`. The internals of `Object` will handle the heap allocation of the key
     /// if needed for better performance.
     pub fn insert<T>(&mut self, key: &str, value: T) -> Result<()>
     where T: Into<JsonValue> {

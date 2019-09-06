@@ -52,7 +52,7 @@ unsafe fn write_num(n: &mut u64, curr: &mut isize, buf_ptr: *mut u8, lut_ptr: *c
 
 pub unsafe fn write<W: io::Write>(wr: &mut W, positive: bool, mut n: u64, exponent: i16) -> io::Result<()> {
     if !positive {
-        try!(wr.write_all(b"-"));
+        wr.write_all(b"-")?;
     }
 
     if n == 0 {
@@ -180,12 +180,12 @@ pub unsafe fn write<W: io::Write>(wr: &mut W, positive: bool, mut n: u64, expone
         }
 
         // Write out the number with a fraction
-        try!(wr.write_all(
+        wr.write_all(
             slice::from_raw_parts(
                 buf_ptr.offset(curr),
                 buf.len() - curr as usize
             )
-        ));
+        )?;
 
         // Omit the 'e' notation for e == 0
         if e == 0 {
@@ -207,12 +207,12 @@ pub unsafe fn write<W: io::Write>(wr: &mut W, positive: bool, mut n: u64, expone
 
     // No need for `e` notation, just print out zeroes
     if (printed + exponent as usize) <= 20 {
-        try!(wr.write_all(
+        wr.write_all(
             slice::from_raw_parts(
                 buf_ptr.offset(curr),
                 buf.len() - curr as usize
             )
-        ));
+        )?;
 
         return wr.write_all(&ZEROFILL[ .. exponent as usize]);
     }
@@ -227,13 +227,13 @@ pub unsafe fn write<W: io::Write>(wr: &mut W, positive: bool, mut n: u64, expone
         e += (printed as u64) - 1;
     }
 
-    try!(wr.write_all(
+    wr.write_all(
         slice::from_raw_parts(
             buf_ptr.offset(curr),
             buf.len() - curr as usize
         )
-    ));
-    try!(wr.write_all(b"e"));
+    )?;
+    wr.write_all(b"e")?;
     write(wr, true, e, 0)
 }
 

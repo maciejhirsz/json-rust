@@ -237,7 +237,7 @@ pub mod iterators {
 pub use Error as JsonError;
 
 #[deprecated(since="0.9.0", note="use `json::Result` instead")]
-pub use Result as JsonResult;
+pub use crate::Result as JsonResult;
 
 pub use parser::parse;
 
@@ -280,7 +280,8 @@ macro_rules! array {
     [] => ($crate::JsonValue::new_array());
 
     [ $( $item:expr ),* ] => ({
-        let mut array = Vec::new();
+        let size = 0 $( + {let _ = $item; 1} )*;
+        let mut array = Vec::with_capacity(size);
 
         $(
             array.push($item.into());
@@ -326,7 +327,8 @@ macro_rules! object {
     { $( $key:expr => $value:expr, )* } => ({
         use $crate::object::Object;
 
-        let mut object = Object::new();
+        let size = 0 $( + {let _ = $key; 1} )*;
+        let mut object = Object::with_capacity(size);
 
         $(
             object.insert($key, $value.into());

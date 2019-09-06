@@ -1,11 +1,11 @@
 use std::ptr;
 use std::io::Write;
-use JsonValue;
-use number::Number;
-use object::Object;
 use std::io;
 
-use util::print_dec;
+use crate::JsonValue;
+use crate::number::Number;
+use crate::object::Object;
+use crate::util::print_dec;
 
 const QU: u8 = b'"';
 const BS: u8 = b'\\';
@@ -66,27 +66,27 @@ pub trait Generator {
 
     #[inline(never)]
     fn write_string_complex(&mut self, string: &str, mut start: usize) -> io::Result<()> {
-        try!(self.write(string[ .. start].as_bytes()));
+        self.write(string[ .. start].as_bytes())?;
 
         for (index, ch) in string.bytes().enumerate().skip(start) {
             let escape = ESCAPED[ch as usize];
             if escape > 0 {
-                try!(self.write(string[start .. index].as_bytes()));
-                try!(self.write(&[b'\\', escape]));
+                self.write(string[start .. index].as_bytes())?;
+                self.write(&[b'\\', escape])?;
                 start = index + 1;
             }
             if escape == b'u' {
-                try!(write!(self.get_writer(), "{:04x}", ch));
+                write!(self.get_writer(), "{:04x}", ch)?;
             }
         }
-        try!(self.write(string[start ..].as_bytes()));
+        self.write(string[start ..].as_bytes())?;
 
         self.write_char(b'"')
     }
 
     #[inline(always)]
     fn write_string(&mut self, string: &str) -> io::Result<()> {
-        try!(self.write_char(b'"'));
+        self.write_char(b'"')?;
 
         for (index, ch) in string.bytes().enumerate() {
             if ESCAPED[ch as usize] > 0 {
@@ -94,7 +94,7 @@ pub trait Generator {
             }
         }
 
-        try!(self.write(string.as_bytes()));
+        self.write(string.as_bytes())?;
         self.write_char(b'"')
     }
 
@@ -116,30 +116,30 @@ pub trait Generator {
 
     #[inline(always)]
     fn write_object(&mut self, object: &Object) -> io::Result<()> {
-        try!(self.write_char(b'{'));
+        self.write_char(b'{')?;
         let mut iter = object.iter();
 
         if let Some((key, value)) = iter.next() {
             self.indent();
-            try!(self.new_line());
-            try!(self.write_string(key));
-            try!(self.write_min(b": ", b':'));
-            try!(self.write_json(value));
+            self.new_line()?;
+            self.write_string(key)?;
+            self.write_min(b": ", b':')?;
+            self.write_json(value)?;
         } else {
-            try!(self.write_char(b'}'));
+            self.write_char(b'}')?;
             return Ok(());
         }
 
         for (key, value) in iter {
-            try!(self.write_char(b','));
-            try!(self.new_line());
-            try!(self.write_string(key));
-            try!(self.write_min(b": ", b':'));
-            try!(self.write_json(value));
+            self.write_char(b',')?;
+            self.new_line()?;
+            self.write_string(key)?;
+            self.write_min(b": ", b':')?;
+            self.write_json(value)?;
         }
 
         self.dedent();
-        try!(self.new_line());
+        self.new_line()?;
         self.write_char(b'}')
     }
 
@@ -152,26 +152,26 @@ pub trait Generator {
             JsonValue::Boolean(true)      => self.write(b"true"),
             JsonValue::Boolean(false)     => self.write(b"false"),
             JsonValue::Array(ref array)   => {
-                try!(self.write_char(b'['));
+                self.write_char(b'[')?;
                 let mut iter = array.iter();
 
                 if let Some(item) = iter.next() {
                     self.indent();
-                    try!(self.new_line());
-                    try!(self.write_json(item));
+                    self.new_line()?;
+                    self.write_json(item)?;
                 } else {
-                    try!(self.write_char(b']'));
+                    self.write_char(b']')?;
                     return Ok(());
                 }
 
                 for item in iter {
-                    try!(self.write_char(b','));
-                    try!(self.new_line());
-                    try!(self.write_json(item));
+                    self.write_char(b',')?;
+                    self.new_line()?;
+                    self.write_json(item)?;
                 }
 
                 self.dedent();
-                try!(self.new_line());
+                self.new_line()?;
                 self.write_char(b']')
             },
             JsonValue::Object(ref object) => {
@@ -345,9 +345,9 @@ impl<'a, W> Generator for PrettyWriterGenerator<'a, W> where W: Write {
     }
 
     fn new_line(&mut self) -> io::Result<()> {
-        try!(self.write_char(b'\n'));
+        self.write_char(b'\n')?;
         for _ in 0..(self.dent * self.spaces_per_indent) {
-            try!(self.write_char(b' '));
+            self.write_char(b' ')?;
         }
         Ok(())
     }

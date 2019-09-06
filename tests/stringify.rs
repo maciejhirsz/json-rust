@@ -163,8 +163,8 @@ fn stringify_raw_object() {
 fn stringify_btree_map() {
     let mut map = BTreeMap::new();
 
-    map.insert("name".into(), "Maciej".into());
-    map.insert("age".into(), 30.into());
+    map.insert("name", JsonValue::from("Maciej"));
+    map.insert("age", JsonValue::from(30));
 
     // BTreeMap will sort keys
     assert_eq!(stringify(map), r#"{"age":30,"name":"Maciej"}"#);
@@ -174,8 +174,8 @@ fn stringify_btree_map() {
 fn stringify_hash_map() {
     let mut map = HashMap::new();
 
-    map.insert("name".into(), "Maciej".into());
-    map.insert("age".into(), 30.into());
+    map.insert("name", JsonValue::from("Maciej"));
+    map.insert("age", JsonValue::from(30));
 
     // HashMap does not sort keys, but depending on hashing used the
     // order can be different. Safe bet is to parse the result and
