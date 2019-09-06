@@ -15,7 +15,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use util::diyfp::{ self, DiyFp };
+use crate::util::diyfp::{ self, DiyFp };
 
 #[inline]
 unsafe fn grisu_round(buffer: &mut u64, delta: u64, mut rest: u64, ten_kappa: u64, wp_w: u64) {

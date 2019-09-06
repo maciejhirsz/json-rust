@@ -1,7 +1,7 @@
 use std::{ ops, fmt, f32, f64 };
 use std::num::FpCategory;
-use util::grisu2;
-use util::print_dec;
+use crate::util::grisu2;
+use crate::util::print_dec;
 
 /// NaN value represented in `Number` type. NaN is equal to itself.
 pub const NAN: Number = Number {

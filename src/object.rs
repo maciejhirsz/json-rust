@@ -1,8 +1,9 @@
 use std::{ ptr, mem, str, slice, fmt };
 use std::ops::{ Index, IndexMut, Deref };
+use std::iter::FromIterator;
 
-use codegen::{ DumpGenerator, Generator, PrettyGenerator };
-use value::JsonValue;
+use crate::codegen::{ DumpGenerator, Generator, PrettyGenerator };
+use crate::value::JsonValue;
 
 const KEY_BUF_LEN: usize = 32;
 static NULL: JsonValue = JsonValue::Null;
@@ -536,6 +537,19 @@ impl Clone for Object {
         Object {
             store: store
         }
+    }
+}
+
+impl<K: AsRef<str>, V: Into<JsonValue>> FromIterator<(K, V)> for Object {
+    fn from_iter<I: IntoIterator<Item=(K, V)>>(iter: I) -> Self {
+        let iter = iter.into_iter();
+        let mut object = Object::with_capacity(iter.size_hint().0);
+
+        for (key, value) in iter {
+            object.insert(key.as_ref(), value.into());
+        }
+
+        object
     }
 }
 

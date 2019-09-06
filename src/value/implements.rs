@@ -1,14 +1,12 @@
 // This is a private module that contains `PartialEq` and `From` trait
 // implementations for `JsonValue`.
 
-use std::collections::{ BTreeMap, HashMap };
-use std::mem;
+use std::collections::{BTreeMap, HashMap};
 
-use short::{ self, Short };
-use number::Number;
-use object::Object;
-
-use { JsonValue, Null };
+use crate::short::{self, Short};
+use crate::number::Number;
+use crate::object::Object;
+use crate::value::JsonValue;
 
 macro_rules! implement_eq {
     ($to:ident, $from:ty) => {
@@ -83,41 +81,25 @@ impl<T: Into<JsonValue>> From<Option<T>> for JsonValue {
 
 impl<T: Into<JsonValue>> From<Vec<T>> for JsonValue {
     fn from(val: Vec<T>) -> JsonValue {
-        let mut array = Vec::with_capacity(val.len());
-
-        for val in val {
-            array.push(val.into());
-        }
-
-        JsonValue::Array(array)
+        JsonValue::Array(val.into_iter().map(Into::into).collect())
     }
 }
 
-impl From<HashMap<String, JsonValue>> for JsonValue {
-    fn from(mut val: HashMap<String, JsonValue>) -> JsonValue {
-        let mut object = Object::with_capacity(val.len());
-
-        for (key, value) in val.drain() {
-            object.insert(&key, value);
-        }
-
-        JsonValue::Object(object)
+impl<'a, T: Into<JsonValue> + Clone> From<&'a [T]> for JsonValue {
+    fn from(val: &'a [T]) -> JsonValue {
+        JsonValue::Array(val.iter().cloned().map(Into::into).collect())
     }
 }
 
-impl From<BTreeMap<String, JsonValue>> for JsonValue {
-    fn from(mut val: BTreeMap<String, JsonValue>) -> JsonValue {
-        let mut object = Object::with_capacity(val.len());
+impl<K: AsRef<str>, V: Into<JsonValue>> From<HashMap<K, V>> for JsonValue {
+    fn from(val: HashMap<K, V>) -> JsonValue {
+        JsonValue::Object(val.into_iter().collect())
+    }
+}
 
-        for (key, value) in val.iter_mut() {
-            // Since BTreeMap has no `drain` available, we can use
-            // the mutable iterator and replace all values by nulls,
-            // taking ownership and transferring it to the new `Object`.
-            let value = mem::replace(value, Null);
-            object.insert(key, value);
-        }
-
-        JsonValue::Object(object)
+impl<K: AsRef<str>, V: Into<JsonValue>> From<BTreeMap<K, V>> for JsonValue {
+    fn from(val: BTreeMap<K, V>) -> JsonValue {
+        JsonValue::Object(val.into_iter().collect())
     }
 }
 
