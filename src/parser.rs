@@ -483,11 +483,20 @@ impl<'a> Parser<'a> {
     // having to be read from source to a buffer and then from a buffer to
     // our target string. Nothing to be done about this, really.
     fn read_complex_string<'b>(&mut self, start: usize) -> Result<&'b str> {
-        self.buffer.clear();
+        // Since string slices are returned by this function that are created via pointers into `self.buffer`
+        // we shouldn't be clearing or modifying the buffer in consecutive calls to this function. Instead
+        // we continuously append bytes to `self.buffer` and keep track of the starting offset of the buffer on each
+        // call to this function. Later when creating string slices that point to the contents of this buffer
+        // we use this starting offset to make sure that newly created slices point only to the bytes that were
+        // appended in the most recent call to this function.
+        //
+        // Failing to do this can result in the StackBlock `key` values being modified in place later.
+        let len = self.buffer.len();
+        //self.buffer.clear();
         let mut ch = b'\\';
 
         // TODO: Use fastwrite here as well
-        self.buffer.extend_from_slice(self.source[start .. self.index - 1].as_bytes());
+        self.buffer.extend_from_slice(&self.source.as_bytes()[start .. self.index - 1]);
 
         loop {
             if ALLOWED[ch as usize] {
@@ -533,7 +542,7 @@ impl<'a> Parser<'a> {
                 // issues here, we construct a new slice from raw parts, which
                 // then has lifetime bound to the outer function scope instead
                 // of the parser itself.
-                slice::from_raw_parts(self.buffer.as_ptr(), self.buffer.len())
+                slice::from_raw_parts(self.buffer[len .. ].as_ptr(), self.buffer.len() - len)
             )
         })
     }
@@ -751,4 +760,139 @@ struct StackBlock(JsonValue, usize);
 #[inline]
 pub fn parse(source: &str) -> Result<JsonValue> {
     Parser::new(source).parse()
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::stringify;
+    use crate::JsonValue;
+
+    #[macro_use]
+    use crate::object;
+    use crate::array;
+
+    use std::fs::File;
+    use std::io::prelude::*;
+
+    #[test]
+    fn it_should_parse_escaped_forward_slashes_with_quotes() {
+        // used to get around the fact that rust strings don't escape forward slashes
+        let mut file = File::open("tests/test_json_slashes_quotes").unwrap();
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+
+        let actual = parse(&contents).unwrap();
+        let serialized = stringify(actual.clone());
+
+        assert_eq!(serialized, contents);
+    }
+
+    #[test]
+    fn it_should_parse_escaped_quotes() {
+        let contents = String::from("{\"ab\":\"c\\\"d\\\"e\"}");
+
+        let actual = parse(&contents).unwrap();
+        let serialized = stringify(actual.clone());
+
+        assert_eq!(serialized, contents);
+    }
+
+    #[test]
+    fn it_should_parse_basic_json_values() {
+        let s = "{\"a\":1,\"b\":true,\"c\":false,\"d\":null,\"e\":2}";
+        let actual = parse(s).unwrap();
+        let mut expected = object! {
+            "a" => 1,
+            "b" => true,
+            "c" => false,
+            "e" => 2
+        };
+        expected["d"] = JsonValue::Null;
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn it_should_parse_json_arrays() {
+        let s = "{\"a\":1,\"b\":true,\"c\":false,\"d\":null,\"e\":2,\"f\":[1,2,3,false,true,[],{}]}";
+        let actual = parse(s).unwrap();
+        let mut expected = object! {
+            "a" => 1,
+            "b" => true,
+            "c" => false,
+            "e" => 2
+        };
+        expected["d"] = JsonValue::Null;
+        expected["f"] = array![
+            1,2,3,
+            false,
+            true,
+            array![],
+            object!{}
+        ];
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn it_should_parse_json_nested_object() {
+        let s = "{\"a\":1,\"b\":{\"c\":2,\"d\":{\"e\":{\"f\":{\"g\":3,\"h\":[]}}},\"i\":4,\"j\":[],\"k\":{\"l\":5,\"m\":{}}}}";
+        let actual = parse(s).unwrap();
+        let mut expected = object! {
+            "a" => 1,
+            "b" => object!{
+                "c" => 2,
+                "d" => object!{
+                    "e" => object! {
+                        "f" => object!{
+                            "g" => 3,
+                            "h" => array![]
+                        }
+                    }
+                },
+                "i" => 4,
+                "j" => array![],
+                "k" => object!{
+                    "l" => 5,
+                    "m" => object!{}
+                }
+            }
+        };
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn it_should_parse_json_complex_object() {
+        let s = "{\"a\":1,\"b\":{\"c\":2,\"d\":{\"e\":{\"f\":{\"g\":3,\"h\":[{\"z\":1},{\"y\":2,\"x\":[{},{}]}]}}},\"i\":4,\"j\":[],\"k\":{\"l\":5,\"m\":{}}}}";
+        let actual = parse(s).unwrap();
+        let mut expected = object! {
+            "a" => 1,
+            "b" => object!{
+                "c" => 2,
+                "d" => object!{
+                    "e" => object! {
+                        "f" => object!{
+                            "g" => 3,
+                            "h" => array![
+                                object!{"z" => 1},
+                                object!{"y" => 2, "x" => array![object!{}, object!{}]}
+                            ]
+                        }
+                    }
+                },
+                "i" => 4,
+                "j" => array![],
+                "k" => object!{
+                    "l" => 5,
+                    "m" => object!{}
+                }
+            }
+        };
+
+        assert_eq!(actual, expected);
+    }
+
 }
