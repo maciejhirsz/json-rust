@@ -66,12 +66,12 @@ pub trait Generator {
 
     #[inline(never)]
     fn write_string_complex(&mut self, string: &str, mut start: usize) -> io::Result<()> {
-        self.write(string[ .. start].as_bytes())?;
+        self.write(&string.as_bytes()[ .. start])?;
 
         for (index, ch) in string.bytes().enumerate().skip(start) {
             let escape = ESCAPED[ch as usize];
             if escape > 0 {
-                self.write(string[start .. index].as_bytes())?;
+                self.write(&string.as_bytes()[start .. index])?;
                 self.write(&[b'\\', escape])?;
                 start = index + 1;
             }
@@ -79,7 +79,7 @@ pub trait Generator {
                 write!(self.get_writer(), "{:04x}", ch)?;
             }
         }
-        self.write(string[start ..].as_bytes())?;
+        self.write(&string.as_bytes()[start ..])?;
 
         self.write_char(b'"')
     }
@@ -381,4 +381,37 @@ fn extend_from_slice(dst: &mut Vec<u8>, src: &[u8]) {
             dst.as_mut_ptr().offset(dst_len as isize),
             src_len);
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::borrow::Borrow;
+    use crate::JsonValue;
+    use crate::parse;
+
+  // found while fuzzing the DumpGenerator
+
+  #[test]
+  fn should_not_panic_on_bad_bytes() {
+    let data = [0, 12, 128, 88, 64, 99].to_vec();
+    let s = unsafe {
+        String::from_utf8_unchecked(data)
+    };
+
+    let mut generator = DumpGenerator::new();
+    generator.write_string(&s);
+  }
+
+  #[test]
+  fn should_not_panic_on_bad_bytes_2() {
+    let data = b"\x48\x48\x48\x57\x03\xE8\x48\x48\xE8\x03\x8F\x48\x29\x48\x48";
+    let s = unsafe {
+        String::from_utf8_unchecked(data.to_vec())
+    };
+
+    let mut generator = DumpGenerator::new();
+    generator.write_string(&s);
+  }
+
 }
