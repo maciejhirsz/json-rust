@@ -1,6 +1,6 @@
 [package]
 name = "json"
-version = "0.12.1"
+version = "0.12.2"
 authors = ["Maciej Hirsz <hello@maciej.codes>"]
 description = "JSON implementation in Rust"
 repository = "https://github.com/maciejhirsz/json-rust"

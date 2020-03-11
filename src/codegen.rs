@@ -390,32 +390,27 @@ fn extend_from_slice(dst: &mut Vec<u8>, src: &[u8]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::borrow::Borrow;
-    use crate::JsonValue;
-    use crate::parse;
 
-  // found while fuzzing the DumpGenerator
+    // found while fuzzing the DumpGenerator
+    #[test]
+    fn should_not_panic_on_bad_bytes() {
+        let data = [0, 12, 128, 88, 64, 99].to_vec();
+        let s = unsafe {
+            String::from_utf8_unchecked(data)
+        };
 
-  #[test]
-  fn should_not_panic_on_bad_bytes() {
-    let data = [0, 12, 128, 88, 64, 99].to_vec();
-    let s = unsafe {
-        String::from_utf8_unchecked(data)
-    };
+        let mut generator = DumpGenerator::new();
+        generator.write_string(&s).unwrap();
+    }
 
-    let mut generator = DumpGenerator::new();
-    generator.write_string(&s);
-  }
+    #[test]
+    fn should_not_panic_on_bad_bytes_2() {
+        let data = b"\x48\x48\x48\x57\x03\xE8\x48\x48\xE8\x03\x8F\x48\x29\x48\x48";
+        let s = unsafe {
+            String::from_utf8_unchecked(data.to_vec())
+        };
 
-  #[test]
-  fn should_not_panic_on_bad_bytes_2() {
-    let data = b"\x48\x48\x48\x57\x03\xE8\x48\x48\xE8\x03\x8F\x48\x29\x48\x48";
-    let s = unsafe {
-        String::from_utf8_unchecked(data.to_vec())
-    };
-
-    let mut generator = DumpGenerator::new();
-    generator.write_string(&s);
-  }
-
+        let mut generator = DumpGenerator::new();
+        generator.write_string(&s).unwrap();
+    }
 }

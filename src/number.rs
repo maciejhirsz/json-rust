@@ -1,5 +1,6 @@
 use std::{ ops, fmt, f32, f64 };
-use std::num::FpCategory;
+use std::convert::{TryFrom, Infallible};
+use std::num::{FpCategory, TryFromIntError};
 use crate::util::grisu2;
 use crate::util::print_dec;
 
@@ -383,6 +384,23 @@ impl PartialEq<Number> for f32 {
     }
 }
 
+/// Error type generated when trying to convert a `Number` into an
+/// integer of inadequate size.
+#[derive(Clone, Copy)]
+pub struct NumberOutOfScope;
+
+impl From<Infallible> for NumberOutOfScope {
+    fn from(_: Infallible) -> NumberOutOfScope {
+        NumberOutOfScope
+    }
+}
+
+impl From<TryFromIntError> for NumberOutOfScope {
+    fn from(_: TryFromIntError) -> NumberOutOfScope {
+        NumberOutOfScope
+    }
+}
+
 macro_rules! impl_unsigned {
     ($( $t:ty ),*) => ($(
         impl From<$t> for Number {
@@ -396,10 +414,23 @@ macro_rules! impl_unsigned {
             }
         }
 
+        impl TryFrom<Number> for $t {
+            type Error = NumberOutOfScope;
+
+            fn try_from(num: Number) -> Result<Self, Self::Error> {
+                let (positive, mantissa, exponent) = num.as_parts();
+
+                if !positive || exponent != 0 {
+                    return Err(NumberOutOfScope);
+                }
+
+                TryFrom::try_from(mantissa).map_err(Into::into)
+            }
+        }
+
         impl_integer!($t);
     )*)
 }
-
 
 macro_rules! impl_signed {
     ($( $t:ty ),*) => ($(
@@ -421,34 +452,32 @@ macro_rules! impl_signed {
             }
         }
 
+        impl TryFrom<Number> for $t {
+            type Error = NumberOutOfScope;
+
+            fn try_from(num: Number) -> Result<Self, Self::Error> {
+                let (positive, mantissa, exponent) = num.as_parts();
+
+                if exponent != 0 {
+                    return Err(NumberOutOfScope);
+                }
+
+                let mantissa = if positive {
+                    mantissa as i64
+                } else {
+                    -(mantissa as i64)
+                };
+
+                TryFrom::try_from(mantissa).map_err(Into::into)
+            }
+        }
+
         impl_integer!($t);
     )*)
 }
 
-
 macro_rules! impl_integer {
     ($t:ty) => {
-        impl From<Number> for $t {
-            fn from(num: Number) -> $t {
-                let (positive, mantissa, exponent) = num.as_parts();
-
-                if exponent <= 0 {
-                    if positive {
-                        mantissa as $t
-                    } else {
-                        -(mantissa as i64) as $t
-                    }
-                } else {
-                    // This may overflow, which is fine
-                    if positive {
-                        (mantissa * 10u64.pow(exponent as u32)) as $t
-                    } else {
-                        (-(mantissa as i64) * 10i64.pow(exponent as u32)) as $t
-                    }
-                }
-            }
-        }
-
         impl PartialEq<$t> for Number {
             fn eq(&self, other: &$t) -> bool {
                 *self == Number::from(*other)

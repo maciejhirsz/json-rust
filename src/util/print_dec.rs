@@ -59,9 +59,10 @@ pub unsafe fn write<W: io::Write>(wr: &mut W, positive: bool, mut n: u64, expone
         return wr.write_all(b"0");
     }
 
-    let mut buf: [u8; 30] = mem::uninitialized();
-    let mut curr = buf.len() as isize;
-    let buf_ptr = buf.as_mut_ptr();
+    const BUF_LEN: usize = 30;
+    let mut buf = mem::MaybeUninit::<[u8; BUF_LEN]>::uninit();
+    let mut curr = BUF_LEN as isize;
+    let buf_ptr = buf.as_mut_ptr() as *mut u8;
     let lut_ptr = DEC_DIGITS_LUT.as_ptr();
 
     if exponent == 0 {
@@ -70,7 +71,7 @@ pub unsafe fn write<W: io::Write>(wr: &mut W, positive: bool, mut n: u64, expone
         return wr.write_all(
             slice::from_raw_parts(
                 buf_ptr.offset(curr),
-                buf.len() - curr as usize
+                BUF_LEN - curr as usize
             )
         );
     } else if exponent < 0 {
@@ -112,7 +113,7 @@ pub unsafe fn write<W: io::Write>(wr: &mut W, positive: bool, mut n: u64, expone
             write_num(&mut n, &mut curr, buf_ptr, lut_ptr);
 
             return wr.write_all(
-                slice::from_raw_parts(buf_ptr.offset(curr), buf.len() - curr as usize)
+                slice::from_raw_parts(buf_ptr.offset(curr), BUF_LEN - curr as usize)
             );
         }
 
@@ -159,7 +160,7 @@ pub unsafe fn write<W: io::Write>(wr: &mut W, positive: bool, mut n: u64, expone
                 ptr::copy_nonoverlapping(lut_ptr.offset(d1), buf_ptr.offset(curr), 2);
             }
 
-            let printed_so_far = buf.len() as u16 - curr as u16;
+            let printed_so_far = BUF_LEN as u16 - curr as u16;
 
 
             if printed_so_far <= e {
@@ -183,7 +184,7 @@ pub unsafe fn write<W: io::Write>(wr: &mut W, positive: bool, mut n: u64, expone
         wr.write_all(
             slice::from_raw_parts(
                 buf_ptr.offset(curr),
-                buf.len() - curr as usize
+                BUF_LEN - curr as usize
             )
         )?;
 
@@ -203,14 +204,14 @@ pub unsafe fn write<W: io::Write>(wr: &mut W, positive: bool, mut n: u64, expone
 
     // Exponent greater than 0
     write_num(&mut n, &mut curr, buf_ptr, lut_ptr);
-    let printed = buf.len() - curr as usize;
+    let printed = BUF_LEN - curr as usize;
 
     // No need for `e` notation, just print out zeroes
     if (printed + exponent as usize) <= 20 {
         wr.write_all(
             slice::from_raw_parts(
                 buf_ptr.offset(curr),
-                buf.len() - curr as usize
+                BUF_LEN - curr as usize
             )
         )?;
 
@@ -230,7 +231,7 @@ pub unsafe fn write<W: io::Write>(wr: &mut W, positive: bool, mut n: u64, expone
     wr.write_all(
         slice::from_raw_parts(
             buf_ptr.offset(curr),
-            buf.len() - curr as usize
+            BUF_LEN - curr as usize
         )
     )?;
     wr.write_all(b"e")?;

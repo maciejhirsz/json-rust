@@ -769,7 +769,6 @@ mod tests {
     use crate::stringify;
     use crate::JsonValue;
 
-    #[macro_use]
     use crate::object;
     use crate::array;
 
@@ -840,7 +839,7 @@ mod tests {
     fn it_should_parse_json_nested_object() {
         let s = "{\"a\":1,\"b\":{\"c\":2,\"d\":{\"e\":{\"f\":{\"g\":3,\"h\":[]}}},\"i\":4,\"j\":[],\"k\":{\"l\":5,\"m\":{}}}}";
         let actual = parse(s).unwrap();
-        let mut expected = object! {
+        let expected = object! {
             "a" => 1,
             "b" => object!{
                 "c" => 2,
@@ -868,7 +867,7 @@ mod tests {
     fn it_should_parse_json_complex_object() {
         let s = "{\"a\":1,\"b\":{\"c\":2,\"d\":{\"e\":{\"f\":{\"g\":3,\"h\":[{\"z\":1},{\"y\":2,\"x\":[{},{}]}]}}},\"i\":4,\"j\":[],\"k\":{\"l\":5,\"m\":{}}}}";
         let actual = parse(s).unwrap();
-        let mut expected = object! {
+        let expected = object! {
             "a" => 1,
             "b" => object!{
                 "c" => 2,
