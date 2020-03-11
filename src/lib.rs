@@ -198,7 +198,7 @@
 
 use std::result;
 
-mod codegen;
+pub mod codegen;
 mod parser;
 mod value;
 mod error;

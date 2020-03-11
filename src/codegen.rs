@@ -38,6 +38,7 @@ static ESCAPED: [u8; 256] = [
   __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // F
 ];
 
+/// Default trait for serializing JSONValue into string.
 pub trait Generator {
     type T: Write;
 
@@ -181,6 +182,7 @@ pub trait Generator {
     }
 }
 
+/// In-Memory Generator, this uses a Vec to store the JSON result.
 pub struct DumpGenerator {
     code: Vec<u8>,
 }
@@ -225,6 +227,7 @@ impl Generator for DumpGenerator {
     }
 }
 
+/// Pretty In-Memory Generator, this uses a Vec to store the JSON result and add indent.
 pub struct PrettyGenerator {
     code: Vec<u8>,
     dent: u16,
@@ -288,6 +291,7 @@ impl Generator for PrettyGenerator {
     }
 }
 
+/// Writer Generator, this uses a custom writer to store the JSON result.
 pub struct WriterGenerator<'a, W: 'a + Write> {
     writer: &'a mut W
 }
@@ -314,7 +318,7 @@ impl<'a, W> Generator for WriterGenerator<'a, W> where W: Write {
     }
 }
 
-
+/// Pretty Writer Generator, this uses a custom writer to store the JSON result and add indent.
 pub struct PrettyWriterGenerator<'a, W: 'a + Write> {
     writer: &'a mut W,
     dent: u16,
