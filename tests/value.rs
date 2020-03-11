@@ -644,10 +644,6 @@ fn equality() {
         foo: [JsonValue::String("bar".into()), 100, true]
     };
 
-    let left_short = object!{
-        foo: [JsonValue::Short(unsafe { json::short::Short::from_slice("bar") }), 100, true]
-    };
-
     let change_bool = object!{
         foo: ["bar", 100, false]
     };
@@ -656,14 +652,8 @@ fn equality() {
         foo: [JsonValue::String("sna".into()), 100, true]
     };
 
-    let change_short = object!{
-        foo: [JsonValue::Short(unsafe { json::short::Short::from_slice("sna") }), 100, true]
-    };
-
     assert_eq!(left, left_copy);
     assert_eq!(left, left_string);
-    assert_eq!(left, left_short);
     assert_ne!(left, change_bool);
     assert_ne!(left, change_string);
-    assert_ne!(left, change_short);
 }

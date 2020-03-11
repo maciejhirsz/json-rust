@@ -5,7 +5,6 @@ use std::io::{self, Write};
 use cowvec::CowStr;
 
 use crate::{Result, Error};
-use crate::short::Short;
 use crate::number::Number;
 use crate::object::Object;
 use crate::iterators::{ Members, MembersMut, Entries, EntriesMut };
@@ -38,7 +37,6 @@ macro_rules! number_to_signed {
 #[derive(Debug, Clone)]
 pub enum JsonValue<'json> {
     Null,
-    Short(Short),
     String(CowStr<'json>),
     Number(Number),
     Boolean(bool),
@@ -52,10 +50,7 @@ impl<'json> PartialEq for JsonValue<'json> {
 
         match (self, other) {
             (&Null, &Null) => true,
-            (&Short(ref a), &Short(ref b)) => a == b,
             (&String(ref a), &String(ref b)) => a == b,
-            (&Short(ref a), &String(ref b))
-            | (&String(ref b), &Short(ref a)) => a.as_str() == b.as_ref(),
             (&Number(ref a), &Number(ref b)) => a == b,
             (&Boolean(ref a), &Boolean(ref b)) => a == b,
             (&Object(ref a), &Object(ref b)) => a == b,
@@ -81,7 +76,6 @@ impl fmt::Display for JsonValue<'_> {
             f.write_str(&self.pretty(4))
         } else {
             match *self {
-                JsonValue::Short(ref value)   => value.fmt(f),
                 JsonValue::String(ref value)  => value.fmt(f),
                 JsonValue::Number(ref value)  => value.fmt(f),
                 JsonValue::Boolean(ref value) => value.fmt(f),
@@ -146,7 +140,6 @@ impl<'json> JsonValue<'json> {
 
     pub fn is_string(&self) -> bool {
         match *self {
-            JsonValue::Short(_)  => true,
             JsonValue::String(_) => true,
             _                    => false,
         }
@@ -198,7 +191,6 @@ impl<'json> JsonValue<'json> {
     pub fn is_empty(&self) -> bool {
         match *self {
             JsonValue::Null               => true,
-            JsonValue::Short(ref value)   => value.is_empty(),
             JsonValue::String(ref value)  => value.is_empty(),
             JsonValue::Number(ref value)  => value.is_empty(),
             JsonValue::Boolean(ref value) => !value,
@@ -209,7 +201,6 @@ impl<'json> JsonValue<'json> {
 
     pub fn as_str(&self) -> Option<&str> {
         match *self {
-            JsonValue::Short(ref value)  => Some(value),
             JsonValue::String(ref value) => Some(value),
             _                            => None
         }
@@ -347,12 +338,6 @@ impl<'json> JsonValue<'json> {
     /// Checks that self is a string, returns an owned Rust `String`, leaving
     /// `Null` in it's place.
     ///
-    /// - If the contained string is already a heap allocated `String`, then
-    /// the ownership is moved without any heap allocation.
-    ///
-    /// - If the contained string is a `Short`, this will perform a heap
-    /// allocation to convert the types for you.
-    ///
     /// ## Example
     ///
     /// ```
@@ -372,7 +357,6 @@ impl<'json> JsonValue<'json> {
         mem::swap(self, &mut placeholder);
 
         match placeholder {
-            JsonValue::Short(short)   => return Some(short.into()),
             JsonValue::String(string) => return Some(string.into_owned()),
 
             // Not a string? Swap the original value back in place!

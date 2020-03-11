@@ -4,7 +4,6 @@
 use std::collections::{BTreeMap, HashMap};
 use cowvec::CowStr;
 
-use crate::short::{self, Short};
 use crate::number::Number;
 use crate::object::Object;
 use crate::value::JsonValue;
@@ -126,7 +125,6 @@ where
 impl PartialEq<&str> for JsonValue<'_> {
     fn eq(&self, other: &&str) -> bool {
         match self {
-            JsonValue::Short(value)  => value == *other,
             JsonValue::String(value) => value.as_ref() == *other,
             _ => false
         }
@@ -136,7 +134,6 @@ impl PartialEq<&str> for JsonValue<'_> {
 impl PartialEq<JsonValue<'_>> for &str {
     fn eq(&self, other: &JsonValue) -> bool {
         match other {
-            JsonValue::Short(value)  => value == *self,
             JsonValue::String(value) => value.as_ref() == *self,
             _ => false
         }
@@ -146,7 +143,6 @@ impl PartialEq<JsonValue<'_>> for &str {
 impl PartialEq<str> for JsonValue<'_> {
     fn eq(&self, other: &str) -> bool {
         match self {
-            JsonValue::Short(value)  => value == other,
             JsonValue::String(value) => value.as_ref() == other,
             _ => false
         }
@@ -156,7 +152,6 @@ impl PartialEq<str> for JsonValue<'_> {
 impl PartialEq<JsonValue<'_>> for str {
     fn eq(&self, other: &JsonValue) -> bool {
         match other {
-            JsonValue::Short(value)  => value == self,
             JsonValue::String(value) => value.as_ref() == self,
             _ => false
         }
