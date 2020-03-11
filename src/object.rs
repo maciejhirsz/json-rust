@@ -51,37 +51,12 @@ fn hash_key(key: &[u8]) -> u64 {
 }
 
 #[derive(Clone)]
-struct Key<'json> {
+struct Node<'json> {
+    // Key
     pub key: CowStr<'json>,
 
-    // A hash of the key, explanation below.
+    // Hash of the key
     pub hash: u64,
-}
-
-impl<'json> Key<'json> {
-    #[inline]
-    fn new(key: CowStr<'json>, hash: u64) -> Self {
-        Key {
-            key,
-            hash,
-        }
-    }
-
-    #[inline]
-    fn as_bytes(&self) -> &[u8] {
-        self.key.as_bytes()
-    }
-
-    #[inline]
-    fn as_str(&self) -> &str {
-        self.key.deref()
-    }
-}
-
-#[derive(Clone)]
-struct Node<'json> {
-    // String-esque key abstraction
-    pub key: Key<'json>,
 
     // Value stored.
     pub value: JsonValue<'json>,
@@ -99,13 +74,13 @@ struct Node<'json> {
 
 impl fmt::Debug for Node<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(&(self.key.as_str(), &self.value, self.left, self.right), f)
+        fmt::Debug::fmt(&(self.key.deref(), &self.value, self.left, self.right), f)
     }
 }
 
 impl<'json> PartialEq for Node<'json> {
     fn eq(&self, other: &Node<'json>) -> bool {
-        self.key.hash       == other.key.hash       &&
+        self.hash           == other.hash           &&
         self.key.as_bytes() == other.key.as_bytes() &&
         self.value          == other.value
     }
@@ -115,8 +90,9 @@ impl<'json> Node<'json> {
     #[inline]
     fn new(value: JsonValue<'json>, key: CowStr<'json>, hash: u64) -> Node<'json> {
         Node {
-            key: Key::new(key, hash),
-            value: value,
+            key,
+            hash,
+            value,
             left: 0,
             right: 0,
         }
@@ -177,7 +153,8 @@ impl<'json> Object<'json> {
     }
 
     pub(crate) fn insert_index(&mut self, key: CowStr<'json>, value: JsonValue<'json>) -> usize {
-        let hash = hash_key(key.as_bytes());
+        let bytes = key.as_bytes();
+        let hash = hash_key(bytes);
 
         if self.store.len() == 0 {
             self.store.push(Node::new(value, key, hash));
@@ -188,10 +165,10 @@ impl<'json> Object<'json> {
         let mut parent = 0;
 
         loop {
-            if hash == node.key.hash && key == node.key.as_str() {
+            if hash == node.hash && bytes == node.key.as_bytes() {
                 node.value = value;
                 return parent;
-            } else if hash < node.key.hash {
+            } else if hash < node.hash {
                 if node.left != 0 {
                     parent = node.left;
                     node = unsafe { &mut *self.node_at_index_mut(node.left) };
@@ -231,9 +208,9 @@ impl<'json> Object<'json> {
         let mut node = unsafe { self.store.get_unchecked(0) };
 
         loop {
-            if hash == node.key.hash && key == node.key.as_bytes() {
+            if hash == node.hash && key == node.key.as_bytes() {
                 return Some(&node.value);
-            } else if hash < node.key.hash {
+            } else if hash < node.hash {
                 if node.left == 0 {
                     return None;
                 }
@@ -260,9 +237,9 @@ impl<'json> Object<'json> {
             let mut node = unsafe { self.store.get_unchecked(0) };
 
             loop {
-                if hash == node.key.hash && key == node.key.as_bytes() {
+                if hash == node.hash && key == node.key.as_bytes() {
                     break;
-                } else if hash < node.key.hash {
+                } else if hash < node.hash {
                     if node.left == 0 {
                         return None;
                     }
@@ -299,9 +276,9 @@ impl<'json> Object<'json> {
 
             // Try to find the node
             loop {
-                if hash == node.key.hash && key == node.key.as_bytes() {
+                if hash == node.hash && key == node.key.as_bytes() {
                     break;
-                } else if hash < node.key.hash {
+                } else if hash < node.hash {
                     if node.left == 0 {
                         return None;
                     }
@@ -331,7 +308,7 @@ impl<'json> Object<'json> {
                 // it is owned. Replace fixes that.
                 removed = Some(node.value);
             } else {
-                self.insert(node.key.key, node.value);
+                self.insert(node.key, node.value);
             }
         }
 
@@ -441,14 +418,14 @@ impl<'a> Iterator for Iter<'a> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|node| (node.key.as_str(), &node.value))
+        self.inner.next().map(|node| (node.key.deref(), &node.value))
     }
 }
 
 impl<'a> DoubleEndedIterator for Iter<'a> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner.next_back().map(|node| (node.key.as_str(), &node.value))
+        self.inner.next_back().map(|node| (node.key.deref(), &node.value))
     }
 }
 
@@ -476,14 +453,14 @@ impl<'a> Iterator for IterMut<'a> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|node| (node.key.as_str(), &mut node.value))
+        self.inner.next().map(|node| (node.key.deref(), &mut node.value))
     }
 }
 
 impl<'a> DoubleEndedIterator for IterMut<'a> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner.next_back().map(|node| (node.key.as_str(), &mut node.value))
+        self.inner.next_back().map(|node| (node.key.deref(), &mut node.value))
     }
 }
 

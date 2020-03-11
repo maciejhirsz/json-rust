@@ -195,7 +195,7 @@ static ALLOWED: [bool; 256] = [
 // unnecessary buffering.
 macro_rules! expect_string {
     ($parser:ident) => ({
-        let result: CowStr;
+        let result;
         let start = $parser.index;
 
         loop {
@@ -204,7 +204,7 @@ macro_rules! expect_string {
                 continue;
             }
             if ch == b'"' {
-                result = $parser.source[start..$parser.index - 1].into();
+                result = CowStr::borrowed(&$parser.source[start..$parser.index - 1]);
                 break;
             }
             if ch == b'\\' {
