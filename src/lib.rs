@@ -1,4 +1,4 @@
-//! ![](https://raw.githubusercontent.com/maciejhirsz/json-rust/master/json-rust-logo-small.png?sanitize=true)
+//! ![](https://raw.githubusercontent.com/maciejhirsz/json-rust/master/json-rust-logo-small.png)
 //!
 //! # json-rust
 //!
