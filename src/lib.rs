@@ -222,10 +222,10 @@ pub type Result<T> = result::Result<T, Error>;
 
 pub mod iterators {
     /// Iterator over members of `JsonValue::Array`.
-    pub type Members<'a> = ::std::slice::Iter<'a, super::JsonValue>;
+    pub type Members<'a> = ::std::slice::Iter<'a, super::JsonValue<'a>>;
 
     /// Mutable iterator over members of `JsonValue::Array`.
-    pub type MembersMut<'a> = ::std::slice::IterMut<'a, super::JsonValue>;
+    pub type MembersMut<'a> = ::std::slice::IterMut<'a, super::JsonValue<'a>>;
 
     /// Iterator over key value pairs of `JsonValue::Object`.
     pub type Entries<'a> = super::object::Iter<'a>;
@@ -242,22 +242,31 @@ pub use crate::Result as JsonResult;
 
 pub use parser::parse;
 
-pub type Array = Vec<JsonValue>;
+pub type Array<'json> = Vec<JsonValue<'json>>;
 
 /// Convenience for `JsonValue::from(value)`
-pub fn from<T>(value: T) -> JsonValue where T: Into<JsonValue> {
+pub fn from<'json, T>(value: T) -> JsonValue<'json>
+where
+    T: Into<JsonValue<'json>>
+{
     value.into()
 }
 
 /// Pretty prints out the value as JSON string.
-pub fn stringify<T>(root: T) -> String where T: Into<JsonValue> {
+pub fn stringify<'json, T>(root: T) -> String
+where
+    T: Into<JsonValue<'json>> + 'json,
+{
     let root: JsonValue = root.into();
     root.dump()
 }
 
 /// Pretty prints out the value as JSON string. Second argument is a
 /// number of spaces to indent new blocks with.
-pub fn stringify_pretty<T>(root: T, spaces: u16) -> String where T: Into<JsonValue> {
+pub fn stringify_pretty<'json, T>(root: T, spaces: u16) -> String
+where
+    T: Into<JsonValue<'json>> + 'json,
+{
     let root: JsonValue = root.into();
     root.pretty(spaces)
 }

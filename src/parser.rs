@@ -18,6 +18,7 @@
 // with MIR support the compiler will get smarter about this.
 
 use std::{str, slice};
+use std::borrow::Cow;
 use std::char::decode_utf16;
 use std::convert::TryFrom;
 use crate::object::Object;
@@ -36,13 +37,13 @@ const DEPTH_LIMIT: usize = 512;
 // The `Parser` struct keeps track of indexing over our buffer. All niceness
 // has been abandoned in favor of raw pointer magic. Does that make you feel
 // dirty? _Good._
-struct Parser<'a> {
+struct Parser<'json> {
     // Helper buffer for parsing strings that can't be just memcopied from
     // the original source (escaped characters)
     buffer: Vec<u8>,
 
     // String slice to parse
-    source: &'a str,
+    source: &'json str,
 
     // Byte pointer to the slice above
     byte_ptr: *const u8,
@@ -193,7 +194,7 @@ static ALLOWED: [bool; 256] = [
 // unnecessary buffering.
 macro_rules! expect_string {
     ($parser:ident) => ({
-        let result: &str;
+        let result: Cow<str>;
         let start = $parser.index;
 
         loop {
@@ -202,11 +203,7 @@ macro_rules! expect_string {
                 continue;
             }
             if ch == b'"' {
-                unsafe {
-                    let ptr = $parser.byte_ptr.offset(start as isize);
-                    let len = $parser.index - 1 - start;
-                    result = str::from_utf8_unchecked(slice::from_raw_parts(ptr, len));
-                }
+                result = $parser.source[start..$parser.index - 1].into();
                 break;
             }
             if ch == b'\\' {
@@ -364,11 +361,11 @@ macro_rules! expect_fraction {
     })
 }
 
-impl<'a> Parser<'a> {
-    pub fn new(source: &'a str) -> Self {
+impl<'json> Parser<'json> {
+    pub fn new(source: &'json str) -> Self {
         Parser {
             buffer: Vec::with_capacity(30),
-            source: source,
+            source,
             byte_ptr: source.as_ptr(),
             index: 0,
             length: source.len(),
@@ -482,17 +479,7 @@ impl<'a> Parser<'a> {
     // is whole lot slower than parsing "foobar", as the former suffers from
     // having to be read from source to a buffer and then from a buffer to
     // our target string. Nothing to be done about this, really.
-    fn read_complex_string<'b>(&mut self, start: usize) -> Result<&'b str> {
-        // Since string slices are returned by this function that are created via pointers into `self.buffer`
-        // we shouldn't be clearing or modifying the buffer in consecutive calls to this function. Instead
-        // we continuously append bytes to `self.buffer` and keep track of the starting offset of the buffer on each
-        // call to this function. Later when creating string slices that point to the contents of this buffer
-        // we use this starting offset to make sure that newly created slices point only to the bytes that were
-        // appended in the most recent call to this function.
-        //
-        // Failing to do this can result in the StackBlock `key` values being modified in place later.
-        let len = self.buffer.len();
-        //self.buffer.clear();
+    fn read_complex_string(&mut self, start: usize) -> Result<Cow<'static, str>> {
         let mut ch = b'\\';
 
         // TODO: Use fastwrite here as well
@@ -534,17 +521,10 @@ impl<'a> Parser<'a> {
         // Since the original source is already valid UTF-8, and `\`
         // cannot occur in front of a codepoint > 127, this is safe.
         Ok(unsafe {
-            str::from_utf8_unchecked(
-                // Because the buffer is stored on the parser, returning it
-                // as a slice here freaks out the borrow checker. The compiler
-                // can't know that the buffer isn't used till the result
-                // of this function is long used and irrelevant. To avoid
-                // issues here, we construct a new slice from raw parts, which
-                // then has lifetime bound to the outer function scope instead
-                // of the parser itself.
-                slice::from_raw_parts(self.buffer[len .. ].as_ptr(), self.buffer.len() - len)
+            String::from_utf8_unchecked(
+                std::mem::replace(&mut self.buffer, Vec::new())
             )
-        })
+        }.into())
     }
 
     // Big numbers! If the `expect_number!` reaches a point where the decimal
@@ -624,7 +604,7 @@ impl<'a> Parser<'a> {
     }
 
     // Parse away!
-    fn parse(&mut self) -> Result<JsonValue> {
+    fn parse(&mut self) -> Result<JsonValue<'json>> {
         let mut stack = Vec::with_capacity(3);
         let mut ch = expect_byte_ignore_whitespace!(self);
 
@@ -754,11 +734,11 @@ impl<'a> Parser<'a> {
     }
 }
 
-struct StackBlock(JsonValue, usize);
+struct StackBlock<'json>(JsonValue<'json>, usize);
 
 // All that hard work, and in the end it's just a single function in the API.
 #[inline]
-pub fn parse(source: &str) -> Result<JsonValue> {
+pub fn parse<'json>(source: &'json str) -> Result<JsonValue<'json>> {
     Parser::new(source).parse()
 }
 

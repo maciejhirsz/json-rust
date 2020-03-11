@@ -205,31 +205,31 @@ fn array_members_rev() {
     assert!(members.next().is_none());
 }
 
-#[test]
-fn array_members_mut() {
-    let mut data = array![null, null];
+// #[test]
+// fn array_members_mut() {
+//     let mut data = array![null, null];
 
-    for member in data.members_mut() {
-        assert!(member.is_null());
-        *member = 100.into();
-    }
+//     for member in data.members_mut() {
+//         assert!(member.is_null());
+//         *member = 100.into();
+//     }
 
-    assert_eq!(data, array![100, 100]);
-}
+//     assert_eq!(data, array![100, 100]);
+// }
 
-#[test]
-fn array_members_mut_rev() {
-    let mut data = array![null, null];
-    let mut item = 100;
+// #[test]
+// fn array_members_mut_rev() {
+//     let mut data = array![null, null];
+//     let mut item = 100;
 
-    for member in data.members_mut().rev() {
-        assert!(member.is_null());
-        *member = item.into();
-        item += 1;
-    }
+//     for member in data.members_mut().rev() {
+//         assert!(member.is_null());
+//         *member = item.into();
+//         item += 1;
+//     }
 
-    assert_eq!(data, array![item - 1, item - 2]);
-}
+//     assert_eq!(data, array![item - 1, item - 2]);
+// }
 
 #[test]
 fn object_len() {
@@ -300,43 +300,43 @@ fn object_entries_rev() {
     assert!(entries.next().is_none());
 }
 
-#[test]
-fn object_entries_mut() {
-    let mut data = object!{
-        a: null,
-        b: null
-    };
+// #[test]
+// fn object_entries_mut() {
+//     let mut data = object!{
+//         a: null,
+//         b: null
+//     };
 
-    for (_, value) in data.entries_mut() {
-        assert!(value.is_null());
-        *value = 100.into();
-    }
+//     for (_, value) in data.entries_mut() {
+//         assert!(value.is_null());
+//         *value = 100.into();
+//     }
 
-    assert_eq!(data, object!{
-        a: 100,
-        b: 100
-    });
-}
+//     assert_eq!(data, object!{
+//         a: 100,
+//         b: 100
+//     });
+// }
 
-#[test]
-fn object_entries_mut_rev() {
-    let mut data = object!{
-        a: null,
-        b: null
-    };
-    let mut item = 100;
+// #[test]
+// fn object_entries_mut_rev() {
+//     let mut data = object!{
+//         a: null,
+//         b: null
+//     };
+//     let mut item = 100;
 
-    for (_, value) in data.entries_mut().rev() {
-        assert!(value.is_null());
-        *value = item.into();
-        item += 1;
-    }
+//     for (_, value) in data.entries_mut().rev() {
+//         assert!(value.is_null());
+//         *value = item.into();
+//         item += 1;
+//     }
 
-    assert_eq!(data, object!{
-        a: item - 1,
-        b: item - 2
-    });
-}
+//     assert_eq!(data, object!{
+//         a: item - 1,
+//         b: item - 2
+//     });
+// }
 
 #[test]
 fn object_dump_minified() {
@@ -641,7 +641,7 @@ fn equality() {
     };
 
     let left_string = object!{
-        foo: [JsonValue::String("bar".to_string()), 100, true]
+        foo: [JsonValue::String("bar".into()), 100, true]
     };
 
     let left_short = object!{
@@ -653,7 +653,7 @@ fn equality() {
     };
 
     let change_string = object!{
-        foo: [JsonValue::String("sna".to_string()), 100, true]
+        foo: [JsonValue::String("sna".into()), 100, true]
     };
 
     let change_short = object!{

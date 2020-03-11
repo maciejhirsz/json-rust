@@ -180,7 +180,8 @@ fn stringify_hash_map() {
     // HashMap does not sort keys, but depending on hashing used the
     // order can be different. Safe bet is to parse the result and
     // compare parsed objects.
-    let parsed = parse(&stringify(map)).unwrap();
+    let string = stringify(map);
+    let parsed = parse(&string).unwrap();
 
     assert_eq!(parsed, object!{
         name: "Maciej",
