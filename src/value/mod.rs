@@ -340,7 +340,7 @@ impl<'json> JsonValue<'json> {
     /// assert!(data[1].is_null());
     /// # }
     /// ```
-    pub fn take(&mut self) -> JsonValue {
+    pub fn take(&mut self) -> JsonValue<'json> {
         mem::replace(self, JsonValue::Null)
     }
 
