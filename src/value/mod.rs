@@ -46,9 +46,6 @@ pub enum JsonValue<'json> {
     Array(Vec<JsonValue<'json>>),
 }
 
-unsafe impl Sync for JsonValue<'_> {}
-unsafe impl Send for JsonValue<'_> {}
-
 impl<'json> PartialEq for JsonValue<'json> {
     fn eq(&self, other: &Self) -> bool {
         use self::JsonValue::*;
@@ -343,7 +340,7 @@ impl<'json> JsonValue<'json> {
     /// assert!(data[1].is_null());
     /// # }
     /// ```
-    pub fn take(&mut self) -> JsonValue {
+    pub fn take(&mut self) -> JsonValue<'json> {
         mem::replace(self, JsonValue::Null)
     }
 

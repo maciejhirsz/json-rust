@@ -521,11 +521,11 @@ impl<'json> Parser<'json> {
 
         // Since the original source is already valid UTF-8, and `\`
         // cannot occur in front of a codepoint > 127, this is safe.
-        Ok(unsafe {
+        Ok(CowStr::owned(unsafe {
             String::from_utf8_unchecked(
                 std::mem::replace(&mut self.buffer, Vec::new())
             )
-        }.into())
+        }))
     }
 
     // Big numbers! If the `expect_number!` reaches a point where the decimal

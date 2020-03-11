@@ -78,11 +78,6 @@ impl<'json> Key<'json> {
     }
 }
 
-// // Implement `Sync` and `Send` for `Key` despite the use of raw pointers. The struct
-// // itself should be memory safe.
-unsafe impl Sync for Key<'_> {}
-unsafe impl Send for Key<'_> {}
-
 #[derive(Clone)]
 struct Node<'json> {
     // String-esque key abstraction
