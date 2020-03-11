@@ -116,12 +116,12 @@ fn parse_array() {
         10,
         "foo",
         true,
-        Null
+        null
     ]);
 
     assert_eq!(parse("[]").unwrap(), array![]);
 
-    assert_eq!(parse("[[]]").unwrap(), array![array![]]);
+    assert_eq!(parse("[[]]").unwrap(), array![[]]);
 }
 
 #[test]
@@ -135,8 +135,8 @@ fn parse_object() {
     }
 
     "#).unwrap(), object!{
-        "foo" => "bar",
-        "num" => 10
+        foo: "bar",
+        num: 10
     });
 
     // Trailing comma in macro
@@ -148,8 +148,8 @@ fn parse_object() {
     }
 
     "#).unwrap(), object!{
-        "foo" => "bar",
-        "num" => 10,
+        foo: "bar",
+        num: 10,
     });
 }
 
@@ -164,8 +164,8 @@ fn parse_object_duplicate_fields() {
     }
 
     "#).unwrap(), object!{
-        "foo" => 2,
-        "bar" => 1
+        foo: 2,
+        bar: 1
     });
 }
 
@@ -178,7 +178,7 @@ fn parse_object_with_array(){
     }
 
     "#).unwrap(), object!{
-        "foo" => array![1, 2, 3]
+        foo: [1, 2, 3]
     });
 }
 
@@ -197,10 +197,10 @@ fn parse_nested_object() {
     }
 
     "#).unwrap(), object!{
-        "l10n" => array![ object!{
-            "product" => object!{
-                "inStock" => object!{
-                    "DE" => "Lieferung innerhalb von 1-3 Werktagen"
+        l10n: [ {
+            product: {
+                inStock: {
+                    DE: "Lieferung innerhalb von 1-3 Werktagen"
                 }
             }
         } ]

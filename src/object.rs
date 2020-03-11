@@ -654,7 +654,7 @@ impl<'a> ExactSizeIterator for IterMut<'a> {
 /// #
 /// # fn main() {
 /// let value = object!{
-///     "foo" => "bar"
+///     foo: "bar"
 /// };
 ///
 /// if let JsonValue::Object(object) = value {

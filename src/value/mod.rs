@@ -604,7 +604,7 @@ impl IndexMut<usize> for JsonValue {
 /// #
 /// # fn main() {
 /// let object = object!{
-///     "foo" => "bar"
+///     foo: "bar"
 /// };
 ///
 /// assert!(object["foo"] == "bar");

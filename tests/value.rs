@@ -49,7 +49,7 @@ fn is_as_number() {
     assert_eq!(number.as_i8(), None);
     assert_eq!(number.as_i16(), None);
     assert_eq!(number.as_i32(), Some(40_000));
-    
+
     let number = JsonValue::from(-5.5);
     assert_eq!(number.as_i8(), None);
     assert_eq!(number.as_i16(), None);
@@ -124,7 +124,7 @@ fn is_empty() {
     assert!(!json::from("foo").is_empty());
     assert!(!json::from(true).is_empty());
     assert!(!array![0].is_empty());
-    assert!(!object!{ "foo" => false }.is_empty());
+    assert!(!object!{ foo: false }.is_empty());
 }
 
 #[test]
@@ -136,7 +136,7 @@ fn array_len() {
 
 #[test]
 fn array_contains() {
-    let data = array![true, Null, 3.14, "foo"];
+    let data = array![true, null, 3.14, "foo"];
 
     assert!(data.contains(true));
     assert!(data.contains(Null));
@@ -207,7 +207,7 @@ fn array_members_rev() {
 
 #[test]
 fn array_members_mut() {
-    let mut data = array![Null, Null];
+    let mut data = array![null, null];
 
     for member in data.members_mut() {
         assert!(member.is_null());
@@ -219,7 +219,7 @@ fn array_members_mut() {
 
 #[test]
 fn array_members_mut_rev() {
-    let mut data = array![Null, Null];
+    let mut data = array![null, null];
     let mut item = 100;
 
     for member in data.members_mut().rev() {
@@ -234,8 +234,8 @@ fn array_members_mut_rev() {
 #[test]
 fn object_len() {
     let data = object!{
-        "a" => true,
-        "b" => false
+        a: true,
+        b: false
     };
 
     assert_eq!(data.len(), 2);
@@ -244,19 +244,19 @@ fn object_len() {
 #[test]
 fn object_remove() {
     let mut data = object!{
-        "foo" => "bar",
-        "answer" => 42
+        foo: "bar",
+        answer: 42
     };
 
     assert_eq!(data.remove("foo"), "bar");
-    assert_eq!(data, object!{ "answer" => 42 });
+    assert_eq!(data, object!{ answer: 42 });
 }
 
 #[test]
 fn object_entries() {
     let data = object!{
-        "a" => 1,
-        "b" => "foo"
+        a: 1,
+        b: "foo"
     };
 
     for (_, value) in data.entries() {
@@ -279,8 +279,8 @@ fn object_entries() {
 #[test]
 fn object_entries_rev() {
     let data = object!{
-        "a" => 1,
-        "b" => "foo"
+        a: 1,
+        b: "foo"
     };
 
     for (_, value) in data.entries().rev() {
@@ -303,8 +303,8 @@ fn object_entries_rev() {
 #[test]
 fn object_entries_mut() {
     let mut data = object!{
-        "a" => Null,
-        "b" => Null
+        a: null,
+        b: null
     };
 
     for (_, value) in data.entries_mut() {
@@ -313,16 +313,16 @@ fn object_entries_mut() {
     }
 
     assert_eq!(data, object!{
-        "a" => 100,
-        "b" => 100
+        a: 100,
+        b: 100
     });
 }
 
 #[test]
 fn object_entries_mut_rev() {
     let mut data = object!{
-        "a" => Null,
-        "b" => Null
+        a: null,
+        b: null
     };
     let mut item = 100;
 
@@ -333,16 +333,16 @@ fn object_entries_mut_rev() {
     }
 
     assert_eq!(data, object!{
-        "a" => item - 1,
-        "b" => item - 2
+        a: item - 1,
+        b: item - 2
     });
 }
 
 #[test]
 fn object_dump_minified() {
     let object = object!{
-        "name" => "Maciej",
-        "age" => 30
+        name: "Maciej",
+        age: 30
     };
 
     assert_eq!(object.dump(), "{\"name\":\"Maciej\",\"age\":30}");
@@ -351,13 +351,13 @@ fn object_dump_minified() {
 #[test]
 fn object_dump_pretty() {
     let object = object!{
-        "name" => "Urlich",
-        "age" => 50,
-        "parents" => object!{
-            "mother" => "Helga",
-            "father" => "Brutus"
+        name: "Urlich",
+        age: 50,
+        parents: {
+            mother: "Helga",
+            father: "Brutus"
         },
-        "cars" => array![ "Golf", "Mercedes", "Porsche" ]
+        cars: [ "Golf", "Mercedes", "Porsche" ]
     };
 
     assert_eq!(object.pretty(2),
@@ -374,7 +374,7 @@ fn null_len() {
 #[test]
 fn index_by_str() {
     let data = object!{
-        "foo" => "bar"
+        foo: "bar"
     };
 
     assert_eq!(data["foo"], "bar");
@@ -383,7 +383,7 @@ fn index_by_str() {
 #[test]
 fn index_by_string() {
     let data = object!{
-        "foo" => "bar"
+        "foo": "bar"
     };
 
     assert_eq!(data["foo".to_string()], "bar");
@@ -392,7 +392,7 @@ fn index_by_string() {
 #[test]
 fn index_by_string_ref() {
     let data = object!{
-        "foo" => "bar"
+        foo: "bar"
     };
 
     let key = "foo".to_string();
@@ -404,7 +404,7 @@ fn index_by_string_ref() {
 #[test]
 fn index_mut_by_str() {
     let mut data = object!{
-        "foo" => Null
+        foo: null
     };
 
     data["foo"] = "bar".into();
@@ -415,7 +415,7 @@ fn index_mut_by_str() {
 #[test]
 fn index_mut_by_string() {
     let mut data = object!{
-        "foo" => Null
+        foo: null
     };
 
     data["foo".to_string()] = "bar".into();
@@ -426,7 +426,7 @@ fn index_mut_by_string() {
 #[test]
 fn index_mut_by_string_ref() {
     let mut data = object!{
-        "foo" => Null
+        foo: null
     };
 
     let key = "foo".to_string();
@@ -440,7 +440,7 @@ fn index_mut_by_string_ref() {
 #[test]
 fn object_index_by_str() {
     let val = object!{
-        "foo" => "bar"
+        foo: "bar"
     };
     if let JsonValue::Object(data) = val {
         assert_eq!(data["foo"], "bar");
@@ -450,7 +450,7 @@ fn object_index_by_str() {
 #[test]
 fn object_index_by_string() {
     let val = object!{
-        "foo" => "bar"
+        foo: "bar"
     };
 
     if let JsonValue::Object(data) = val {
@@ -461,7 +461,7 @@ fn object_index_by_string() {
 #[test]
 fn object_index_by_string_ref() {
     let val = object!{
-        "foo" => "bar"
+        foo: "bar"
     };
 
     let key = "foo".to_string();
@@ -475,7 +475,7 @@ fn object_index_by_string_ref() {
 #[test]
 fn object_index_mut_by_str() {
     let val = object!{
-        "foo" => Null
+        foo: null
     };
 
     if let JsonValue::Object(mut data) = val {
@@ -488,7 +488,7 @@ fn object_index_mut_by_str() {
 #[test]
 fn object_index_mut_by_string() {
     let val = object!{
-        "foo" => Null
+        foo: null
     };
 
     if let JsonValue::Object(mut data) = val {
@@ -501,7 +501,7 @@ fn object_index_mut_by_string() {
 #[test]
 fn object_index_mut_by_string_ref() {
     let val = object!{
-        "foo" => Null
+        foo: null
     };
 
     let key = "foo".to_string();
@@ -557,8 +557,8 @@ fn fmt_array() {
 #[test]
 fn fmt_object() {
     let data = object!{
-        "foo" => "bar",
-        "answer" => 42
+        foo: "bar",
+        answer: 42
     };
 
     assert_eq!(format!("{}", data), r#"{"foo":"bar","answer":42}"#);
@@ -607,7 +607,7 @@ fn error_unexpected_token() {
 #[test]
 fn writer_generator() {
     let data = object!{
-        "foo" => array!["bar", 100, true]
+        foo: ["bar", 100, true]
     };
 
     let mut buf = Vec::new();
@@ -620,7 +620,7 @@ fn writer_generator() {
 #[test]
 fn pretty_writer_generator() {
     let data = object!{
-        "foo" => array!["bar", 100, true]
+        foo: ["bar", 100, true]
     };
 
     let mut buf = Vec::new();
@@ -633,31 +633,31 @@ fn pretty_writer_generator() {
 #[test]
 fn equality() {
     let left = object!{
-        "foo" => array!["bar", 100, true]
+        foo: ["bar", 100, true]
     };
 
     let left_copy = object!{
-        "foo" => array!["bar", 100, true]
+        foo: ["bar", 100, true]
     };
 
     let left_string = object!{
-        "foo" => array![JsonValue::String("bar".to_string()), 100, true]
+        foo: [JsonValue::String("bar".to_string()), 100, true]
     };
 
     let left_short = object!{
-        "foo" => array![JsonValue::Short(unsafe { json::short::Short::from_slice("bar") }), 100, true]
+        foo: [JsonValue::Short(unsafe { json::short::Short::from_slice("bar") }), 100, true]
     };
 
     let change_bool = object!{
-        "foo" => array!["bar", 100, false]
+        foo: ["bar", 100, false]
     };
 
     let change_string = object!{
-        "foo" => array![JsonValue::String("sna".to_string()), 100, true]
+        foo: [JsonValue::String("sna".to_string()), 100, true]
     };
 
     let change_short = object!{
-        "foo" => array![JsonValue::Short(unsafe { json::short::Short::from_slice("sna") }), 100, true]
+        foo: [JsonValue::Short(unsafe { json::short::Short::from_slice("sna") }), 100, true]
     };
 
     assert_eq!(left, left_copy);
