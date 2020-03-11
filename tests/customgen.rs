@@ -2,7 +2,7 @@
 extern crate json;
 
 use json::codegen::Generator;
-use json::object::{self, Object};
+use json::object::Object;
 use json::{JsonValue, Null};
 use std::io;
 
