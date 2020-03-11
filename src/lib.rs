@@ -205,7 +205,6 @@ mod value;
 mod error;
 mod util;
 
-pub mod short;
 pub mod object;
 pub mod number;
 
