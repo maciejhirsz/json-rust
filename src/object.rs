@@ -1,7 +1,7 @@
 use std::{ ptr, mem, str, slice, fmt };
-use std::borrow::Cow;
 use std::ops::{ Index, IndexMut, Deref };
 use std::iter::FromIterator;
+use cowvec::CowStr;
 
 use crate::codegen::{ DumpGenerator, Generator, PrettyGenerator };
 use crate::value::JsonValue;
@@ -52,7 +52,7 @@ fn hash_key(key: &[u8]) -> u64 {
 
 #[derive(Clone)]
 struct Key<'json> {
-    pub key: Cow<'json, str>,
+    pub key: CowStr<'json>,
 
     // A hash of the key, explanation below.
     pub hash: u64,
@@ -60,7 +60,7 @@ struct Key<'json> {
 
 impl<'json> Key<'json> {
     #[inline]
-    fn new(key: Cow<'json, str>, hash: u64) -> Self {
+    fn new(key: CowStr<'json>, hash: u64) -> Self {
         Key {
             key,
             hash,
@@ -80,8 +80,8 @@ impl<'json> Key<'json> {
 
 // // Implement `Sync` and `Send` for `Key` despite the use of raw pointers. The struct
 // // itself should be memory safe.
-// unsafe impl Sync for Key {}
-// unsafe impl Send for Key {}
+unsafe impl Sync for Key<'_> {}
+unsafe impl Send for Key<'_> {}
 
 #[derive(Clone)]
 struct Node<'json> {
@@ -118,7 +118,7 @@ impl<'json> PartialEq for Node<'json> {
 
 impl<'json> Node<'json> {
     #[inline]
-    fn new(value: JsonValue<'json>, key: Cow<'json, str>, hash: u64) -> Node<'json> {
+    fn new(value: JsonValue<'json>, key: CowStr<'json>, hash: u64) -> Node<'json> {
         Node {
             key: Key::new(key, hash),
             value: value,
@@ -161,7 +161,7 @@ impl<'json> Object<'json> {
     }
 
     #[inline]
-    fn add_node(&mut self, key: Cow<'json, str>, value: JsonValue<'json>, hash: u64) -> usize {
+    fn add_node(&mut self, key: CowStr<'json>, value: JsonValue<'json>, hash: u64) -> usize {
         let index = self.store.len();
 
         self.store.push(Node::new(value, key, hash));
@@ -176,12 +176,12 @@ impl<'json> Object<'json> {
     #[inline]
     pub fn insert<K>(&mut self, key: K, value: JsonValue<'json>)
     where
-        K: Into<Cow<'json, str>> + 'json,
+        K: Into<CowStr<'json>> + 'json,
     {
         self.insert_index(key.into(), value);
     }
 
-    pub(crate) fn insert_index(&mut self, key: Cow<'json, str>, value: JsonValue<'json>) -> usize {
+    pub(crate) fn insert_index(&mut self, key: CowStr<'json>, value: JsonValue<'json>) -> usize {
         let hash = hash_key(key.as_bytes());
 
         if self.store.len() == 0 {
@@ -390,7 +390,7 @@ impl<'json> Object<'json> {
 
 impl<'json, K, V> FromIterator<(K, V)> for Object<'json>
 where
-    K: Into<Cow<'json, str>> + 'json,
+    K: Into<CowStr<'json>> + 'json,
     V: Into<JsonValue<'json>>,
 {
     fn from_iter<I>(iter: I) -> Self
@@ -573,7 +573,7 @@ impl<'json> Index<&String> for Object<'json> {
 impl<'json> IndexMut<&str> for Object<'json> {
     fn index_mut(&mut self, index: &str) -> &mut JsonValue<'json> {
         if self.get(index).is_none() {
-            self.insert(index.to_owned(), JsonValue::Null);
+            self.insert(CowStr::from(index.to_owned()), JsonValue::Null);
         }
         self.get_mut(index).unwrap()
     }
@@ -582,7 +582,7 @@ impl<'json> IndexMut<&str> for Object<'json> {
 impl<'json> IndexMut<String> for Object<'json> {
     fn index_mut(&mut self, index: String) -> &mut JsonValue<'json> {
         if self.get(&index).is_none() {
-            self.insert(index.clone(), JsonValue::Null);
+            self.insert(CowStr::from(index.clone()), JsonValue::Null);
         }
         self.get_mut(&index).unwrap()
     }
@@ -591,7 +591,7 @@ impl<'json> IndexMut<String> for Object<'json> {
 impl<'json> IndexMut<&String> for Object<'json> {
     fn index_mut(&mut self, index: &String) -> &mut JsonValue<'json> {
         if self.get(index).is_none() {
-            self.insert(index.clone(), JsonValue::Null);
+            self.insert(CowStr::from(index.clone()), JsonValue::Null);
         }
         self.get_mut(index).unwrap()
     }

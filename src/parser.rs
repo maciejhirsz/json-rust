@@ -18,9 +18,10 @@
 // with MIR support the compiler will get smarter about this.
 
 use std::{str, slice};
-use std::borrow::Cow;
 use std::char::decode_utf16;
 use std::convert::TryFrom;
+use cowvec::CowStr;
+
 use crate::object::Object;
 use crate::number::Number;
 use crate::{JsonValue, Error, Result};
@@ -194,7 +195,7 @@ static ALLOWED: [bool; 256] = [
 // unnecessary buffering.
 macro_rules! expect_string {
     ($parser:ident) => ({
-        let result: Cow<str>;
+        let result: CowStr;
         let start = $parser.index;
 
         loop {
@@ -479,7 +480,7 @@ impl<'json> Parser<'json> {
     // is whole lot slower than parsing "foobar", as the former suffers from
     // having to be read from source to a buffer and then from a buffer to
     // our target string. Nothing to be done about this, really.
-    fn read_complex_string(&mut self, start: usize) -> Result<Cow<'static, str>> {
+    fn read_complex_string(&mut self, start: usize) -> Result<CowStr<'static>> {
         let mut ch = b'\\';
 
         // TODO: Use fastwrite here as well

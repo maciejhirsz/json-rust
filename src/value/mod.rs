@@ -1,8 +1,8 @@
 use std::ops::{Index, IndexMut, Deref};
 use std::convert::TryInto;
-use std::borrow::Cow;
 use std::{fmt, mem, usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32};
 use std::io::{self, Write};
+use cowvec::CowStr;
 
 use crate::{Result, Error};
 use crate::short::Short;
@@ -39,12 +39,15 @@ macro_rules! number_to_signed {
 pub enum JsonValue<'json> {
     Null,
     Short(Short),
-    String(Cow<'json, str>),
+    String(CowStr<'json>),
     Number(Number),
     Boolean(bool),
     Object(Object<'json>),
     Array(Vec<JsonValue<'json>>),
 }
+
+unsafe impl Sync for JsonValue<'_> {}
+unsafe impl Send for JsonValue<'_> {}
 
 impl<'json> PartialEq for JsonValue<'json> {
     fn eq(&self, other: &Self) -> bool {
@@ -55,7 +58,7 @@ impl<'json> PartialEq for JsonValue<'json> {
             (&Short(ref a), &Short(ref b)) => a == b,
             (&String(ref a), &String(ref b)) => a == b,
             (&Short(ref a), &String(ref b))
-            | (&String(ref b), &Short(ref a)) => a.as_str() == b,
+            | (&String(ref b), &Short(ref a)) => a.as_str() == b.as_ref(),
             (&Number(ref a), &Number(ref b)) => a == b,
             (&Boolean(ref a), &Boolean(ref b)) => a == b,
             (&Object(ref a), &Object(ref b)) => a == b,
@@ -491,7 +494,7 @@ impl<'json> JsonValue<'json> {
     /// if needed for better performance.
     pub fn insert<K, V>(&mut self, key: K, value: V) -> Result<()>
     where
-        K: Into<Cow<'json, str>> + 'json,
+        K: Into<CowStr<'json>> + 'json,
         V: Into<JsonValue<'json>>,
     {
         match *self {
