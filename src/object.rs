@@ -1,12 +1,12 @@
-use std::{ ptr, mem, str, slice, fmt };
-use std::ops::{ Index, IndexMut, Deref };
+use std::{mem, str, slice, fmt};
+use std::ops::{Index, IndexMut, Deref};
 use std::iter::FromIterator;
+use std::cell::Cell;
 use cowvec::CowStr;
 
 use crate::codegen::{ DumpGenerator, Generator, PrettyGenerator };
 use crate::value::JsonValue;
 
-const KEY_BUF_LEN: usize = 32;
 const NULL: JsonValue<'static> = JsonValue::Null;
 
 // FNV-1a implementation
@@ -64,17 +64,17 @@ struct Node<'json> {
     // Store vector index pointing to the `Node` for which `key_hash` is smaller
     // than that of this `Node`.
     // Will default to 0 as root node can't be referenced anywhere else.
-    pub left: usize,
+    pub left: Cell<usize>,
 
     // Same as above but for `Node`s with hash larger than this one. If the
     // hash is the same, but keys are different, the lookup will default
     // to the right branch as well.
-    pub right: usize,
+    pub right: Cell<usize>,
 }
 
 impl fmt::Debug for Node<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(&(self.key.deref(), &self.value, self.left, self.right), f)
+        fmt::Debug::fmt(&(self.key.deref(), &self.value, self.left.get(), self.right.get()), f)
     }
 }
 
@@ -93,11 +93,14 @@ impl<'json> Node<'json> {
             key,
             hash,
             value,
-            left: 0,
-            right: 0,
+            left: Cell::new(0),
+            right: Cell::new(0),
         }
     }
 }
+
+// `Cell` isn't `Sync`, but all of our use is self-contained so this is safe
+unsafe impl Sync for Node<'_> {}
 
 /// A binary tree implementation of a string -> `JsonValue` map. You normally don't
 /// have to interact with instances of `Object`, much more likely you will be
@@ -105,6 +108,11 @@ impl<'json> Node<'json> {
 #[derive(Debug, Clone)]
 pub struct Object<'json> {
     store: Vec<Node<'json>>
+}
+
+enum FindResult<'find> {
+    Hit(usize),
+    Miss(Option<&'find Cell<usize>>),
 }
 
 impl<'json> Object<'json> {
@@ -126,20 +134,6 @@ impl<'json> Object<'json> {
         }
     }
 
-    #[inline]
-    fn node_at_index_mut(&mut self, index: usize) -> *mut Node<'json> {
-        unsafe { self.store.as_mut_ptr().offset(index as isize) }
-    }
-
-    #[inline]
-    fn add_node(&mut self, key: CowStr<'json>, value: JsonValue<'json>, hash: u64) -> usize {
-        let index = self.store.len();
-
-        self.store.push(Node::new(value, key, hash));
-
-        index
-    }
-
     /// Insert a new entry, or override an existing one. Note that `key` has
     /// to be a `&str` slice and not an owned `String`. The internals of
     /// `Object` will handle the heap allocation of the key if needed for
@@ -152,43 +146,51 @@ impl<'json> Object<'json> {
         self.insert_index(key.into(), value);
     }
 
+    #[inline]
+    fn find(&self, bytes: &[u8], hash: u64) -> FindResult {
+        let mut idx = 0;
+
+        while let Some(node) = self.store.get(idx) {
+            if hash == node.hash && bytes == node.key.as_bytes() {
+                return FindResult::Hit(idx);
+            } else if hash < node.hash {
+                if node.left.get() == 0 {
+                    return FindResult::Miss(Some(&node.left));
+                }
+
+                idx = node.left.get();
+            } else {
+                if node.right.get() == 0 {
+                    return FindResult::Miss(Some(&node.right));
+                }
+
+                idx = node.right.get();
+            }
+        }
+
+        FindResult::Miss(None)
+    }
+
     pub(crate) fn insert_index(&mut self, key: CowStr<'json>, value: JsonValue<'json>) -> usize {
         let bytes = key.as_bytes();
         let hash = hash_key(bytes);
 
-        if self.store.len() == 0 {
-            self.store.push(Node::new(value, key, hash));
-            return 0;
-        }
+        match self.find(bytes, hash) {
+            FindResult::Hit(idx) => {
+                self.store[idx].value = value;
+                idx
+            },
+            FindResult::Miss(parent) => {
+                let idx = self.store.len();
 
-        let mut node = unsafe { &mut *self.node_at_index_mut(0) };
-        let mut parent = 0;
-
-        loop {
-            if hash == node.hash && bytes == node.key.as_bytes() {
-                node.value = value;
-                return parent;
-            } else if hash < node.hash {
-                if node.left != 0 {
-                    parent = node.left;
-                    node = unsafe { &mut *self.node_at_index_mut(node.left) };
-                    continue;
+                if let Some(parent) = parent {
+                    parent.set(idx);
                 }
-                let index = self.add_node(key, value, hash);
-                self.store[parent].left = index;
 
-                return index;
-            } else {
-                if node.right != 0 {
-                    parent = node.right;
-                    node = unsafe { &mut *self.node_at_index_mut(node.right) };
-                    continue;
-                }
-                let index = self.add_node(key, value, hash);
-                self.store[parent].right = index;
+                self.store.push(Node::new(value, key, hash));
 
-                return index;
-            }
+                idx
+            },
         }
     }
 
@@ -198,101 +200,34 @@ impl<'json> Object<'json> {
     }
 
     pub fn get(&self, key: &str) -> Option<&JsonValue<'json>> {
-        if self.store.len() == 0 {
-            return None;
-        }
+        let bytes = key.as_bytes();
+        let hash = hash_key(bytes);
 
-        let key = key.as_bytes();
-        let hash = hash_key(key);
-
-        let mut node = unsafe { self.store.get_unchecked(0) };
-
-        loop {
-            if hash == node.hash && key == node.key.as_bytes() {
-                return Some(&node.value);
-            } else if hash < node.hash {
-                if node.left == 0 {
-                    return None;
-                }
-                node = unsafe { self.store.get_unchecked(node.left) };
-            } else {
-                if node.right == 0 {
-                    return None;
-                }
-                node = unsafe { self.store.get_unchecked(node.right) };
-            }
+        match self.find(bytes, hash) {
+            FindResult::Hit(idx) => Some(&self.store[idx].value),
+            FindResult::Miss(_) => None,
         }
     }
 
     pub fn get_mut(&mut self, key: &str) -> Option<&mut JsonValue<'json>> {
-        if self.store.len() == 0 {
-            return None;
+        let bytes = key.as_bytes();
+        let hash = hash_key(bytes);
+
+        match self.find(bytes, hash) {
+            FindResult::Hit(idx) => Some(&mut self.store[idx].value),
+            FindResult::Miss(_) => None,
         }
-
-        let key = key.as_bytes();
-        let hash = hash_key(key);
-
-        let mut index = 0;
-        {
-            let mut node = unsafe { self.store.get_unchecked(0) };
-
-            loop {
-                if hash == node.hash && key == node.key.as_bytes() {
-                    break;
-                } else if hash < node.hash {
-                    if node.left == 0 {
-                        return None;
-                    }
-                    index = node.left;
-                    node = unsafe { self.store.get_unchecked(node.left) };
-                } else {
-                    if node.right == 0 {
-                        return None;
-                    }
-                    index = node.right;
-                    node = unsafe { self.store.get_unchecked(node.right) };
-                }
-            }
-        }
-
-        let node = unsafe { self.store.get_unchecked_mut(index) };
-
-        Some(&mut node.value)
     }
 
     /// Attempts to remove the value behind `key`, if successful
     /// will return the `JsonValue` stored behind the `key`.
     pub fn remove(&mut self, key: &str) -> Option<JsonValue<'json>> {
-        if self.store.len() == 0 {
-            return None;
-        }
-
-        let key = key.as_bytes();
-        let hash = hash_key(key);
-        let mut index = 0;
-
-        {
-            let mut node = unsafe { self.store.get_unchecked(0) };
-
-            // Try to find the node
-            loop {
-                if hash == node.hash && key == node.key.as_bytes() {
-                    break;
-                } else if hash < node.hash {
-                    if node.left == 0 {
-                        return None;
-                    }
-                    index = node.left;
-                    node = unsafe { self.store.get_unchecked(node.left) };
-                } else {
-                    if node.right == 0 {
-                        return None;
-                    }
-                    index = node.right;
-                    node = unsafe { self.store.get_unchecked(node.right) };
-                }
-            }
-        }
+        let bytes = key.as_bytes();
+        let hash = hash_key(bytes);
+        let index = match self.find(bytes, hash) {
+            FindResult::Hit(idx) => idx,
+            FindResult::Miss(_) => return None,
+        };
 
         // Removing a node would screw the tree badly, it's easier to just
         // recreate it. This is a very costly operation, but removing nodes

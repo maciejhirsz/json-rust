@@ -51,7 +51,7 @@ impl Generator for CustomGenerator {
         if let Some((key, value)) = iter.next() {
             self.indent();
             self.new_line()?;
-            self.write_string(key)?;
+            self.write_string(key.as_bytes())?;
             self.write_min(b": ", b':')?;
             self.write_json(value)?;
         } else {
@@ -62,7 +62,7 @@ impl Generator for CustomGenerator {
         for (key, value) in iter {
             self.write_char(b',')?;
             self.new_line()?;
-            self.write_string(key)?;
+            self.write_string(key.as_bytes())?;
             self.write_min(b": ", b':')?;
             self.write_json(value)?;
         }
