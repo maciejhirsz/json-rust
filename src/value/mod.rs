@@ -480,7 +480,7 @@ impl<'json> JsonValue<'json> {
     {
         match *self {
             JsonValue::Object(ref mut object) => {
-                object.insert(key, value.into());
+                object.insert(key.into(), value.into());
                 Ok(())
             },
             _ => Err(Error::wrong_type("Object"))

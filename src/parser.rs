@@ -51,9 +51,6 @@ struct Parser<'json> {
 
     // Current index
     index: usize,
-
-    // Length of the source
-    length: usize,
 }
 
 
@@ -367,14 +364,13 @@ impl<'json> Parser<'json> {
             source,
             byte_ptr: source.as_ptr(),
             index: 0,
-            length: source.len(),
         }
     }
 
     // Check if we are at the end of the source.
     #[inline]
     fn is_eof(&mut self) -> bool {
-        self.index == self.length
+        self.index == self.source.len()
     }
 
     // Read a byte from the source. Note that this does not increment
@@ -385,14 +381,14 @@ impl<'json> Parser<'json> {
     // is virtually irrelevant.
     #[inline]
     fn read_byte(&mut self) -> u8 {
-        debug_assert!(self.index < self.length, "Reading out of bounds");
+        debug_assert!(self.index < self.source.len(), "Reading out of bounds");
 
         unsafe { *self.byte_ptr.offset(self.index as isize) }
     }
 
     #[inline]
     fn read_bytes<T: Copy>(&mut self) -> Option<&T> {
-        if self.index + std::mem::size_of::<T>() > self.length {
+        if self.index + std::mem::size_of::<T>() > self.source.len() {
             None
         } else {
             Some(unsafe { &*(self.byte_ptr.offset(self.index as isize) as *const T) })
@@ -648,7 +644,7 @@ impl<'json> Parser<'json> {
                             return Err(Error::ExceededDepthLimit);
                         }
 
-                        stack.push(StackBlock(JsonValue::Array(Vec::with_capacity(2)), 0));
+                        stack.push(StackBlock(JsonValue::Array(Vec::with_capacity(2)), None));
                         continue 'parsing;
                     }
 
@@ -662,16 +658,16 @@ impl<'json> Parser<'json> {
                             return Err(Error::ExceededDepthLimit);
                         }
 
-                        let mut object = Object::with_capacity(4);
-
                         if ch != b'"' {
                             return self.unexpected_character()
                         }
 
-                        let index = object.insert_index(expect_string!(self), JsonValue::Null);
-                        expect!(self, b':');
+                        let object = Object::with_capacity(4);
+                        let key = expect_string!(self);
 
-                        stack.push(StackBlock(JsonValue::Object(object), index));
+                        stack.push(StackBlock(JsonValue::Object(object), Some(key)));
+
+                        expect!(self, b':');
 
                         ch = expect_byte_ignore_whitespace!(self);
 
@@ -732,15 +728,17 @@ impl<'json> Parser<'json> {
                         }
                     },
 
-                    Some(&mut StackBlock(JsonValue::Object(ref mut object), ref mut index )) => {
-                        object.override_at(*index, value);
+                    Some(&mut StackBlock(JsonValue::Object(ref mut object), ref mut key )) => {
+                        if let Some(key) = key.take() {
+                            object.insert(key, value);
+                        }
 
                         ch = expect_byte_ignore_whitespace!(self);
 
                         match ch {
                             b',' => {
                                 expect!(self, b'"');
-                                *index = object.insert_index(expect_string!(self), JsonValue::Null);
+                                *key = Some(expect_string!(self));
                                 expect!(self, b':');
 
                                 ch = expect_byte_ignore_whitespace!(self);
@@ -764,7 +762,7 @@ impl<'json> Parser<'json> {
     }
 }
 
-struct StackBlock<'json>(JsonValue<'json>, usize);
+struct StackBlock<'json>(JsonValue<'json>, Option<Cow<'json, str>>);
 
 // All that hard work, and in the end it's just a single function in the API.
 #[inline]

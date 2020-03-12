@@ -52,15 +52,15 @@ fn hash_key(key: &[u8]) -> u64 {
 }
 
 #[derive(Clone)]
-struct Node<'json> {
+struct Node<K, V> {
     // Key
-    pub key: Cow<'json, str>,
+    pub key: K,
 
     // Hash of the key
     pub hash: u64,
 
     // Value stored.
-    pub value: JsonValue<'json>,
+    pub value: V,
 
     // Store vector index pointing to the `Node` for which `hash` is smaller
     // than that of this `Node`.
@@ -72,23 +72,31 @@ struct Node<'json> {
     pub right: Cell<Option<NonZeroU32>>,
 }
 
-impl fmt::Debug for Node<'_> {
+impl<K, V> fmt::Debug for Node<K, V>
+where
+    K: fmt::Debug,
+    V: fmt::Debug,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(&(self.key.deref(), &self.value, self.left.get(), self.right.get()), f)
+        fmt::Debug::fmt(&(&self.key, &self.value, self.left.get(), self.right.get()), f)
     }
 }
 
-impl<'json> PartialEq for Node<'json> {
-    fn eq(&self, other: &Node<'json>) -> bool {
-        self.hash           == other.hash           &&
-        self.key.as_bytes() == other.key.as_bytes() &&
-        self.value          == other.value
+impl<K, V> PartialEq for Node<K, V>
+where
+    K: PartialEq,
+    V: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.hash == other.hash &&
+        self.key == other.key &&
+        self.value == other.value
     }
 }
 
-impl<'json> Node<'json> {
+impl<K, V> Node<K, V> {
     #[inline]
-    fn new(value: JsonValue<'json>, key: Cow<'json, str>, hash: u64) -> Node<'json> {
+    const fn new(key: K, value: V, hash: u64) -> Self {
         Node {
             key,
             hash,
@@ -101,14 +109,14 @@ impl<'json> Node<'json> {
 
 // `Cell` isn't `Sync`, but all of our writes are contained and require
 // `&mut` access, ergo this is safe.
-unsafe impl Sync for Node<'_> {}
+unsafe impl<K: Sync, V: Sync> Sync for Node<K, V> {}
 
 /// A binary tree implementation of a string -> `JsonValue` map. You normally don't
 /// have to interact with instances of `Object`, much more likely you will be
 /// using the `JsonValue::Object` variant, which wraps around this struct.
 #[derive(Debug, Clone)]
 pub struct Object<'json> {
-    store: Vec<Node<'json>>
+    store: Vec<Node<Cow<'json, str>, JsonValue<'json>>>
 }
 
 enum FindResult<'find> {
@@ -135,16 +143,27 @@ impl<'json> Object<'json> {
         }
     }
 
-    /// Insert a new entry, or override an existing one. Note that `key` has
-    /// to be a `&str` slice and not an owned `String`. The internals of
-    /// `Object` will handle the heap allocation of the key if needed for
-    /// better performance.
-    #[inline]
+    /// Insert a new entry, or override an existing one.
     pub fn insert<K>(&mut self, key: K, value: JsonValue<'json>)
     where
-        K: Into<Cow<'json, str>> + 'json,
+        K: Into<Cow<'json, str>>,
     {
-        self.insert_index(key.into(), value);
+        let key = key.into();
+        let bytes = key.as_bytes();
+        let hash = hash_key(bytes);
+
+        match self.find(bytes, hash) {
+            FindResult::Hit(idx) => {
+                self.store[idx].value = value;
+            },
+            FindResult::Miss(parent) => {
+                if let Some(parent) = parent {
+                    parent.set(NonZeroU32::new(self.store.len() as u32));
+                }
+
+                self.store.push(Node::new(key, value, hash));
+            },
+        }
     }
 
     #[inline]
@@ -168,34 +187,6 @@ impl<'json> Object<'json> {
         }
 
         FindResult::Miss(None)
-    }
-
-    pub(crate) fn insert_index(&mut self, key: Cow<'json, str>, value: JsonValue<'json>) -> usize {
-        let bytes = key.as_bytes();
-        let hash = hash_key(bytes);
-
-        match self.find(bytes, hash) {
-            FindResult::Hit(idx) => {
-                self.store[idx].value = value;
-                idx
-            },
-            FindResult::Miss(parent) => {
-                let idx = self.store.len();
-
-                if let Some(parent) = parent {
-                    parent.set(NonZeroU32::new(idx as u32));
-                }
-
-                self.store.push(Node::new(value, key, hash));
-
-                idx
-            },
-        }
-    }
-
-    #[inline]
-    pub(crate) fn override_at(&mut self, index: usize, value: JsonValue<'json>) {
-        self.store[index].value = value;
     }
 
     pub fn get(&self, key: &str) -> Option<&JsonValue<'json>> {
@@ -335,7 +326,7 @@ impl<'json> PartialEq for Object<'json> {
 }
 
 pub struct Iter<'a> {
-    inner: slice::Iter<'a, Node<'a>>
+    inner: slice::Iter<'a, Node<Cow<'a, str>, JsonValue<'a>>>
 }
 
 impl<'a> Iter<'a> {
@@ -370,7 +361,7 @@ impl<'a> ExactSizeIterator for Iter<'a> {
 }
 
 pub struct IterMut<'a> {
-    inner: slice::IterMut<'a, Node<'a>>
+    inner: slice::IterMut<'a, Node<Cow<'a, str>, JsonValue<'a>>>,
 }
 
 impl<'a> IterMut<'a> {
