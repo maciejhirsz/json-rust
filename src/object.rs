@@ -1,5 +1,6 @@
 use std::{mem, str, slice, fmt};
 use std::ops::{Index, IndexMut, Deref};
+use std::num::NonZeroU32;
 use std::iter::FromIterator;
 use std::cell::Cell;
 use cowvec::CowStr;
@@ -61,15 +62,14 @@ struct Node<'json> {
     // Value stored.
     pub value: JsonValue<'json>,
 
-    // Store vector index pointing to the `Node` for which `key_hash` is smaller
+    // Store vector index pointing to the `Node` for which `hash` is smaller
     // than that of this `Node`.
-    // Will default to 0 as root node can't be referenced anywhere else.
-    pub left: Cell<usize>,
+    pub left: Cell<Option<NonZeroU32>>,
 
     // Same as above but for `Node`s with hash larger than this one. If the
     // hash is the same, but keys are different, the lookup will default
     // to the right branch as well.
-    pub right: Cell<usize>,
+    pub right: Cell<Option<NonZeroU32>>,
 }
 
 impl fmt::Debug for Node<'_> {
@@ -93,13 +93,14 @@ impl<'json> Node<'json> {
             key,
             hash,
             value,
-            left: Cell::new(0),
-            right: Cell::new(0),
+            left: Cell::new(None),
+            right: Cell::new(None),
         }
     }
 }
 
-// `Cell` isn't `Sync`, but all of our use is self-contained so this is safe
+// `Cell` isn't `Sync`, but all of our writes are contained and require
+// `&mut` access, ergo this is safe.
 unsafe impl Sync for Node<'_> {}
 
 /// A binary tree implementation of a string -> `JsonValue` map. You normally don't
@@ -112,7 +113,7 @@ pub struct Object<'json> {
 
 enum FindResult<'find> {
     Hit(usize),
-    Miss(Option<&'find Cell<usize>>),
+    Miss(Option<&'find Cell<Option<NonZeroU32>>>),
 }
 
 impl<'json> Object<'json> {
@@ -154,17 +155,15 @@ impl<'json> Object<'json> {
             if hash == node.hash && bytes == node.key.as_bytes() {
                 return FindResult::Hit(idx);
             } else if hash < node.hash {
-                if node.left.get() == 0 {
-                    return FindResult::Miss(Some(&node.left));
+                match node.left.get() {
+                    Some(i) => idx = i.get() as usize,
+                    None => return FindResult::Miss(Some(&node.left)),
                 }
-
-                idx = node.left.get();
             } else {
-                if node.right.get() == 0 {
-                    return FindResult::Miss(Some(&node.right));
+                match node.right.get() {
+                    Some(i) => idx = i.get() as usize,
+                    None => return FindResult::Miss(Some(&node.right)),
                 }
-
-                idx = node.right.get();
             }
         }
 
@@ -184,7 +183,7 @@ impl<'json> Object<'json> {
                 let idx = self.store.len();
 
                 if let Some(parent) = parent {
-                    parent.set(idx);
+                    parent.set(NonZeroU32::new(idx as u32));
                 }
 
                 self.store.push(Node::new(value, key, hash));

@@ -17,7 +17,7 @@
 // This makes for some ugly code, but it is faster. Hopefully in the future
 // with MIR support the compiler will get smarter about this.
 
-use std::{str, slice};
+use std::str;
 use std::char::decode_utf16;
 use std::convert::TryFrom;
 use cowvec::CowStr;
@@ -81,42 +81,26 @@ macro_rules! expect_byte {
 //
 // Anything else is an error.
 macro_rules! expect_sequence {
-    ($parser:ident, $( $ch:pat ),*) => {
-        $(
-            match expect_byte!($parser) {
-                $ch => {},
-                _   => return $parser.unexpected_character(),
-            }
-        )*
-    }
+    ($parser:ident, $bytes:literal) => ({
+        if $parser.read_bytes() == Some($bytes) {
+            $parser.index += $bytes.len()
+        } else {
+            return $parser.unexpected_bytes(*$bytes);
+        }
+    })
 }
-
 
 // A drop in macro for when we expect to read a byte, but we don't care
 // about any whitespace characters that might occur before it.
 macro_rules! expect_byte_ignore_whitespace {
-    ($parser:ident) => ({
-        let mut ch = expect_byte!($parser);
-
-        // Don't go straight for the loop, assume we are in the clear first.
-        match ch {
-            // whitespace
-            9 ..= 13 | 32 => {
-                loop {
-                    match expect_byte!($parser) {
-                        9 ..= 13 | 32 => {},
-                        next          => {
-                            ch = next;
-                            break;
-                        }
-                    }
-                }
-            },
-            _ => {}
+    ($parser:ident) => {
+        loop {
+            match expect_byte!($parser) {
+                9 ..= 13 | 32 => {},
+                next          => break next,
+            }
         }
-
-        ch
-    })
+    }
 }
 
 // Expect to find EOF or just whitespaces leading to EOF after a JSON value
@@ -199,6 +183,20 @@ macro_rules! expect_string {
         let start = $parser.index;
 
         loop {
+            // Lookahead if next 4 bytes are allowed with minimal branching,
+            // saving some nanos here since we don't have to do bounds checks
+            // every byte.
+            if let Some(bytes) = $parser.read_bytes::<[u8; 4]>() {
+                if ALLOWED[bytes[0] as usize] &
+                    ALLOWED[bytes[1] as usize] &
+                    ALLOWED[bytes[2] as usize] &
+                    ALLOWED[bytes[3] as usize]
+                {
+                    $parser.index += 4;
+                    continue;
+                }
+            }
+
             let ch = expect_byte!($parser);
             if ALLOWED[ch as usize] {
                 continue;
@@ -374,7 +372,7 @@ impl<'json> Parser<'json> {
     }
 
     // Check if we are at the end of the source.
-    #[inline(always)]
+    #[inline]
     fn is_eof(&mut self) -> bool {
         self.index == self.length
     }
@@ -385,23 +383,54 @@ impl<'json> Parser<'json> {
     // very very rarely, lead to a situation where the same byte is read
     // twice, but since this operation is using a raw pointer, the cost
     // is virtually irrelevant.
-    #[inline(always)]
+    #[inline]
     fn read_byte(&mut self) -> u8 {
         debug_assert!(self.index < self.length, "Reading out of bounds");
 
         unsafe { *self.byte_ptr.offset(self.index as isize) }
     }
 
+    #[inline]
+    fn read_bytes<T: Copy>(&mut self) -> Option<&T> {
+        if self.index + std::mem::size_of::<T>() > self.length {
+            None
+        } else {
+            Some(unsafe { &*(self.byte_ptr.offset(self.index as isize) as *const T) })
+        }
+    }
+
     // Manually increment the index. Calling `read_byte` and then `bump`
     // is equivalent to consuming a byte on an iterator.
-    #[inline(always)]
+    #[inline]
     fn bump(&mut self) {
         self.index = self.index.wrapping_add(1);
     }
 
+    #[inline(never)]
+    fn unexpected_bytes<T, B: AsRef<[u8]> + Copy>(&mut self, expected: B) -> Result<T> {
+        let got = match self.read_bytes::<B>() {
+            Some(got) => got,
+            None => return Err(Error::UnexpectedEndOfJson),
+        };
+
+        let mut bump = 1;
+
+        for (a, b) in expected.as_ref().iter().zip(got.as_ref()) {
+            if a != b {
+                break;
+            }
+
+            bump += 1;
+        }
+
+        self.index += bump;
+        self.unexpected_character()
+    }
+
     // So we got an unexpected character, now what? Well, figure out where
     // it is, and throw an error!
-    fn unexpected_character<T: Sized>(&mut self) -> Result<T> {
+    #[inline(never)]
+    fn unexpected_character<T>(&mut self) -> Result<T> {
         let at = self.index - 1;
 
         let ch = self.source[at..]
@@ -456,7 +485,7 @@ impl<'json> Parser<'json> {
             Ok(code) => code,
             // Handle surrogate pairs
             Err(_) => {
-                expect_sequence!(self, b'\\', b'u');
+                expect_sequence!(self, b"\\u");
 
                 match decode_utf16(
                     [codepoint, self.read_hexdec_codepoint()?].iter().copied()
@@ -606,7 +635,7 @@ impl<'json> Parser<'json> {
 
     // Parse away!
     fn parse(&mut self) -> Result<JsonValue<'json>> {
-        let mut stack = Vec::with_capacity(3);
+        let mut stack = Vec::with_capacity(4);
         let mut ch = expect_byte_ignore_whitespace!(self);
 
         'parsing: loop {
@@ -633,7 +662,7 @@ impl<'json> Parser<'json> {
                             return Err(Error::ExceededDepthLimit);
                         }
 
-                        let mut object = Object::with_capacity(3);
+                        let mut object = Object::with_capacity(4);
 
                         if ch != b'"' {
                             return self.unexpected_character()
@@ -665,15 +694,15 @@ impl<'json> Parser<'json> {
                     })
                 }
                 b't' => {
-                    expect_sequence!(self, b'r', b'u', b'e');
+                    expect_sequence!(self, b"rue");
                     JsonValue::Boolean(true)
                 },
                 b'f' => {
-                    expect_sequence!(self, b'a', b'l', b's', b'e');
+                    expect_sequence!(self, b"alse");
                     JsonValue::Boolean(false)
                 },
                 b'n' => {
-                    expect_sequence!(self, b'u', b'l', b'l');
+                    expect_sequence!(self, b"ull");
                     JsonValue::Null
                 },
                 _    => return self.unexpected_character()
