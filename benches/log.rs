@@ -14,10 +14,10 @@ extern crate test;
 // extern crate rustc_serialize;
 // extern crate num_traits;
 
-#[macro_use]
+// #[macro_use]
 // mod macros;
 
-use test::Bencher;
+use test::{Bencher, black_box};
 
 // #[derive(Debug, PartialEq, RustcEncodable, RustcDecodable, Serialize, Deserialize)]
 // struct Http {
@@ -266,7 +266,7 @@ fn json_rust_stringify_io_write(b: &mut Bencher) {
     let mut target = Vec::new();
 
     b.iter(|| {
-        data.to_writer(&mut target);
+        black_box(data.write(&mut target).ok());
     })
 }
 
@@ -290,6 +290,6 @@ fn json_rust_stringify_floats_io_write(b: &mut Bencher) {
     let mut target = Vec::new();
 
     b.iter(|| {
-        data.to_writer(&mut target);
+        black_box(data.write(&mut target).ok());
     })
 }

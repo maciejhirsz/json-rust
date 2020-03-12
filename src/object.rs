@@ -3,7 +3,7 @@ use std::ops::{Index, IndexMut, Deref};
 use std::num::NonZeroU32;
 use std::iter::FromIterator;
 use std::cell::Cell;
-use cowvec::CowStr;
+use beef::Cow;
 
 use crate::codegen::{ DumpGenerator, Generator, PrettyGenerator };
 use crate::value::JsonValue;
@@ -54,7 +54,7 @@ fn hash_key(key: &[u8]) -> u64 {
 #[derive(Clone)]
 struct Node<'json> {
     // Key
-    pub key: CowStr<'json>,
+    pub key: Cow<'json, str>,
 
     // Hash of the key
     pub hash: u64,
@@ -88,7 +88,7 @@ impl<'json> PartialEq for Node<'json> {
 
 impl<'json> Node<'json> {
     #[inline]
-    fn new(value: JsonValue<'json>, key: CowStr<'json>, hash: u64) -> Node<'json> {
+    fn new(value: JsonValue<'json>, key: Cow<'json, str>, hash: u64) -> Node<'json> {
         Node {
             key,
             hash,
@@ -142,7 +142,7 @@ impl<'json> Object<'json> {
     #[inline]
     pub fn insert<K>(&mut self, key: K, value: JsonValue<'json>)
     where
-        K: Into<CowStr<'json>> + 'json,
+        K: Into<Cow<'json, str>> + 'json,
     {
         self.insert_index(key.into(), value);
     }
@@ -170,7 +170,7 @@ impl<'json> Object<'json> {
         FindResult::Miss(None)
     }
 
-    pub(crate) fn insert_index(&mut self, key: CowStr<'json>, value: JsonValue<'json>) -> usize {
+    pub(crate) fn insert_index(&mut self, key: Cow<'json, str>, value: JsonValue<'json>) -> usize {
         let bytes = key.as_bytes();
         let hash = hash_key(bytes);
 
@@ -296,7 +296,7 @@ impl<'json> Object<'json> {
 
 impl<'json, K, V> FromIterator<(K, V)> for Object<'json>
 where
-    K: Into<CowStr<'json>> + 'json,
+    K: Into<Cow<'json, str>> + 'json,
     V: Into<JsonValue<'json>>,
 {
     fn from_iter<I>(iter: I) -> Self
@@ -479,7 +479,7 @@ impl<'json> Index<&String> for Object<'json> {
 impl<'json> IndexMut<&str> for Object<'json> {
     fn index_mut(&mut self, index: &str) -> &mut JsonValue<'json> {
         if self.get(index).is_none() {
-            self.insert(CowStr::from(index.to_owned()), JsonValue::Null);
+            self.insert(Cow::owned(index.to_owned()), JsonValue::Null);
         }
         self.get_mut(index).unwrap()
     }
@@ -488,7 +488,7 @@ impl<'json> IndexMut<&str> for Object<'json> {
 impl<'json> IndexMut<String> for Object<'json> {
     fn index_mut(&mut self, index: String) -> &mut JsonValue<'json> {
         if self.get(&index).is_none() {
-            self.insert(CowStr::from(index.clone()), JsonValue::Null);
+            self.insert(Cow::owned(index.clone()), JsonValue::Null);
         }
         self.get_mut(&index).unwrap()
     }
@@ -497,7 +497,7 @@ impl<'json> IndexMut<String> for Object<'json> {
 impl<'json> IndexMut<&String> for Object<'json> {
     fn index_mut(&mut self, index: &String) -> &mut JsonValue<'json> {
         if self.get(index).is_none() {
-            self.insert(CowStr::from(index.clone()), JsonValue::Null);
+            self.insert(Cow::owned(index.clone()), JsonValue::Null);
         }
         self.get_mut(index).unwrap()
     }

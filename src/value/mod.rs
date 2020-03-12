@@ -2,7 +2,7 @@ use std::ops::{Index, IndexMut};
 use std::convert::TryInto;
 use std::{fmt, mem, usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32};
 use std::io::{self, Write};
-use cowvec::CowStr;
+use beef::Cow;
 
 use crate::{Result, Error};
 use crate::number::Number;
@@ -37,7 +37,7 @@ macro_rules! number_to_signed {
 #[derive(Debug, Clone)]
 pub enum JsonValue<'json> {
     Null,
-    String(CowStr<'json>),
+    String(Cow<'json, str>),
     Number(Number),
     Boolean(bool),
     Object(Object<'json>),
@@ -475,7 +475,7 @@ impl<'json> JsonValue<'json> {
     /// if needed for better performance.
     pub fn insert<K, V>(&mut self, key: K, value: V) -> Result<()>
     where
-        K: Into<CowStr<'json>> + 'json,
+        K: Into<Cow<'json, str>> + 'json,
         V: Into<JsonValue<'json>>,
     {
         match *self {

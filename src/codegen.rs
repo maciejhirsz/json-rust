@@ -66,7 +66,9 @@ pub trait Generator {
     fn dedent(&mut self) {}
 
     #[inline(never)]
-    fn write_string_complex(&mut self, string: &[u8], mut start: usize) -> io::Result<()> {
+    fn write_string_complex(&mut self, string: &str, mut start: usize) -> io::Result<()> {
+        let string = string.as_bytes();
+
         self.write(&string[ .. start])?;
 
         for (index, &ch) in string.iter().enumerate().skip(start) {
@@ -86,16 +88,32 @@ pub trait Generator {
     }
 
     #[inline(always)]
-    fn write_string(&mut self, string: &[u8]) -> io::Result<()> {
+    fn write_string(&mut self, string: &str) -> io::Result<()> {
         self.write_char(b'"')?;
 
-        for (index, &ch) in string.iter().enumerate() {
+        let mut idx = 0;
+
+        while idx + 4 < string.len() {
+            let slice = unsafe { &*(string.as_ptr().offset(idx as isize) as *const [u8; 4]) };
+
+            if ESCAPED[slice[0] as usize] |
+                ESCAPED[slice[1] as usize] |
+                ESCAPED[slice[2] as usize] |
+                ESCAPED[slice[3] as usize] != 0
+            {
+                break;
+            }
+
+            idx += 4;
+        }
+
+        for (tail, ch) in string[idx..].bytes().enumerate() {
             if ESCAPED[ch as usize] > 0 {
-                return self.write_string_complex(string, index)
+                return self.write_string_complex(string, tail + idx)
             }
         }
 
-        self.write(string)?;
+        self.write(string.as_bytes())?;
         self.write_char(b'"')
     }
 
@@ -123,7 +141,7 @@ pub trait Generator {
         if let Some((key, value)) = iter.next() {
             self.indent();
             self.new_line()?;
-            self.write_string(key.as_bytes())?;
+            self.write_string(key)?;
             self.write_min(b": ", b':')?;
             self.write_json(value)?;
         } else {
@@ -134,7 +152,7 @@ pub trait Generator {
         for (key, value) in iter {
             self.write_char(b',')?;
             self.new_line()?;
-            self.write_string(key.as_bytes())?;
+            self.write_string(key)?;
             self.write_min(b": ", b':')?;
             self.write_json(value)?;
         }
@@ -147,7 +165,7 @@ pub trait Generator {
     fn write_json(&mut self, json: &JsonValue) -> io::Result<()> {
         match *json {
             JsonValue::Null               => self.write(b"null"),
-            JsonValue::String(ref string) => self.write_string(string.as_bytes()),
+            JsonValue::String(ref string) => self.write_string(string),
             JsonValue::Number(ref number) => self.write_number(number),
             JsonValue::Boolean(true)      => self.write(b"true"),
             JsonValue::Boolean(false)     => self.write(b"false"),
@@ -399,7 +417,7 @@ mod tests {
         };
 
         let mut generator = DumpGenerator::new();
-        generator.write_string(s.as_bytes()).unwrap();
+        generator.write_string(&s).unwrap();
     }
 
     #[test]
@@ -410,6 +428,6 @@ mod tests {
         };
 
         let mut generator = DumpGenerator::new();
-        generator.write_string(s.as_bytes()).unwrap();
+        generator.write_string(&s).unwrap();
     }
 }

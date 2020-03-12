@@ -20,7 +20,7 @@
 use std::str;
 use std::char::decode_utf16;
 use std::convert::TryFrom;
-use cowvec::CowStr;
+use beef::Cow;
 
 use crate::object::Object;
 use crate::number::Number;
@@ -202,7 +202,7 @@ macro_rules! expect_string {
                 continue;
             }
             if ch == b'"' {
-                result = CowStr::borrowed(&$parser.source[start..$parser.index - 1]);
+                result = Cow::borrowed(&$parser.source[start..$parser.index - 1]);
                 break;
             }
             if ch == b'\\' {
@@ -509,7 +509,7 @@ impl<'json> Parser<'json> {
     // is whole lot slower than parsing "foobar", as the former suffers from
     // having to be read from source to a buffer and then from a buffer to
     // our target string. Nothing to be done about this, really.
-    fn read_complex_string(&mut self, start: usize) -> Result<CowStr<'static>> {
+    fn read_complex_string(&mut self, start: usize) -> Result<Cow<'static, str>> {
         let mut ch = b'\\';
 
         // TODO: Use fastwrite here as well
@@ -550,7 +550,7 @@ impl<'json> Parser<'json> {
 
         // Since the original source is already valid UTF-8, and `\`
         // cannot occur in front of a codepoint > 127, this is safe.
-        Ok(CowStr::owned(unsafe {
+        Ok(Cow::owned(unsafe {
             String::from_utf8_unchecked(
                 std::mem::replace(&mut self.buffer, Vec::new())
             )

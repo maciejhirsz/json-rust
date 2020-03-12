@@ -2,7 +2,7 @@
 // implementations for `JsonValue`.
 
 use std::collections::{BTreeMap, HashMap};
-use cowvec::CowStr;
+use beef::Cow;
 
 use crate::number::Number;
 use crate::object::Object;
@@ -66,8 +66,8 @@ impl<'json> From<&'json str> for JsonValue<'json> {
     }
 }
 
-impl<'json> From<CowStr<'json>> for JsonValue<'json> {
-    fn from(val: CowStr<'json>) -> JsonValue<'json> {
+impl<'json> From<Cow<'json, str>> for JsonValue<'json> {
+    fn from(val: Cow<'json, str>) -> JsonValue<'json> {
         JsonValue::String(val)
     }
 }
@@ -104,7 +104,7 @@ where
 
 impl<'json, K, V> From<HashMap<K, V>> for JsonValue<'json>
 where
-    K: Into<CowStr<'json>> + 'json,
+    K: Into<Cow<'json, str>> + 'json,
     V: Into<JsonValue<'json>>,
 {
     fn from(val: HashMap<K, V>) -> JsonValue<'json> {
@@ -114,7 +114,7 @@ where
 
 impl<'json, K, V> From<BTreeMap<K, V>> for JsonValue<'json>
 where
-    K: Into<CowStr<'json>> + 'json,
+    K: Into<Cow<'json, str>> + 'json,
     V: Into<JsonValue<'json>>,
 {
     fn from(val: BTreeMap<K, V>) -> JsonValue<'json> {
@@ -125,7 +125,7 @@ where
 impl PartialEq<&str> for JsonValue<'_> {
     fn eq(&self, other: &&str) -> bool {
         match self {
-            JsonValue::String(value) => value.as_ref() == *other,
+            JsonValue::String(value) => value == *other,
             _ => false
         }
     }
@@ -134,7 +134,7 @@ impl PartialEq<&str> for JsonValue<'_> {
 impl PartialEq<JsonValue<'_>> for &str {
     fn eq(&self, other: &JsonValue) -> bool {
         match other {
-            JsonValue::String(value) => value.as_ref() == *self,
+            JsonValue::String(value) => value == *self,
             _ => false
         }
     }
@@ -143,7 +143,7 @@ impl PartialEq<JsonValue<'_>> for &str {
 impl PartialEq<str> for JsonValue<'_> {
     fn eq(&self, other: &str) -> bool {
         match self {
-            JsonValue::String(value) => value.as_ref() == other,
+            JsonValue::String(value) => value == other,
             _ => false
         }
     }
@@ -152,7 +152,7 @@ impl PartialEq<str> for JsonValue<'_> {
 impl PartialEq<JsonValue<'_>> for str {
     fn eq(&self, other: &JsonValue) -> bool {
         match other {
-            JsonValue::String(value) => value.as_ref() == self,
+            JsonValue::String(value) => value == self,
             _ => false
         }
     }
