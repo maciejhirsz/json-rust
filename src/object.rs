@@ -1,54 +1,21 @@
 use std::{mem, str, slice, fmt};
-use std::ops::{Index, IndexMut, Deref};
+use std::borrow::Borrow;
 use std::num::NonZeroU32;
 use std::iter::FromIterator;
 use std::cell::Cell;
+use std::hash::{Hash, Hasher};
 use beef::Cow;
+use fnv::FnvHasher;
 
-use crate::codegen::{ DumpGenerator, Generator, PrettyGenerator };
 use crate::value::JsonValue;
 
-const NULL: JsonValue<'static> = JsonValue::Null;
-
-// FNV-1a implementation
-//
-// While the `Object` is implemented as a binary tree, not a hash table, the
-// order in which the tree is balanced makes absolutely no difference as long
-// as there is a deterministic left / right ordering with good spread.
-// Comparing a hashed `u64` is faster than comparing `&str` or even `&[u8]`,
-// for larger objects this yields non-trivial performance benefits.
-//
-// Additionally this "randomizes" the keys a bit. Should the keys in an object
-// be inserted in alphabetical order (an example of such a use case would be
-// using an object as a store for entries by ids, where ids are sorted), this
-// will prevent the tree from being constructed in a way where the same branch
-// of each node is always used, effectively producing linear lookup times. Bad!
-//
-// Example:
-//
-// ```
-// println!("{}", hash_key(b"10000056"));
-// println!("{}", hash_key(b"10000057"));
-// println!("{}", hash_key(b"10000058"));
-// println!("{}", hash_key(b"10000059"));
-// ```
-//
-// Produces:
-//
-// ```
-// 15043794053238616431  <-- 2nd
-// 15043792953726988220  <-- 1st
-// 15043800650308385697  <-- 4th
-// 15043799550796757486  <-- 3rd
-// ```
 #[inline]
-fn hash_key(key: &[u8]) -> u64 {
-    let mut hash: u64 = 0xcbf29ce484222325;
-    for byte in key {
-        hash ^= *byte as u64;
-        hash = hash.wrapping_mul(0x100000001b3);
-    }
-    hash
+fn hash_key<H: Hash>(hash: H) -> u64 {
+    let mut hasher = FnvHasher::default();
+
+    hash.hash(&mut hasher);
+
+    hasher.finish()
 }
 
 #[derive(Clone)]
@@ -111,12 +78,16 @@ impl<K, V> Node<K, V> {
 // `&mut` access, ergo this is safe.
 unsafe impl<K: Sync, V: Sync> Sync for Node<K, V> {}
 
+pub type Object<'json> = Map<Cow<'json, str>, JsonValue<'json>>;
+pub type Iter<'a> = MapIter<'a, Cow<'a, str>, JsonValue<'a>>;
+pub type IterMut<'a> = MapIterMut<'a, Cow<'a, str>, JsonValue<'a>>;
+
 /// A binary tree implementation of a string -> `JsonValue` map. You normally don't
 /// have to interact with instances of `Object`, much more likely you will be
 /// using the `JsonValue::Object` variant, which wraps around this struct.
 #[derive(Debug, Clone)]
-pub struct Object<'json> {
-    store: Vec<Node<Cow<'json, str>, JsonValue<'json>>>
+pub struct Map<K, V> {
+    store: Vec<Node<K, V>>
 }
 
 enum FindResult<'find> {
@@ -124,35 +95,51 @@ enum FindResult<'find> {
     Miss(Option<&'find Cell<Option<NonZeroU32>>>),
 }
 
-impl<'json> Object<'json> {
-    /// Create a new, empty instance of `Object`. Empty `Object` performs no
-    /// allocation until a value is inserted into it.
+impl<K, V> Map<K, V> {
+    /// Create a new `Map`.
     #[inline]
     pub fn new() -> Self {
-        Object {
+        Map {
             store: Vec::new()
         }
     }
 
-    /// Create a new `Object` with memory preallocated for `capacity` number
-    /// of entries.
+    /// Create a `Map` with a given capacity
     #[inline]
     pub fn with_capacity(capacity: usize) -> Self {
-        Object {
+        Map {
             store: Vec::with_capacity(capacity)
         }
     }
 
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.store.len()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.store.is_empty()
+    }
+
+    pub fn clear(&mut self) {
+        self.store.clear();
+    }
+}
+
+impl<K, V> Map<K, V>
+where
+    K: Hash + Eq,
+{
     /// Insert a new entry, or override an existing one.
-    pub fn insert<K>(&mut self, key: K, value: JsonValue<'json>)
+    pub fn insert<Q>(&mut self, key: Q, value: V)
     where
-        K: Into<Cow<'json, str>>,
+        Q: Into<K>,
     {
         let key = key.into();
-        let bytes = key.as_bytes();
-        let hash = hash_key(bytes);
+        let hash = hash_key(&key);
 
-        match self.find(bytes, hash) {
+        match self.find(&key, hash) {
             FindResult::Hit(idx) => {
                 self.store[idx].value = value;
             },
@@ -166,55 +153,66 @@ impl<'json> Object<'json> {
         }
     }
 
-    #[inline]
-    fn find(&self, bytes: &[u8], hash: u64) -> FindResult {
-        let mut idx = 0;
+    pub fn get<Q>(&self, key: &Q) -> Option<&V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
+        let hash = hash_key(key);
 
-        while let Some(node) = self.store.get(idx) {
-            if hash == node.hash && bytes == node.key.as_bytes() {
-                return FindResult::Hit(idx);
-            } else if hash < node.hash {
-                match node.left.get() {
-                    Some(i) => idx = i.get() as usize,
-                    None => return FindResult::Miss(Some(&node.left)),
-                }
-            } else {
-                match node.right.get() {
-                    Some(i) => idx = i.get() as usize,
-                    None => return FindResult::Miss(Some(&node.right)),
-                }
-            }
-        }
-
-        FindResult::Miss(None)
-    }
-
-    pub fn get(&self, key: &str) -> Option<&JsonValue<'json>> {
-        let bytes = key.as_bytes();
-        let hash = hash_key(bytes);
-
-        match self.find(bytes, hash) {
+        match self.find(key, hash) {
             FindResult::Hit(idx) => Some(&self.store[idx].value),
             FindResult::Miss(_) => None,
         }
     }
 
-    pub fn get_mut(&mut self, key: &str) -> Option<&mut JsonValue<'json>> {
-        let bytes = key.as_bytes();
-        let hash = hash_key(bytes);
+    pub fn get_mut<Q>(&mut self, key: &Q) -> Option<&mut V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
+        let hash = hash_key(key);
 
-        match self.find(bytes, hash) {
+        match self.find(key, hash) {
             FindResult::Hit(idx) => Some(&mut self.store[idx].value),
             FindResult::Miss(_) => None,
         }
     }
 
+    pub fn get_or_insert<Q, F>(&mut self, key: Q, fill: F) -> &mut V
+    where
+        Q: Into<K>,
+        F: FnOnce() -> V,
+    {
+        let key = key.into();
+        let hash = hash_key(&key);
+
+        match self.find(&key, hash) {
+            FindResult::Hit(idx) => &mut self.store[idx].value,
+            FindResult::Miss(parent) => {
+                let idx = self.store.len();
+
+                if let Some(parent) = parent {
+                    parent.set(NonZeroU32::new(self.store.len() as u32));
+                }
+
+                self.store.push(Node::new(key, fill(), hash));
+
+                &mut self.store[idx].value
+            },
+        }
+    }
+
     /// Attempts to remove the value behind `key`, if successful
     /// will return the `JsonValue` stored behind the `key`.
-    pub fn remove(&mut self, key: &str) -> Option<JsonValue<'json>> {
-        let bytes = key.as_bytes();
-        let hash = hash_key(bytes);
-        let index = match self.find(bytes, hash) {
+    pub fn remove<Q>(&mut self, key: &Q) -> Option<V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
+        let hash = hash_key(key);
+
+        let index = match self.find(key, hash) {
             FindResult::Hit(idx) => idx,
             FindResult::Miss(_) => return None,
         };
@@ -241,83 +239,85 @@ impl<'json> Object<'json> {
     }
 
     #[inline]
-    pub fn len(&self) -> usize {
-        self.store.len()
+    fn find<Q: ?Sized>(&self, key: &Q, hash: u64) -> FindResult
+    where
+        K: Borrow<Q>,
+        Q: Eq,
+    {
+        let mut idx = 0;
+
+        while let Some(node) = self.store.get(idx) {
+            if hash == node.hash && key == node.key.borrow() {
+                return FindResult::Hit(idx);
+            } else if hash < node.hash {
+                match node.left.get() {
+                    Some(i) => idx = i.get() as usize,
+                    None => return FindResult::Miss(Some(&node.left)),
+                }
+            } else {
+                match node.right.get() {
+                    Some(i) => idx = i.get() as usize,
+                    None => return FindResult::Miss(Some(&node.right)),
+                }
+            }
+        }
+
+        FindResult::Miss(None)
     }
 
     #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.store.is_empty()
-    }
-
-    /// Wipe the `Object` clear. The capacity will remain untouched.
-    pub fn clear(&mut self) {
-        self.store.clear();
-    }
-
-    #[inline]
-    pub fn iter(&self) -> Iter {
-        Iter {
+    pub fn iter(&self) -> MapIter<K, V> {
+        MapIter {
             inner: self.store.iter()
         }
     }
 
     #[inline]
-    pub fn iter_mut<'iter: 'json>(&'iter mut self) -> IterMut<'iter> {
-        IterMut {
+    pub fn iter_mut(&mut self) -> MapIterMut<K, V> {
+        MapIterMut {
             inner: self.store.iter_mut()
         }
     }
-
-    /// Prints out the value as JSON string.
-    pub fn dump(&self) -> String {
-        let mut gen = DumpGenerator::new();
-        gen.write_object(self).expect("Can't fail");
-        gen.consume()
-    }
-
-    /// Pretty prints out the value as JSON string. Takes an argument that's
-    /// number of spaces to indent new blocks with.
-    pub fn pretty(&self, spaces: u16) -> String {
-        let mut gen = PrettyGenerator::new(spaces);
-        gen.write_object(self).expect("Can't fail");
-        gen.consume()
-    }
 }
 
-impl<'json, K, V> FromIterator<(K, V)> for Object<'json>
+impl<'json, IK, IV, K, V> FromIterator<(IK, IV)> for Map<K, V>
 where
-    K: Into<Cow<'json, str>> + 'json,
-    V: Into<JsonValue<'json>>,
+    IK: Into<K>,
+    IV: Into<V>,
+    K: Hash + Eq,
 {
     fn from_iter<I>(iter: I) -> Self
     where
-        I: IntoIterator<Item=(K, V)>,
+        I: IntoIterator<Item=(IK, IV)>,
     {
         let iter = iter.into_iter();
-        let mut object = Object::with_capacity(iter.size_hint().0);
+        let mut map = Map::with_capacity(iter.size_hint().0);
 
         for (key, value) in iter {
-            object.insert(key, value.into());
+            map.insert(key, value.into());
         }
 
-        object
+        map
     }
 }
 
 // Because keys can inserted in different order, the safe way to
-// compare `Object`s is to iterate over one and check if the other
+// compare `Map`s is to iterate over one and check if the other
 // has all the same keys.
-impl<'json> PartialEq for Object<'json> {
-    fn eq(&self, other: &Object<'json>) -> bool {
+impl<K, V> PartialEq for Map<K, V>
+where
+    K: Hash + Eq,
+    V: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
         if self.len() != other.len() {
             return false;
         }
 
         for (key, value) in self.iter() {
             match other.get(key) {
-                Some(ref other_val) => if *other_val != value { return false; },
-                None                => return false
+                Some(v) if v == value => {},
+                _ => return false,
             }
         }
 
@@ -325,172 +325,72 @@ impl<'json> PartialEq for Object<'json> {
     }
 }
 
-pub struct Iter<'a> {
-    inner: slice::Iter<'a, Node<Cow<'a, str>, JsonValue<'a>>>
+pub struct MapIter<'a, K, V> {
+    inner: slice::Iter<'a, Node<K, V>>,
 }
 
-impl<'a> Iter<'a> {
+pub struct MapIterMut<'a, K, V> {
+    inner: slice::IterMut<'a, Node<K, V>>,
+}
+
+impl<K, V> MapIter<'_, K, V> {
     /// Create an empty iterator that always returns `None`
     pub fn empty() -> Self {
-        Iter {
+        MapIter {
             inner: [].iter()
         }
     }
 }
 
-impl<'a> Iterator for Iter<'a> {
-    type Item = (&'a str, &'a JsonValue<'a>);
+impl<'i, K, V> Iterator for MapIter<'i, K, V> {
+    type Item = (&'i K, &'i V);
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|node| (node.key.deref(), &node.value))
+        self.inner.next().map(|node| (&node.key, &node.value))
     }
 }
 
-impl<'a> DoubleEndedIterator for Iter<'a> {
+impl<K, V> DoubleEndedIterator for MapIter<'_, K, V> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner.next_back().map(|node| (node.key.deref(), &node.value))
+        self.inner.next_back().map(|node| (&node.key, &node.value))
     }
 }
 
-impl<'a> ExactSizeIterator for Iter<'a> {
+impl<K, V> ExactSizeIterator for MapIter<'_, K, V> {
     fn len(&self) -> usize {
         self.inner.len()
     }
 }
 
-pub struct IterMut<'a> {
-    inner: slice::IterMut<'a, Node<Cow<'a, str>, JsonValue<'a>>>,
-}
-
-impl<'a> IterMut<'a> {
+impl<K, V> MapIterMut<'_, K, V> {
     /// Create an empty iterator that always returns `None`
     pub fn empty() -> Self {
-        IterMut {
+        MapIterMut {
             inner: [].iter_mut()
         }
     }
 }
 
-impl<'a> Iterator for IterMut<'a> {
-    type Item = (&'a str, &'a mut JsonValue<'a>);
+impl<'a, K, V> Iterator for MapIterMut<'a, K, V> {
+    type Item = (&'a K, &'a mut V);
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|node| (node.key.deref(), &mut node.value))
+        self.inner.next().map(|node| (&node.key, &mut node.value))
     }
 }
 
-impl<'a> DoubleEndedIterator for IterMut<'a> {
+impl<K, V> DoubleEndedIterator for MapIterMut<'_, K, V> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner.next_back().map(|node| (node.key.deref(), &mut node.value))
+        self.inner.next_back().map(|node| (&node.key, &mut node.value))
     }
 }
 
-impl<'a> ExactSizeIterator for IterMut<'a> {
+impl<K, V> ExactSizeIterator for MapIterMut<'_, K, V> {
     fn len(&self) -> usize {
         self.inner.len()
     }
 }
-
-/// Implements indexing by `&str` to easily access object members:
-///
-/// ## Example
-///
-/// ```
-/// # #[macro_use]
-/// # extern crate json;
-/// # use json::JsonValue;
-/// #
-/// # fn main() {
-/// let value = object!{
-///     foo: "bar"
-/// };
-///
-/// if let JsonValue::Object(object) = value {
-///   assert!(object["foo"] == "bar");
-/// }
-/// # }
-/// ```
-// TODO: doc
-impl<'json> Index<&str> for Object<'json> {
-    type Output = JsonValue<'json>;
-
-    fn index(&self, index: &str) -> &JsonValue<'json> {
-        match self.get(index) {
-            Some(value) => value,
-            _ => &NULL
-        }
-    }
-}
-
-impl<'json> Index<String> for Object<'json> {
-    type Output = JsonValue<'json>;
-
-    fn index(&self, index: String) -> &JsonValue<'json> {
-        match self.get(&index) {
-            Some(value) => value,
-            _ => &NULL
-        }
-    }
-}
-
-impl<'json> Index<&String> for Object<'json> {
-    type Output = JsonValue<'json>;
-
-    fn index(&self, index: &String) -> &JsonValue<'json> {
-        match self.get(index) {
-            Some(value) => value,
-            _ => &NULL
-        }
-    }
-}
-
-/// Implements mutable indexing by `&str` to easily modify object members:
-///
-/// ## Example
-///
-/// ```
-/// # #[macro_use]
-/// # extern crate json;
-/// # use json::JsonValue;
-/// #
-/// # fn main() {
-/// let value = object!{};
-///
-/// if let JsonValue::Object(mut object) = value {
-///   object["foo"] = 42.into();
-///
-///   assert!(object["foo"] == 42);
-/// }
-/// # }
-/// ```
-impl<'json> IndexMut<&str> for Object<'json> {
-    fn index_mut(&mut self, index: &str) -> &mut JsonValue<'json> {
-        if self.get(index).is_none() {
-            self.insert(Cow::owned(index.to_owned()), JsonValue::Null);
-        }
-        self.get_mut(index).unwrap()
-    }
-}
-
-impl<'json> IndexMut<String> for Object<'json> {
-    fn index_mut(&mut self, index: String) -> &mut JsonValue<'json> {
-        if self.get(&index).is_none() {
-            self.insert(Cow::owned(index.clone()), JsonValue::Null);
-        }
-        self.get_mut(&index).unwrap()
-    }
-}
-
-impl<'json> IndexMut<&String> for Object<'json> {
-    fn index_mut(&mut self, index: &String) -> &mut JsonValue<'json> {
-        if self.get(index).is_none() {
-            self.insert(Cow::owned(index.clone()), JsonValue::Null);
-        }
-        self.get_mut(index).unwrap()
-    }
-}
-

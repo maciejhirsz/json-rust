@@ -149,17 +149,6 @@ fn stringify_object() {
 }
 
 #[test]
-fn stringify_raw_object() {
-    let mut object = json::object::Object::new();
-
-    object.insert("name", "Maciej".into());
-    object.insert("age", 30.into());
-
-    assert_eq!(object.dump(), r#"{"name":"Maciej","age":30}"#);
-    assert_eq!(stringify(object), r#"{"name":"Maciej","age":30}"#);
-}
-
-#[test]
 fn stringify_btree_map() {
     let mut map = BTreeMap::new();
 

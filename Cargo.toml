@@ -9,4 +9,6 @@ license = "MIT/Apache-2.0"
 edition = "2018"
 
 [dependencies]
-beef = "0.1"
+# beef = "0.1"
+beef = { path = "../beef" }
+fnv = "1.0.6"
