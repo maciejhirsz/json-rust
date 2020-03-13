@@ -79,8 +79,6 @@ impl<K, V> Node<K, V> {
 unsafe impl<K: Sync, V: Sync> Sync for Node<K, V> {}
 
 pub type Object<'json> = Map<Cow<'json, str>, JsonValue<'json>>;
-pub type Iter<'a> = MapIter<'a, Cow<'a, str>, JsonValue<'a>>;
-pub type IterMut<'a> = MapIterMut<'a, Cow<'a, str>, JsonValue<'a>>;
 
 /// A binary tree implementation of a string -> `JsonValue` map. You normally don't
 /// have to interact with instances of `Object`, much more likely you will be
@@ -266,15 +264,15 @@ where
     }
 
     #[inline]
-    pub fn iter(&self) -> MapIter<K, V> {
-        MapIter {
+    pub fn iter(&self) -> Iter<K, V> {
+        Iter {
             inner: self.store.iter()
         }
     }
 
     #[inline]
-    pub fn iter_mut(&mut self) -> MapIterMut<K, V> {
-        MapIterMut {
+    pub fn iter_mut(&mut self) -> IterMut<K, V> {
+        IterMut {
             inner: self.store.iter_mut()
         }
     }
@@ -325,24 +323,24 @@ where
     }
 }
 
-pub struct MapIter<'a, K, V> {
+pub struct Iter<'a, K, V> {
     inner: slice::Iter<'a, Node<K, V>>,
 }
 
-pub struct MapIterMut<'a, K, V> {
+pub struct IterMut<'a, K, V> {
     inner: slice::IterMut<'a, Node<K, V>>,
 }
 
-impl<K, V> MapIter<'_, K, V> {
+impl<K, V> Iter<'_, K, V> {
     /// Create an empty iterator that always returns `None`
     pub fn empty() -> Self {
-        MapIter {
+        Iter {
             inner: [].iter()
         }
     }
 }
 
-impl<'i, K, V> Iterator for MapIter<'i, K, V> {
+impl<'i, K, V> Iterator for Iter<'i, K, V> {
     type Item = (&'i K, &'i V);
 
     #[inline]
@@ -351,29 +349,29 @@ impl<'i, K, V> Iterator for MapIter<'i, K, V> {
     }
 }
 
-impl<K, V> DoubleEndedIterator for MapIter<'_, K, V> {
+impl<K, V> DoubleEndedIterator for Iter<'_, K, V> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
         self.inner.next_back().map(|node| (&node.key, &node.value))
     }
 }
 
-impl<K, V> ExactSizeIterator for MapIter<'_, K, V> {
+impl<K, V> ExactSizeIterator for Iter<'_, K, V> {
     fn len(&self) -> usize {
         self.inner.len()
     }
 }
 
-impl<K, V> MapIterMut<'_, K, V> {
+impl<K, V> IterMut<'_, K, V> {
     /// Create an empty iterator that always returns `None`
     pub fn empty() -> Self {
-        MapIterMut {
+        IterMut {
             inner: [].iter_mut()
         }
     }
 }
 
-impl<'a, K, V> Iterator for MapIterMut<'a, K, V> {
+impl<'a, K, V> Iterator for IterMut<'a, K, V> {
     type Item = (&'a K, &'a mut V);
 
     #[inline]
@@ -382,14 +380,14 @@ impl<'a, K, V> Iterator for MapIterMut<'a, K, V> {
     }
 }
 
-impl<K, V> DoubleEndedIterator for MapIterMut<'_, K, V> {
+impl<K, V> DoubleEndedIterator for IterMut<'_, K, V> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
         self.inner.next_back().map(|node| (&node.key, &mut node.value))
     }
 }
 
-impl<K, V> ExactSizeIterator for MapIterMut<'_, K, V> {
+impl<K, V> ExactSizeIterator for IterMut<'_, K, V> {
     fn len(&self) -> usize {
         self.inner.len()
     }
