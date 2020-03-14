@@ -93,6 +93,8 @@ enum FindResult<'find> {
     Miss(Option<&'find Cell<Option<NonZeroU32>>>),
 }
 
+use FindResult::*;
+
 impl<K, V> Map<K, V> {
     /// Create a new `Map`.
     #[inline]
@@ -138,10 +140,10 @@ where
         let hash = hash_key(&key);
 
         match self.find(&key, hash) {
-            FindResult::Hit(idx) => {
+            Hit(idx) => {
                 self.store[idx].value = value;
             },
-            FindResult::Miss(parent) => {
+            Miss(parent) => {
                 if let Some(parent) = parent {
                     parent.set(NonZeroU32::new(self.store.len() as u32));
                 }
@@ -159,8 +161,8 @@ where
         let hash = hash_key(key);
 
         match self.find(key, hash) {
-            FindResult::Hit(idx) => Some(&self.store[idx].value),
-            FindResult::Miss(_) => None,
+            Hit(idx) => Some(&self.store[idx].value),
+            Miss(_) => None,
         }
     }
 
@@ -172,8 +174,8 @@ where
         let hash = hash_key(key);
 
         match self.find(key, hash) {
-            FindResult::Hit(idx) => Some(&mut self.store[idx].value),
-            FindResult::Miss(_) => None,
+            Hit(idx) => Some(&mut self.store[idx].value),
+            Miss(_) => None,
         }
     }
 
@@ -186,8 +188,8 @@ where
         let hash = hash_key(&key);
 
         match self.find(&key, hash) {
-            FindResult::Hit(idx) => &mut self.store[idx].value,
-            FindResult::Miss(parent) => {
+            Hit(idx) => &mut self.store[idx].value,
+            Miss(parent) => {
                 let idx = self.store.len();
 
                 if let Some(parent) = parent {
@@ -211,8 +213,8 @@ where
         let hash = hash_key(key);
 
         let index = match self.find(key, hash) {
-            FindResult::Hit(idx) => idx,
-            FindResult::Miss(_) => return None,
+            Hit(idx) => idx,
+            Miss(_) => return None,
         };
 
         // Removing a node would screw the tree badly, it's easier to just
@@ -221,15 +223,20 @@ where
         // can wait for better times.
         let mut removed = None;
         let capacity = self.store.len();
-        let old_store = mem::replace(&mut self.store, Vec::with_capacity(capacity));
+        let old = mem::replace(&mut self.store, Vec::with_capacity(capacity));
 
-        for (i, node) in old_store.into_iter().enumerate() {
+        for (i, Node { key, value, hash, .. }) in old.into_iter().enumerate() {
             if i == index {
                 // Rust doesn't like us moving things from `node`, even if
                 // it is owned. Replace fixes that.
-                removed = Some(node.value);
+                removed = Some(value);
             } else {
-                self.insert(node.key, node.value);
+                // Faster than .insert() since we can avoid hashing
+                if let Miss(Some(parent)) = self.find(key.borrow(), hash) {
+                    parent.set(NonZeroU32::new(self.store.len() as u32));
+                }
+
+                self.store.push(Node::new(key, value, hash));
             }
         }
 
@@ -246,21 +253,21 @@ where
 
         while let Some(node) = self.store.get(idx) {
             if hash == node.hash && key == node.key.borrow() {
-                return FindResult::Hit(idx);
+                return Hit(idx);
             } else if hash < node.hash {
                 match node.left.get() {
                     Some(i) => idx = i.get() as usize,
-                    None => return FindResult::Miss(Some(&node.left)),
+                    None => return Miss(Some(&node.left)),
                 }
             } else {
                 match node.right.get() {
                     Some(i) => idx = i.get() as usize,
-                    None => return FindResult::Miss(Some(&node.right)),
+                    None => return Miss(Some(&node.right)),
                 }
             }
         }
 
-        FindResult::Miss(None)
+        Miss(None)
     }
 
     #[inline]
@@ -312,11 +319,15 @@ where
             return false;
         }
 
-        for (key, value) in self.iter() {
-            match other.get(key) {
-                Some(v) if v == value => {},
-                _ => return false,
+        // Faster than .get() since we can avoid hashing
+        for &Node { ref key, ref value, hash, .. } in self.store.iter() {
+            if let Hit(idx) = other.find(key, hash) {
+                if &other.store[idx].value == value {
+                    continue;
+                }
             }
+
+            return false;
         }
 
         true
