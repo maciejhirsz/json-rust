@@ -9,5 +9,14 @@ license = "MIT/Apache-2.0"
 edition = "2018"
 
 [dependencies]
-beef = "0.2.1"
+# beef = "0.2.1"
+beef = { path = "../beef" }
 fnv = "1.0.6"
+ahash = "0.3.2"
+
+[profile.bench]
+opt-level = 3
+debug = false
+lto = true
+debug-assertions = false
+codegen-units = 1

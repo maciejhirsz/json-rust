@@ -4,6 +4,7 @@
 use std::collections::{BTreeMap, HashMap};
 use beef::Cow;
 
+use crate::vec::Vec;
 use crate::number::Number;
 use crate::object::Object;
 use crate::value::JsonValue;
@@ -89,6 +90,15 @@ where
     T: Into<JsonValue<'json>>,
 {
     fn from(val: Vec<T>) -> JsonValue<'json> {
+        JsonValue::Array(val.into_iter().map(Into::into).collect())
+    }
+}
+
+impl<'json, T> From<std::vec::Vec<T>> for JsonValue<'json>
+where
+    T: Into<JsonValue<'json>>,
+{
+    fn from(val: std::vec::Vec<T>) -> JsonValue<'json> {
         JsonValue::Array(val.into_iter().map(Into::into).collect())
     }
 }

@@ -5,13 +5,14 @@ use std::iter::FromIterator;
 use std::cell::Cell;
 use std::hash::{Hash, Hasher};
 use beef::Cow;
-use fnv::FnvHasher;
+use crate::vec::Vec;
 
 use crate::value::JsonValue;
 
 #[inline]
 fn hash_key<H: Hash>(hash: H) -> u64 {
-    let mut hasher = FnvHasher::default();
+    let mut hasher = fnv::FnvHasher::default();
+    // let mut hasher = ahash::AHasher::default();
 
     hash.hash(&mut hasher);
 

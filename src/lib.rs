@@ -204,6 +204,7 @@ mod parser;
 mod value;
 mod error;
 mod util;
+mod vec;
 
 pub mod object;
 pub mod number;
@@ -241,7 +242,7 @@ pub use crate::Result as JsonResult;
 
 pub use parser::parse;
 
-pub type Array<'json> = Vec<JsonValue<'json>>;
+pub type Array<'json> = crate::vec::Vec<JsonValue<'json>>;
 
 /// Convenience for `JsonValue::from(value)`
 pub fn from<'json, T>(value: T) -> JsonValue<'json>
@@ -319,7 +320,7 @@ macro_rules! array {
     // Construct the actual array
     (@END $( $i:expr, )*) => ({
         let size = 0 $( + {let _ = || $i; 1} )*;
-        let mut array = Vec::with_capacity(size);
+        let mut array = $crate::Array::with_capacity(size);
 
         $(
             array.push($i.into());

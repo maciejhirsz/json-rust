@@ -22,6 +22,7 @@ use std::char::decode_utf16;
 use std::convert::TryFrom;
 use beef::Cow;
 
+use crate::vec::Vec;
 use crate::object::Object;
 use crate::number::Number;
 use crate::{JsonValue, Error, Result};
@@ -41,7 +42,7 @@ const DEPTH_LIMIT: usize = 512;
 struct Parser<'json> {
     // Helper buffer for parsing strings that can't be just memcopied from
     // the original source (escaped characters)
-    buffer: Vec<u8>,
+    buffer: std::vec::Vec<u8>,
 
     // String slice to parse
     source: &'json str,
@@ -360,7 +361,7 @@ macro_rules! expect_fraction {
 impl<'json> Parser<'json> {
     pub fn new(source: &'json str) -> Self {
         Parser {
-            buffer: Vec::with_capacity(30),
+            buffer: std::vec::Vec::with_capacity(30),
             source,
             byte_ptr: source.as_ptr(),
             index: 0,
@@ -548,7 +549,7 @@ impl<'json> Parser<'json> {
         // cannot occur in front of a codepoint > 127, this is safe.
         Ok(Cow::owned(unsafe {
             String::from_utf8_unchecked(
-                std::mem::replace(&mut self.buffer, Vec::new())
+                std::mem::replace(&mut self.buffer, std::vec::Vec::new())
             )
         }))
     }
@@ -631,7 +632,7 @@ impl<'json> Parser<'json> {
 
     // Parse away!
     fn parse(&mut self) -> Result<JsonValue<'json>> {
-        let mut stack = Vec::with_capacity(4);
+        let mut stack = std::vec::Vec::with_capacity(4);
         let mut ch = expect_byte_ignore_whitespace!(self);
 
         'parsing: loop {
