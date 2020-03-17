@@ -1,8 +1,6 @@
-# json-rust
+![](https://raw.githubusercontent.com/maciejhirsz/json-rust/master/json-rust-logo-small.png)
 
-[![Travis shield](https://travis-ci.org/maciejhirsz/json-rust.svg)](https://travis-ci.org/maciejhirsz/json-rust)
-[![Crates.io version shield](https://img.shields.io/crates/v/json.svg)](https://crates.io/crates/json)
-[![Crates.io license shield](https://img.shields.io/crates/l/json.svg)](https://crates.io/crates/json)
+# json-rust
 
 Parse and serialize [JSON](http://json.org/) with ease.
 
@@ -10,7 +8,6 @@ Parse and serialize [JSON](http://json.org/) with ease.
 **[Complete Documentation](https://docs.rs/json/) -**
 **[Cargo](https://crates.io/crates/json) -**
 **[Repository](https://github.com/maciejhirsz/json-rust)**
-
 
 ## Why?
 
@@ -39,10 +36,11 @@ let parsed = json::parse(r#"
 "#).unwrap();
 
 let instantiated = object!{
-    "code" => 200,
-    "success" => true,
-    "payload" => object!{
-        "features" => array![
+    // quotes on keys are optional
+    "code": 200,
+    success: true,
+    payload: {
+        features: [
             "awesome",
             "easyAPI",
             "lowLearningCurve"
@@ -59,10 +57,10 @@ Using macros and indexing, it's easy to work with the data.
 
 ```rust
 let mut data = object!{
-    "foo" => false,
-    "bar" => json::Null,
-    "answer" => 42,
-    "list" => array![json::Null, "world", true]
+    foo: false,
+    bar: null,
+    answer: 42,
+    list: [null, "world", true]
 };
 
 // Partial equality is implemented for most raw types:

@@ -3,7 +3,7 @@ extern crate json;
 
 use json::codegen::Generator;
 use json::object::Object;
-use json::{JsonValue, Null};
+use json::JsonValue;
 use std::io;
 
 /// Custom generator that sort keys by name; based on DumpGenerator.
@@ -76,9 +76,9 @@ impl Generator for CustomGenerator {
 #[test]
 fn object_keys_sorted() {
     let o = object! {
-        "c" => Null,
-        "b" => Null,
-        "a" => Null,
+        c: null,
+        b: null,
+        a: null,
     };
     let mut gen = CustomGenerator::new();
     gen.write_json(&o).expect("Can't fail");

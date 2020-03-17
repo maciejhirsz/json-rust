@@ -803,10 +803,10 @@ mod tests {
         let s = "{\"a\":1,\"b\":true,\"c\":false,\"d\":null,\"e\":2}";
         let actual = parse(s).unwrap();
         let mut expected = object! {
-            "a" => 1,
-            "b" => true,
-            "c" => false,
-            "e" => 2
+            a: 1,
+            b: true,
+            c: false,
+            e: 2,
         };
         expected["d"] = JsonValue::Null;
 
@@ -818,18 +818,18 @@ mod tests {
         let s = "{\"a\":1,\"b\":true,\"c\":false,\"d\":null,\"e\":2,\"f\":[1,2,3,false,true,[],{}]}";
         let actual = parse(s).unwrap();
         let mut expected = object! {
-            "a" => 1,
-            "b" => true,
-            "c" => false,
-            "e" => 2
+            a: 1,
+            b: true,
+            c: false,
+            e: 2,
         };
         expected["d"] = JsonValue::Null;
         expected["f"] = array![
             1,2,3,
             false,
             true,
-            array![],
-            object!{}
+            [],
+            {},
         ];
 
         assert_eq!(actual, expected);
@@ -840,22 +840,22 @@ mod tests {
         let s = "{\"a\":1,\"b\":{\"c\":2,\"d\":{\"e\":{\"f\":{\"g\":3,\"h\":[]}}},\"i\":4,\"j\":[],\"k\":{\"l\":5,\"m\":{}}}}";
         let actual = parse(s).unwrap();
         let expected = object! {
-            "a" => 1,
-            "b" => object!{
-                "c" => 2,
-                "d" => object!{
-                    "e" => object! {
-                        "f" => object!{
-                            "g" => 3,
-                            "h" => array![]
+            a: 1,
+            b: {
+                c: 2,
+                d: {
+                    e: {
+                        f: {
+                            g: 3,
+                            h: []
                         }
                     }
                 },
-                "i" => 4,
-                "j" => array![],
-                "k" => object!{
-                    "l" => 5,
-                    "m" => object!{}
+                i: 4,
+                j: [],
+                k: {
+                    l: 5,
+                    m: {}
                 }
             }
         };
@@ -868,25 +868,25 @@ mod tests {
         let s = "{\"a\":1,\"b\":{\"c\":2,\"d\":{\"e\":{\"f\":{\"g\":3,\"h\":[{\"z\":1},{\"y\":2,\"x\":[{},{}]}]}}},\"i\":4,\"j\":[],\"k\":{\"l\":5,\"m\":{}}}}";
         let actual = parse(s).unwrap();
         let expected = object! {
-            "a" => 1,
-            "b" => object!{
-                "c" => 2,
-                "d" => object!{
-                    "e" => object! {
-                        "f" => object!{
-                            "g" => 3,
-                            "h" => array![
-                                object!{"z" => 1},
-                                object!{"y" => 2, "x" => array![object!{}, object!{}]}
+            a: 1,
+            b: {
+                c: 2,
+                d: {
+                    e: {
+                        f: {
+                            g: 3,
+                            h: [
+                                { z: 1 },
+                                { y: 2, x: [{}, {}]}
                             ]
                         }
                     }
                 },
-                "i" => 4,
-                "j" => array![],
-                "k" => object!{
-                    "l" => 5,
-                    "m" => object!{}
+                i: 4,
+                j: [],
+                k: {
+                    l: 5,
+                    m: {}
                 }
             }
         };

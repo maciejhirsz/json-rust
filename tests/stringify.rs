@@ -140,8 +140,8 @@ fn stringify_typed_opt_vec() {
 #[test]
 fn stringify_object() {
     let object = object!{
-        "name" => "Maciej",
-        "age" => 30
+        name: "Maciej",
+        age: 30
     };
 
     assert_eq!(object.dump(), r#"{"name":"Maciej","age":30}"#);
@@ -183,8 +183,8 @@ fn stringify_hash_map() {
     let parsed = parse(&stringify(map)).unwrap();
 
     assert_eq!(parsed, object!{
-        "name" => "Maciej",
-        "age" => 30
+        name: "Maciej",
+        age: 30
     });
 }
 
@@ -234,13 +234,13 @@ fn stringify_control_escaped() {
 #[test]
 fn stringify_pretty_object() {
     let object = object!{
-        "name" => "Urlich",
-        "age" => 50,
-        "parents" => object!{
-            "mother" => "Helga",
-            "father" => "Brutus"
+        name: "Urlich",
+        age: 50,
+        parents: {
+            mother: "Helga",
+            father: "Brutus"
         },
-        "cars" => array![ "Golf", "Mercedes", "Porsche" ]
+        cars: [ "Golf", "Mercedes", "Porsche" ]
     };
 
     let expected = "{\n  \"name\": \"Urlich\",\n  \"age\": 50,\n  \"parents\": {\n    \"mother\": \"Helga\",\n    \"father\": \"Brutus\"\n  },\n  \"cars\": [\n    \"Golf\",\n    \"Mercedes\",\n    \"Porsche\"\n  ]\n}";

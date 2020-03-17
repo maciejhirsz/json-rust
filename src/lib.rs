@@ -1,4 +1,4 @@
-//! ![](http://terhix.com/doc/json-rust-logo-small.png)
+//! ![](https://raw.githubusercontent.com/maciejhirsz/json-rust/master/json-rust-logo-small.png)
 //!
 //! # json-rust
 //!
@@ -38,10 +38,11 @@
 //! "#).unwrap();
 //!
 //! let instantiated = object!{
-//!     "code" => 200,
-//!     "success" => true,
-//!     "payload" => object!{
-//!         "features" => array![
+//!     // quotes on keys are optional
+//!     "code": 200,
+//!     success: true,
+//!     payload: {
+//!         features: [
 //!             "awesome",
 //!             "easyAPI",
 //!             "lowLearningCurve"
@@ -61,10 +62,10 @@
 //! # #[macro_use] extern crate json;
 //! # fn main() {
 //! let mut data = object!{
-//!     "foo" => false,
-//!     "bar" => json::Null,
-//!     "answer" => 42,
-//!     "list" => array![json::Null, "world", true]
+//!     foo: false,
+//!     bar: null,
+//!     answer: 42,
+//!     list: [null, "world", true]
 //! };
 //!
 //! // Partial equality is implemented for most raw types:
@@ -174,7 +175,7 @@
 //! ```
 //! # #[macro_use] extern crate json;
 //! # fn main() {
-//! let data = array!["foo", "bar", 100, true, json::Null];
+//! let data = array!["foo", "bar", 100, true, null];
 //! assert_eq!(data.dump(), r#"["foo","bar",100,true,null]"#);
 //! # }
 //! ```
@@ -185,9 +186,9 @@
 //! # #[macro_use] extern crate json;
 //! # fn main() {
 //! let data = object!{
-//!     "name"    => "John Doe",
-//!     "age"     => 30,
-//!     "canJSON" => true
+//!     name: "John Doe",
+//!     age: 30,
+//!     canJSON: true
 //! };
 //! assert_eq!(
 //!     data.dump(),
@@ -279,16 +280,65 @@ pub fn stringify_pretty<T>(root: T, spaces: u16) -> String where T: Into<JsonVal
 macro_rules! array {
     [] => ($crate::JsonValue::new_array());
 
-    [ $( $item:expr ),* ] => ({
-        let size = 0 $( + {let _ = $item; 1} )*;
+    // Handles for token tree items
+    [@ITEM($( $i:expr, )*) $item:tt, $( $cont:tt )+] => {
+        $crate::array!(
+            @ITEM($( $i, )* $crate::value!($item), )
+            $( $cont )*
+        )
+    };
+    (@ITEM($( $i:expr, )*) $item:tt,) => ({
+        $crate::array!(@END $( $i, )* $crate::value!($item), )
+    });
+    (@ITEM($( $i:expr, )*) $item:tt) => ({
+        $crate::array!(@END $( $i, )* $crate::value!($item), )
+    });
+
+    // Handles for expression items
+    [@ITEM($( $i:expr, )*) $item:expr, $( $cont:tt )+] => {
+        $crate::array!(
+            @ITEM($( $i, )* $crate::value!($item), )
+            $( $cont )*
+        )
+    };
+    (@ITEM($( $i:expr, )*) $item:expr,) => ({
+        $crate::array!(@END $( $i, )* $crate::value!($item), )
+    });
+    (@ITEM($( $i:expr, )*) $item:expr) => ({
+        $crate::array!(@END $( $i, )* $crate::value!($item), )
+    });
+
+    // Construct the actual array
+    (@END $( $i:expr, )*) => ({
+        let size = 0 $( + {let _ = || $i; 1} )*;
         let mut array = Vec::with_capacity(size);
 
         $(
-            array.push($item.into());
+            array.push($i.into());
         )*
 
         $crate::JsonValue::Array(array)
-    })
+    });
+
+    // Entry point to the macro
+    ($( $cont:tt )+) => {
+        $crate::array!(@ITEM() $($cont)*)
+    };
+}
+
+#[macro_export]
+/// Helper crate for converting types into `JsonValue`. It's used
+/// internally by the `object!` and `array!` macros.
+macro_rules! value {
+    ( null ) => { $crate::Null };
+    ( [$( $token:tt )*] ) => {
+        // 10
+        $crate::array![ $( $token )* ]
+    };
+    ( {$( $token:tt )*} ) => {
+        $crate::object!{ $( $token )* }
+    };
+    { $value:expr } => { $value };
 }
 
 /// Helper macro for creating instances of `JsonValue::Object`.
@@ -297,8 +347,8 @@ macro_rules! array {
 /// # #[macro_use] extern crate json;
 /// # fn main() {
 /// let data = object!{
-///     "foo" => 42,
-///     "bar" => false
+///     foo: 42,
+///     bar: false,
 /// };
 ///
 /// assert_eq!(data["foo"], 42);
@@ -312,29 +362,68 @@ macro_rules! object {
     // Empty object.
     {} => ($crate::JsonValue::new_object());
 
-    // Non-empty object, no trailing comma.
-    //
-    // In this implementation, key/value pairs separated by commas.
-    { $( $key:expr => $value:expr ),* } => {
-        $crate::object!( $(
-            $key => $value,
-        )* )
+    // Handles for different types of keys
+    (@ENTRY($( $k:expr => $v:expr, )*) $key:ident: $( $cont:tt )*) => {
+        $crate::object!(@ENTRY($( $k => $v, )*) stringify!($key) => $($cont)*)
+    };
+    (@ENTRY($( $k:expr => $v:expr, )*) $key:literal: $( $cont:tt )*) => {
+        $crate::object!(@ENTRY($( $k => $v, )*) $key => $($cont)*)
+    };
+    (@ENTRY($( $k:expr => $v:expr, )*) [$key:expr]: $( $cont:tt )*) => {
+        $crate::object!(@ENTRY($( $k => $v, )*) $key => $($cont)*)
     };
 
-    // Non-empty object, trailing comma.
-    //
-    // In this implementation, the comma is part of the value.
-    { $( $key:expr => $value:expr, )* } => ({
-        use $crate::object::Object;
+    // Handles for token tree values
+    (@ENTRY($( $k:expr => $v:expr, )*) $key:expr => $value:tt, $( $cont:tt )+) => {
+        $crate::object!(
+            @ENTRY($( $k => $v, )* $key => $crate::value!($value), )
+            $( $cont )*
+        )
+    };
+    (@ENTRY($( $k:expr => $v:expr, )*) $key:expr => $value:tt,) => ({
+        $crate::object!(@END $( $k => $v, )* $key => $crate::value!($value), )
+    });
+    (@ENTRY($( $k:expr => $v:expr, )*) $key:expr => $value:tt) => ({
+        $crate::object!(@END $( $k => $v, )* $key => $crate::value!($value), )
+    });
 
-        let size = 0 $( + {let _ = $key; 1} )*;
-        let mut object = Object::with_capacity(size);
+    // Handles for expression values
+    (@ENTRY($( $k:expr => $v:expr, )*) $key:expr => $value:expr, $( $cont:tt )+) => {
+        $crate::object!(
+            @ENTRY($( $k => $v, )* $key => $crate::value!($value), )
+            $( $cont )*
+        )
+    };
+    (@ENTRY($( $k:expr => $v:expr, )*) $key:expr => $value:expr,) => ({
+        $crate::object!(@END $( $k => $v, )* $key => $crate::value!($value), )
+    });
+
+    (@ENTRY($( $k:expr => $v:expr, )*) $key:expr => $value:expr) => ({
+        $crate::object!(@END $( $k => $v, )* $key => $crate::value!($value), )
+    });
+
+    // Construct the actual object
+    (@END $( $k:expr => $v:expr, )*) => ({
+        let size = 0 $( + {let _ = || $k; 1} )*;
+        let mut object = $crate::object::Object::with_capacity(size);
 
         $(
-            object.insert($key, $value.into());
+            object.insert($k, $v.into());
         )*
 
         $crate::JsonValue::Object(object)
-    })
-}
+    });
 
+    // Entry point to the macro
+    ($key:tt: $( $cont:tt )+) => {
+        $crate::object!(@ENTRY() $key: $($cont)*)
+    };
+
+    // Legacy macro
+    ($( $k:expr => $v:expr, )*) => {
+        $crate::object!(@END $( $k => $crate::value!($v), )*)
+    };
+    ($( $k:expr => $v:expr ),*) => {
+        $crate::object!(@END $( $k => $crate::value!($v), )*)
+    };
+}
