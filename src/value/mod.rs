@@ -2,7 +2,8 @@ use std::ops::{Index, IndexMut};
 use std::convert::TryInto;
 use std::{fmt, mem, usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32};
 use std::io::{self, Write};
-use beef::Cow;
+
+use beef::lean::Cow;
 
 use crate::vec::Vec;
 use crate::{Result, Error};

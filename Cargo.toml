@@ -7,10 +7,10 @@ repository = "https://github.com/maciejhirsz/json-rust"
 documentation = "https://docs.rs/json/"
 license = "MIT/Apache-2.0"
 edition = "2018"
+readme = "./README.md"
 
 [dependencies]
-# beef = "0.2.1"
-beef = { path = "../beef" }
+beef = "0.3.0"
 fnv = "1.0.6"
 ahash = "0.3.2"
 

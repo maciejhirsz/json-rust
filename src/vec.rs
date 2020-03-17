@@ -5,9 +5,7 @@ use core::mem::{forget, replace, ManuallyDrop};
 use core::ptr::{NonNull, slice_from_raw_parts_mut, slice_from_raw_parts};
 
 pub struct Vec<T> {
-    ptr: NonNull<T>,
-    len: u32,
-    cap: u32,
+    ptr: NonNull<[T]>,
 }
 
 impl<T> Vec<T> {
@@ -20,39 +18,38 @@ impl<T> Vec<T> {
     }
 
     pub fn push(&mut self, val: T) {
-        if self.len == self.cap {
-            let new_cap = match self.cap {
+        let ptr = self.as_mut_ptr();
+        let (len, cap) = self.parts();
+
+        if len == cap {
+            let new_cap = match cap {
                 0 => 1,
                 n => n * 2,
             };
             // Create a new bigger buffer
-            let mut svec = ManuallyDrop::new(SVec::with_capacity(new_cap as usize));
+            let mut svec = ManuallyDrop::new(SVec::with_capacity(new_cap));
 
             unsafe {
-                let old = self.ptr.as_ptr();
-
                 // Copy contents
-                std::ptr::copy_nonoverlapping(old as *const T, svec.as_mut_ptr(), self.len as usize);
+                std::ptr::copy_nonoverlapping(ptr, svec.as_mut_ptr(), len);
 
                 // Drop old buffer, len 0 (we don't want to drop content)
-                std::mem::drop(SVec::from_raw_parts(old, 0, self.cap as usize));
+                std::mem::drop(SVec::from_raw_parts(ptr, 0, cap));
             }
 
-            self.ptr = unsafe { NonNull::new_unchecked(svec.as_mut_ptr()) };
-            self.cap = new_cap;
+            self.ptr = unsafe { pack_unchecked(svec.as_mut_ptr(), len, svec.capacity()) }
         }
-        unsafe { self.ptr.as_ptr().add(self.len as usize).write(val) }
-        self.len += 1;
+        unsafe { self.as_mut_ptr().add(len).write(val) }
+        self.set_len(len + 1);
     }
 
     pub fn pop(&mut self) -> Option<T> {
-        if self.len == 0 {
-            return None;
-        }
+        let len = self.len().checked_sub(1)?;
 
-        self.len -= 1;
+        self.set_len(len);
+
         Some(unsafe {
-            self.ptr.as_ptr().add(self.len as usize).read()
+            self.as_mut_ptr().add(len).read()
         })
     }
 
@@ -61,11 +58,15 @@ impl<T> Vec<T> {
     }
 
     pub fn len(&self) -> usize {
-        self.len as usize
+        let (len, _) = self.parts();
+
+        len
     }
 
     pub fn capacity(&self) -> usize {
-        self.cap as usize
+        let (_, cap) = self.parts();
+
+        cap
     }
 
     pub fn remove(&mut self, index: usize) -> T {
@@ -73,44 +74,53 @@ impl<T> Vec<T> {
     }
 
     pub fn as_ptr(&self) -> *const T {
-        self.ptr.as_ptr()
+        self.ptr.cast().as_ptr()
     }
 
     pub fn as_mut_ptr(&mut self) -> *mut T {
-        self.ptr.as_ptr()
+        self.ptr.cast().as_ptr()
+    }
+
+    fn set_len(&mut self, len: usize) {
+        let (_, cap) = self.parts();
+
+        self.ptr = unsafe {
+            pack_unchecked(
+                self.as_mut_ptr(),
+                len,
+                cap,
+            )
+        };
+    }
+
+    #[inline]
+    fn parts(&self) -> (usize, usize) {
+        let parts = unsafe { &*self.ptr.as_ptr() }.len();
+
+        (parts & MASK_LO, (parts & MASK_HI) >> 32)
     }
 
     fn with<'a, R: 'a, F: FnOnce(&mut SVec<T>) -> R>(&mut self, f: F) -> R {
-        let mut svec = ManuallyDrop::new(unsafe {
-            SVec::from_raw_parts(
-                self.ptr.as_ptr(),
-                self.len as usize,
-                self.cap as usize,
-            )
-        });
-        self.len = 0;
-        self.cap = 0;
+        let (len, cap) = self.parts();
+
+        let mut svec = unsafe {
+            SVec::from_raw_parts(self.as_mut_ptr(), len, cap)
+        };
 
         let r = f(&mut svec);
 
-        self.ptr = unsafe { NonNull::new_unchecked(svec.as_mut_ptr()) };
-        self.len = svec.len() as u32;
-        self.cap = svec.capacity() as u32;
+        ManuallyDrop::new(std::mem::replace(self, Self::from_svec_unchecked(svec)));
 
         r
     }
 
     fn into_inner(self) -> SVec<T> {
-        let Vec { ptr, len, cap } = self;
-
-        ManuallyDrop::new(self);
+        let mut vec = ManuallyDrop::new(self);
+        let ptr = vec.as_mut_ptr();
+        let (len, cap) = vec.parts();
 
         unsafe {
-            SVec::from_raw_parts(
-                ptr.as_ptr(),
-                len as usize,
-                cap as usize,
-            )
+            SVec::from_raw_parts(ptr, len, cap)
         }
     }
 
@@ -119,34 +129,39 @@ impl<T> Vec<T> {
 
         let (ptr, len, cap) = (svec.as_mut_ptr(), svec.len(), svec.capacity());
 
+        let ptr = slice_from_raw_parts_mut(
+            ptr,
+            len & MASK_LO | (cap & MASK_LO) << 32,
+        );
+
         Vec {
             ptr: unsafe { NonNull::new_unchecked(ptr) },
-            len: len as u32,
-            cap: cap as u32,
         }
     }
 
     fn inner_ref<'a>(&'a self) -> &'a [T] {
+        let (len, _) = self.parts();
+
         unsafe {
-            &*slice_from_raw_parts(self.as_ptr(), self.len())
+            &*slice_from_raw_parts(self.as_ptr() as *mut T, len)
         }
     }
 
     fn inner_mut<'a>(&'a mut self) -> &'a mut [T] {
+        let (len, _) = self.parts();
+
         unsafe {
-            &mut*slice_from_raw_parts_mut(self.as_mut_ptr(), self.len())
+            &mut*slice_from_raw_parts_mut(self.as_mut_ptr() as *mut T, len)
         }
     }
 }
 
 impl<T> std::ops::Drop for Vec<T> {
     fn drop(&mut self) {
+        let (len, cap) = self.parts();
+
         unsafe {
-            SVec::from_raw_parts(
-                self.ptr.as_ptr(),
-                self.len as usize,
-                self.cap as usize,
-            );
+            SVec::from_raw_parts(self.as_mut_ptr(), len, cap);
         }
     }
 }
@@ -210,7 +225,7 @@ const MASK_HI: usize = !(core::u32::MAX as usize);
 
 
 #[inline]
-unsafe fn pack<T>(ptr: *mut T, len: usize, capacity: usize) -> *mut [T] {
+unsafe fn pack<T>(ptr: *mut T, len: usize, capacity: usize) -> NonNull<[T]> {
     if (capacity & MASK_HI) != 0 {
         panic!("beef::Cow::owned: Capacity out of bounds");
     }
@@ -220,10 +235,12 @@ unsafe fn pack<T>(ptr: *mut T, len: usize, capacity: usize) -> *mut [T] {
 
 
 #[inline]
-unsafe fn pack_unchecked<T>(ptr: *mut T, len: usize, capacity: usize) -> *mut [T] {
-    slice_from_raw_parts_mut(
-        ptr as *mut T,
-        (len & MASK_LO) | ((capacity & MASK_HI) << std::mem::size_of::<u32>() * 8)
+unsafe fn pack_unchecked<T>(ptr: *mut T, len: usize, capacity: usize) -> NonNull<[T]> {
+    NonNull::new_unchecked(
+        slice_from_raw_parts_mut(
+            ptr as *mut T,
+            (len & MASK_LO) | ((capacity & MASK_LO) << 32)
+        )
     )
 }
 
@@ -236,6 +253,6 @@ fn unpack<T>(ptr: *mut [T]) -> (*mut T, usize, usize) {
     (
         ptr as *mut T,
         caplen & MASK_LO,
-        (caplen & MASK_HI) >> std::mem::size_of::<u32>() * 8,
+        (caplen & MASK_HI) >> 32,
     )
 }

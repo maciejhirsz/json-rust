@@ -221,6 +221,8 @@ pub use value::JsonValue::Null;
 pub type Result<T> = result::Result<T, Error>;
 
 pub mod iterators {
+    use beef::lean::Cow;
+
     /// Iterator over members of `JsonValue::Array`.
     pub type Members<'a> = ::std::slice::Iter<'a, super::JsonValue<'a>>;
 
@@ -228,10 +230,10 @@ pub mod iterators {
     pub type MembersMut<'a> = ::std::slice::IterMut<'a, super::JsonValue<'a>>;
 
     /// Iterator over key value pairs of `JsonValue::Object`.
-    pub type Entries<'a> = super::object::Iter<'a, beef::Cow<'a, str>, super::JsonValue<'a>>;
+    pub type Entries<'a> = super::object::Iter<'a, Cow<'a, str>, super::JsonValue<'a>>;
 
     /// Mutable iterator over key value pairs of `JsonValue::Object`.
-    pub type EntriesMut<'a> = super::object::IterMut<'a, beef::Cow<'a, str>, super::JsonValue<'a>>;
+    pub type EntriesMut<'a> = super::object::IterMut<'a, Cow<'a, str>, super::JsonValue<'a>>;
 }
 
 #[deprecated(since="0.9.0", note="use `json::Error` instead")]

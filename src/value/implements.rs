@@ -2,7 +2,8 @@
 // implementations for `JsonValue`.
 
 use std::collections::{BTreeMap, HashMap};
-use beef::Cow;
+
+use beef::lean::Cow;
 
 use crate::vec::Vec;
 use crate::number::Number;
