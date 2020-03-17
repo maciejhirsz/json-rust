@@ -20,7 +20,7 @@
 use std::str;
 use std::char::decode_utf16;
 use std::convert::TryFrom;
-use beef::Cow;
+use beef::lean::Cow;
 
 use crate::object::Object;
 use crate::number::Number;

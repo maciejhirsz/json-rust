@@ -4,7 +4,7 @@ use std::num::NonZeroU32;
 use std::iter::FromIterator;
 use std::cell::Cell;
 use std::hash::{Hash, Hasher};
-use beef::Cow;
+use beef::lean::Cow;
 use fnv::FnvHasher;
 
 use crate::value::JsonValue;
