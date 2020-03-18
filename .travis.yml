@@ -5,14 +5,7 @@ rust:
   - beta
   - nightly
 
-branches:
-  except:
-    - dev
-    - benches
-
-matrix:
+jobs:
   allow_failures:
     - rust: nightly
-
-os:
-  - linux
+  fast_finish: true
