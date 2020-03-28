@@ -435,6 +435,19 @@ impl JsonValue {
 
     /// Works on `JsonValue::Array` - returns an iterator over members.
     /// Will return an empty iterator if called on non-array types.
+    /// ## Example
+    /// ```
+    /// # use json::JsonValue;
+    /// # #[macro_use] use json::array;
+    /// let animals = array!["Cat", "Dog", "Snail"];
+    /// let mut animals_with_letter_a = Vec::new();
+    /// for animal in animals.members() {
+    ///     if animal.as_str().unwrap().contains('a') {
+    ///         animals_with_letter_a.push(animal);
+    ///     }
+    /// }
+    /// assert_eq!(animals_with_letter_a, vec!["Cat", "Snail"]);
+    /// ```
     pub fn members(&self) -> Members {
         match *self {
             JsonValue::Array(ref vec) => {
@@ -457,6 +470,27 @@ impl JsonValue {
 
     /// Works on `JsonValue::Object` - returns an iterator over key value pairs.
     /// Will return an empty iterator if called on non-object types.
+    /// ## Example
+    /// ```
+    /// # use json::JsonValue;
+    /// let heights = json::parse(r#"
+    /// {
+    ///     "Alice": 1.42,
+    ///     "Bob": 1.6,
+    ///     "Carlos": 2.1
+    /// }
+    /// "#).unwrap();
+    /// let mut total_height = 0.0;
+    /// let mut names_with_o: Vec<&str> = Vec::new();
+    /// for (name, height) in heights.entries() {
+    ///     total_height += height.as_f64().unwrap();
+    ///     if name.contains('o') {
+    ///         names_with_o.push(name);
+    ///     }
+    /// }
+    /// assert_eq!(total_height, 5.12);
+    /// assert_eq!(names_with_o, vec!["Bob", "Carlos"]);
+    /// ```
     pub fn entries(&self) -> Entries {
         match *self {
             JsonValue::Object(ref object) => {
