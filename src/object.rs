@@ -251,25 +251,29 @@ where
         K: Borrow<Q>,
         Q: Eq,
     {
+        if self.store.len() == 0 {
+            return Miss(None);
+        }
+
         let mut idx = 0;
 
-        while let Some(node) = self.store.get(idx) {
-            if hash == node.hash && key == node.key.borrow() {
-                return Hit(idx);
-            } else if hash < node.hash {
+        loop {
+            let node = unsafe { self.store.get_unchecked(idx) };
+
+            if hash < node.hash {
                 match node.left.get() {
                     Some(i) => idx = i.get() as usize,
                     None => return Miss(Some(&node.left)),
                 }
-            } else {
+            } else if hash > node.hash {
                 match node.right.get() {
                     Some(i) => idx = i.get() as usize,
                     None => return Miss(Some(&node.right)),
                 }
+            } else {
+                return Hit(idx);
             }
         }
-
-        Miss(None)
     }
 
     #[inline]
