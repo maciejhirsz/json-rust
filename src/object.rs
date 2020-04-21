@@ -29,7 +29,7 @@ struct Node<K, V> {
     pub hash: u64,
 
     // Value stored.
-    pub value: V,
+    pub value: Option<V>,
 
     // Store vector index pointing to the `Node` for which `hash` is smaller
     // than that of this `Node`.
@@ -69,7 +69,7 @@ impl<K, V> Node<K, V> {
         Node {
             key,
             hash,
-            value,
+            value: Some(value),
             left: Cell::new(None),
             right: Cell::new(None),
         }
@@ -143,7 +143,7 @@ where
 
         match self.find(&key, hash) {
             Hit(idx) => {
-                self.store[idx].value = value;
+                self.store[idx].value.replace(value);
             },
             Miss(parent) => {
                 if let Some(parent) = parent {
@@ -163,7 +163,9 @@ where
         let hash = hash_key(key);
 
         match self.find(key, hash) {
-            Hit(idx) => Some(&self.store[idx].value),
+            Hit(idx) => unsafe {
+                self.store.get_unchecked(idx).value.as_ref()
+            },
             Miss(_) => None,
         }
     }
@@ -176,7 +178,9 @@ where
         let hash = hash_key(key);
 
         match self.find(key, hash) {
-            Hit(idx) => Some(&mut self.store[idx].value),
+            Hit(idx) => unsafe {
+                self.store.get_unchecked_mut(idx).value.as_mut()
+            },
             Miss(_) => None,
         }
     }
@@ -190,7 +194,12 @@ where
         let hash = hash_key(&key);
 
         match self.find(&key, hash) {
-            Hit(idx) => &mut self.store[idx].value,
+            Hit(idx) => unsafe {
+                self.store
+                    .get_unchecked_mut(idx)
+                    .value
+                    .get_or_insert_with(fill)
+            },
             Miss(parent) => {
                 let idx = self.store.len();
 
@@ -200,7 +209,9 @@ where
 
                 self.store.push(Node::new(key, fill(), hash));
 
-                &mut self.store[idx].value
+                let node = unsafe { self.store.get_unchecked_mut(idx) };
+
+                node.value.as_mut().unwrap()
             },
         }
     }
@@ -214,35 +225,10 @@ where
     {
         let hash = hash_key(key);
 
-        let index = match self.find(key, hash) {
-            Hit(idx) => idx,
-            Miss(_) => return None,
-        };
-
-        // Removing a node would screw the tree badly, it's easier to just
-        // recreate it. This is a very costly operation, but removing nodes
-        // in JSON shouldn't happen very often if at all. Optimizing this
-        // can wait for better times.
-        let mut removed = None;
-        let capacity = self.store.len();
-        let old = mem::replace(&mut self.store, Vec::with_capacity(capacity));
-
-        for (i, Node { key, value, hash, .. }) in old.into_iter().enumerate() {
-            if i == index {
-                // Rust doesn't like us moving things from `node`, even if
-                // it is owned. Replace fixes that.
-                removed = Some(value);
-            } else {
-                // Faster than .insert() since we can avoid hashing
-                if let Miss(Some(parent)) = self.find(key.borrow(), hash) {
-                    parent.set(NonZeroU32::new(self.store.len() as u32));
-                }
-
-                self.store.push(Node::new(key, value, hash));
-            }
+        match self.find(key, hash) {
+            Hit(idx) => unsafe { self.store.get_unchecked_mut(idx).value.take() },
+            Miss(_) => None,
         }
-
-        removed
     }
 
     #[inline]
@@ -362,14 +348,32 @@ impl<'i, K, V> Iterator for Iter<'i, K, V> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|node| (&node.key, &node.value))
+        while let Some(node) = self.inner.next() {
+            let value = match node.value {
+                Some(ref value) => value,
+                None => continue,
+            };
+
+            return Some((&node.key, value))
+        }
+
+        None
     }
 }
 
 impl<K, V> DoubleEndedIterator for Iter<'_, K, V> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner.next_back().map(|node| (&node.key, &node.value))
+        while let Some(node) = self.inner.next_back() {
+            let value = match node.value {
+                Some(ref value) => value,
+                None => continue,
+            };
+
+            return Some((&node.key, value))
+        }
+
+        None
     }
 }
 
@@ -393,14 +397,32 @@ impl<'a, K, V> Iterator for IterMut<'a, K, V> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|node| (&node.key, &mut node.value))
+        while let Some(node) = self.inner.next() {
+            let value = match node.value {
+                Some(ref mut value) => value,
+                None => continue,
+            };
+
+            return Some((&node.key, value))
+        }
+
+        None
     }
 }
 
 impl<K, V> DoubleEndedIterator for IterMut<'_, K, V> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner.next_back().map(|node| (&node.key, &mut node.value))
+        while let Some(node) = self.inner.next_back() {
+            let value = match node.value {
+                Some(ref mut value) => value,
+                None => continue,
+            };
+
+            return Some((&node.key, value))
+        }
+
+        None
     }
 }
 
