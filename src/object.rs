@@ -1,4 +1,4 @@
-use std::{ ptr, mem, str, slice, fmt };
+use std::{ ptr, mem, str, slice, vec, fmt };
 use std::ops::{ Index, IndexMut, Deref };
 use std::iter::FromIterator;
 
@@ -171,6 +171,24 @@ impl Clone for Key {
                 len: self.len,
                 ptr: ptr::null_mut(), // requires a `fix_ptr` call after `Node` is on the heap
                 hash: self.hash,
+            }
+        }
+    }
+}
+
+impl From<Key> for String {
+    fn from(key: Key) -> String {
+        unsafe {
+            if key.len > KEY_BUF_LEN {
+                // Construct a `String` out of the `key_ptr`. Since the key is
+                // always allocated from a slice, the capacity is equal to length.
+                String::from_raw_parts(
+                    key.ptr,
+                    key.len,
+                    key.len
+                )
+            } else {
+                String::from_utf8_unchecked(key.buf[0..key.len].to_vec())
             }
         }
     }
@@ -640,6 +658,45 @@ impl<'a> DoubleEndedIterator for IterMut<'a> {
 impl<'a> ExactSizeIterator for IterMut<'a> {
     fn len(&self) -> usize {
         self.inner.len()
+    }
+}
+
+pub struct IntoIter {
+    inner: vec::IntoIter<Node>
+}
+
+impl Iterator for IntoIter {
+    type Item = (String, JsonValue);
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next().map(|node| (node.key.into(), node.value))
+    }
+}
+
+impl DoubleEndedIterator for IntoIter {
+    #[inline(always)]
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.inner.next_back().map(|node| (node.key.into(), node.value))
+    }
+}
+
+impl ExactSizeIterator for IntoIter {
+    #[inline(always)]
+    fn len(&self) -> usize {
+        self.inner.len()
+    }
+}
+
+impl IntoIterator for Object {
+    type Item = (String, JsonValue);
+    type IntoIter = IntoIter;
+
+    #[inline(always)]
+    fn into_iter(self) -> IntoIter {
+        IntoIter {
+            inner: self.store.into_iter()
+        }
     }
 }
 
