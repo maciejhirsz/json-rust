@@ -277,6 +277,60 @@ impl JsonValue {
         }
     }
 
+    pub fn as_object(&self) -> Option<&Object> {
+        if let Self::Object(object) = self {
+            Some(object)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_object_mut(&mut self) -> Option<&mut Object> {
+        if let Self::Object(object) = self {
+            Some(object)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_array(&self) -> Option<&Vec<JsonValue>> {
+        if let Self::Array(array) = self {
+            Some(array)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_array_mut(&mut self) -> Option<&mut Vec<JsonValue>> {
+        if let Self::Array(array) = self {
+            Some(array)
+        } else {
+            None
+        }
+    }
+
+    /// If `self` is a `JsonValue::Object`, then this looks up an entry by its `key` in the object.
+    ///
+    /// If `self` is not a `JsonValue::Object`, then this method returns `None`.
+    pub fn get(&self, key: &str) -> Option<&JsonValue> {
+        if let Self::Object(object) = self {
+            object.get(key)
+        } else {
+            None
+        }
+    }
+
+    /// If `self` is a `JsonValue::Object`, then this looks up an entry by its `key` in the object.
+    ///
+    /// If `self` is not a `JsonValue::Object`, then this method returns `None`.
+    pub fn get_mut(&mut self, key: &str) -> Option<&mut JsonValue> {
+        if let Self::Object(object) = self {
+            object.get_mut(key)
+        } else {
+            None
+        }
+    }
+
     /// Obtain an integer at a fixed decimal point. This is useful for
     /// converting monetary values and doing arithmetic on them without
     /// rounding errors introduced by floating point operations.

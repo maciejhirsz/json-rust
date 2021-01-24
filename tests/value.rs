@@ -667,3 +667,38 @@ fn equality() {
     assert_ne!(left, change_string);
     assert_ne!(left, change_short);
 }
+
+#[test]
+fn as_object() {
+    let obj = object!{ foo: ["bar"] };
+    assert!(obj.as_object().is_some());
+    assert_eq!(*obj.as_object().unwrap().get("foo").unwrap(), array!{"bar"});
+
+    assert!((array!{}).as_object().is_none());
+    assert!(JsonValue::from("string").as_object().is_none());
+}
+
+#[test]
+fn as_object_mut() {
+    let mut obj = object!{};
+    assert!(obj.as_object_mut().is_some());
+    obj.as_object_mut().unwrap().insert("foo", array!{42});
+    assert_eq!(obj, object!{foo: [42]});
+
+    assert!((array!{}).as_object_mut().is_none());
+    assert!(JsonValue::from("string").as_object_mut().is_none());
+}
+
+#[test]
+fn value_get() {
+    let obj: JsonValue = object!{ foo: 42 };
+    assert_eq!(obj.get("foo"), Some(&JsonValue::from(42)));
+    assert_eq!(obj.get("missing"), None);
+}
+
+#[test]
+fn value_get_mut() {
+    let mut obj: JsonValue = object!{ foo: [42] };
+    obj.get_mut("foo").unwrap().push(43).unwrap();
+    assert_eq!(obj, object!{ foo: [42, 43] });
+}
