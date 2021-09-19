@@ -1,3 +1,4 @@
+use std::mem::MaybeUninit;
 use std::{ ptr, str, slice, fmt };
 use std::ops::Deref;
 
@@ -6,7 +7,7 @@ pub const MAX_LEN: usize = 30;
 #[derive(Clone, Copy)]
 pub struct Short {
     len: u8,
-    value: [u8; MAX_LEN],
+    value: [MaybeUninit<u8>; MAX_LEN],
 }
 
 /// A `Short` is a small string, up to `MAX_LEN` bytes, that can be managed without
@@ -23,11 +24,11 @@ impl Short {
     #[inline(always)]
     pub unsafe fn from_slice(slice: &str) -> Self {
         let mut short = Short {
-            value: [0; MAX_LEN],
+            value: MaybeUninit::uninit().assume_init(),
             len: slice.len() as u8,
         };
 
-        ptr::copy_nonoverlapping(slice.as_ptr(), short.value.as_mut_ptr(), slice.len());
+        ptr::copy_nonoverlapping(slice.as_ptr(), short.value.as_mut_ptr() as _, slice.len());
 
         short
     }
@@ -37,7 +38,7 @@ impl Short {
     pub fn as_str(&self) -> &str {
         unsafe {
             str::from_utf8_unchecked(
-                slice::from_raw_parts(self.value.as_ptr(), self.len as usize)
+                slice::from_raw_parts(self.value.as_ptr() as _, self.len as usize)
             )
         }
     }
