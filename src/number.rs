@@ -42,7 +42,7 @@ pub struct Number {
     // Decimal exponent, analog to `e` notation in string form.
     exponent: i16,
 
-    // Integer base before sing and exponent applied.
+    // Integer base before sign and exponent applied.
     mantissa: u64,
 }
 
