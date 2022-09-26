@@ -197,6 +197,12 @@
 //! # }
 //! ```
 
+#![cfg_attr(
+    feature = "debugger_visualizer",
+    feature(debugger_visualizer),
+    debugger_visualizer(natvis_file = "../debug_metadata/json.natvis")
+)]
+
 use std::result;
 
 pub mod codegen;

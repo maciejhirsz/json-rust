@@ -7,3 +7,17 @@ repository = "https://github.com/maciejhirsz/json-rust"
 documentation = "https://docs.rs/json/"
 license = "MIT/Apache-2.0"
 edition = "2018"
+
+[dev-dependencies]
+debugger_test = "0.1.0"
+debugger_test_parser = "0.1.0"
+
+[features]
+# UNSTABLE FEATURES (requires Rust nightly)
+# Enable to use the #[debugger_visualizer] attribute.
+debugger_visualizer = []
+
+[[test]]
+path = "tests/debugger_visualizer.rs"
+name = "debugger_visualizer"
+required-features = ["debugger_visualizer"]

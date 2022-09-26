@@ -1,0 +1,48 @@
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+  <Type Name="json::number::Number">
+    <Intrinsic Name="pos" Expression="exponent &lt; 0 ? -exponent : exponent" />
+    <Intrinsic Name="calc_exponent" Expression="exponent == 0 ? 1 : exponent == 1 ? value : calc_exponent(exponent - 1, value * 10)">
+        <Parameter Name="exponent" Type="int" />
+        <Parameter Name="value" Type="__int64" />
+    </Intrinsic>
+    <Intrinsic Name="calc_value" Expression="exponent &lt; 0 ? ((double)mantissa / calc_exponent(pos(), 10)) : (__int64)(mantissa * calc_exponent(pos(), 10))" />
+
+    <!-- Display the value for a negative number -->
+    <DisplayString Condition="category == 0">{(-1 * calc_value()),d}</DisplayString>
+    <!-- Display the value for a positive number -->
+    <DisplayString Condition="category == 1">{calc_value(),d}</DisplayString>
+
+    <Expand>
+        <Item Name="[category]">category,d</Item>
+        <Item Name="[exponent]">exponent,d</Item>
+        <Item Name="[mantissa]">mantissa,d</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="json::object::Key">
+    <DisplayString>{(char*)ptr,[len]s8}</DisplayString>
+  </Type>
+
+  <Type Name="json::object::Node">
+    <DisplayString>{{ key={key}, value={value}}}</DisplayString>
+    <Expand>
+        <Item Name="[key]">key</Item>
+        <Item Name="[value]">value</Item>
+        <Item Name="[left]">left</Item>
+        <Item Name="[right]">right</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="json::object::Object">
+    <Expand>
+        <CustomListItems>
+            <Variable Name="i" InitialValue="0" />
+            <Size>store.len</Size>
+            <Loop>
+                <Item Name="{store[i].key}">store[i].value</Item>
+                <Exec>i++</Exec>
+            </Loop>
+        </CustomListItems>
+    </Expand>
+  </Type>
+</AutoVisualizer>
