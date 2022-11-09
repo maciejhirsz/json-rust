@@ -482,7 +482,7 @@ impl<'a> Parser<'a> {
     // is whole lot slower than parsing "foobar", as the former suffers from
     // having to be read from source to a buffer and then from a buffer to
     // our target string. Nothing to be done about this, really.
-    fn read_complex_string<'b>(&mut self, start: usize) -> Result<&'b str> {
+    fn read_complex_string(&mut self, start: usize) -> Result<&'_ str> {
         // Since string slices are returned by this function that are created via pointers into `self.buffer`
         // we shouldn't be clearing or modifying the buffer in consecutive calls to this function. Instead
         // we continuously append bytes to `self.buffer` and keep track of the starting offset of the buffer on each
