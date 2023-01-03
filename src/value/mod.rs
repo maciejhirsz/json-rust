@@ -1,6 +1,6 @@
 use std::ops::{Index, IndexMut, Deref};
 use std::convert::TryInto;
-use std::{fmt, mem, usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32};
+use std::{fmt, mem, usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32, u128};
 use std::io::{self, Write};
 
 use crate::{Result, Error};
@@ -229,6 +229,12 @@ impl JsonValue {
     }
 
     pub fn as_u64(&self) -> Option<u64> {
+        self.as_number().and_then(|value| {
+            value.try_into().ok()
+        })
+    }
+    
+    pub fn as_u128(&self) -> Option<u128> {
         self.as_number().and_then(|value| {
             value.try_into().ok()
         })
