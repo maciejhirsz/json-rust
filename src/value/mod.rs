@@ -555,6 +555,19 @@ impl JsonValue {
         }
     }
 
+    /// Works on `JsonValue::Array` - insert an entry at index.
+    /// will return error not on `JsonValue::Array`.
+    pub fn array_insert<T>(&mut self, index: usize, value: T) -> Result<()> 
+        where T: Into<JsonValue> {
+        match *self {
+            JsonValue::Array(ref mut vec) => {
+                vec.insert(index, value.into());
+                Ok(())
+            },
+            _ => Err(Error::wrong_type("I'snt an Arry"))
+        }
+    }    
+    
     /// When called on an array or an object, will wipe them clean. When called
     /// on a string will clear the string. Numbers and booleans become null.
     pub fn clear(&mut self) {
