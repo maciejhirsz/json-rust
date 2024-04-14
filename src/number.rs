@@ -440,7 +440,7 @@ macro_rules! impl_signed {
                     Number {
                         category: NEGATIVE,
                         exponent: 0,
-                        mantissa: -num as u64,
+                        mantissa: num.wrapping_neg() as u64,
                     }
                 } else {
                     Number {
