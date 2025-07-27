@@ -327,7 +327,7 @@ macro_rules! array {
 }
 
 #[macro_export]
-/// Helper crate for converting types into `JsonValue`. It's used
+/// Helper macro for converting types into `JsonValue`. It's used
 /// internally by the `object!` and `array!` macros.
 macro_rules! value {
     ( null ) => { $crate::Null };
