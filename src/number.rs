@@ -211,11 +211,16 @@ impl PartialEq for Number {
         } else if e_diff > 0 {
             let power = decimal_power(e_diff as u16);
 
-            self.mantissa.wrapping_mul(power) == other.mantissa
+            self.mantissa
+                .checked_mul(power)
+                .map_or(false, |mantissa| mantissa == other.mantissa)
         } else {
             let power = decimal_power(-e_diff as u16);
 
-            self.mantissa == other.mantissa.wrapping_mul(power)
+            other
+                .mantissa
+                .checked_mul(power)
+                .map_or(false, |mantissa| mantissa == self.mantissa)
         }
 
     }
