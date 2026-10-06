@@ -242,6 +242,6 @@ fn safe_abs(x : i16) -> u16 {
     if let Some(y) = x.checked_abs() {
         y as u16
     } else {
-        i16::max_value() as u16 + 1u16
+        i16::MAX as u16 + 1u16
     }
 }

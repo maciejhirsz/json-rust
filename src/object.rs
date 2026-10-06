@@ -495,14 +495,14 @@ impl Object {
     }
 
     #[inline(always)]
-    pub fn iter(&self) -> Iter {
+    pub fn iter(&self) -> Iter<'_> {
         Iter {
             inner: self.store.iter()
         }
     }
 
     #[inline(always)]
-    pub fn iter_mut(&mut self) -> IterMut {
+    pub fn iter_mut(&mut self) -> IterMut<'_> {
         IterMut {
             inner: self.store.iter_mut()
         }

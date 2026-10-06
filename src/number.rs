@@ -1,4 +1,4 @@
-use std::{ ops, fmt, f32, f64 };
+use std::{ ops, fmt };
 use std::convert::{TryFrom, Infallible};
 use std::num::{FpCategory, TryFromIntError};
 use crate::util::grisu2;

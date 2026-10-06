@@ -17,8 +17,8 @@
 // This makes for some ugly code, but it is faster. Hopefully in the future
 // with MIR support the compiler will get smarter about this.
 
-use std::{str, slice};
-use std::char::decode_utf16;
+use core::{str, slice};
+use core::char::decode_utf16;
 use std::convert::TryFrom;
 use crate::object::Object;
 use crate::number::Number;

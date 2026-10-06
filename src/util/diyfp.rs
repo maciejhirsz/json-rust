@@ -9,7 +9,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::{mem, ops};
+use std::ops;
 
 const DIY_SIGNIFICAND_SIZE: isize = 64;
 const DP_SIGNIFICAND_SIZE: isize = 52;
@@ -50,7 +50,7 @@ impl DiyFp {
     }
     */
     pub unsafe fn from_f64(d: f64) -> Self {
-        let u: u64 = mem::transmute(d);
+        let u: u64 = f64::to_bits(d);
 
         let biased_e = ((u & DP_EXPONENT_MASK) >> DP_SIGNIFICAND_SIZE) as isize;
         let significand = u & DP_SIGNIFICAND_MASK;

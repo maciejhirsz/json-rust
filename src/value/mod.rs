@@ -1,6 +1,6 @@
 use std::ops::{Index, IndexMut, Deref};
 use std::convert::TryInto;
-use std::{fmt, mem, usize, u8, u16, u32, u64, isize, i8, i16, i32, i64, f32};
+use std::{fmt, mem};
 use std::io::{self, Write};
 
 use crate::{Result, Error};
@@ -448,7 +448,7 @@ impl JsonValue {
     /// }
     /// assert_eq!(animals_with_letter_a, vec!["Cat", "Snail"]);
     /// ```
-    pub fn members(&self) -> Members {
+    pub fn members(&self) -> Members<'_> {
         match *self {
             JsonValue::Array(ref vec) => {
                 vec.iter()
@@ -459,7 +459,7 @@ impl JsonValue {
 
     /// Works on `JsonValue::Array` - returns a mutable iterator over members.
     /// Will return an empty iterator if called on non-array types.
-    pub fn members_mut(&mut self) -> MembersMut {
+    pub fn members_mut(&mut self) -> MembersMut<'_> {
         match *self {
             JsonValue::Array(ref mut vec) => {
                 vec.iter_mut()
@@ -491,7 +491,7 @@ impl JsonValue {
     /// assert_eq!(total_height, 5.12);
     /// assert_eq!(names_with_o, vec!["Bob", "Carlos"]);
     /// ```
-    pub fn entries(&self) -> Entries {
+    pub fn entries(&self) -> Entries<'_> {
         match *self {
             JsonValue::Object(ref object) => {
                 object.iter()
@@ -503,7 +503,7 @@ impl JsonValue {
     /// Works on `JsonValue::Object` - returns a mutable iterator over
     /// key value pairs.
     /// Will return an empty iterator if called on non-object types.
-    pub fn entries_mut(&mut self) -> EntriesMut {
+    pub fn entries_mut(&mut self) -> EntriesMut<'_> {
         match *self {
             JsonValue::Object(ref mut object) => {
                 object.iter_mut()
